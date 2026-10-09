@@ -57,7 +57,7 @@
         </button>
         <button class="nav-item" data-view="factions" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          Factions &amp; Rep
+          Factions & Rep
         </button>
         <button class="nav-item" data-view="forces" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
@@ -133,7 +133,7 @@
             <textarea id="campaign-status" rows="3" placeholder="Current situation, major open threads, next expected pressure..."></textarea>
           </div>
           <div class="card span-2">
-            <h3>Key Goals &amp; Hooks</h3>
+            <h3>Key Goals & Hooks</h3>
             <textarea id="campaign-goals" rows="4" placeholder="Player goals, GM hooks, prophecies, open questions..."></textarea>
           </div>
         </div>
@@ -173,7 +173,7 @@
       <!-- Factions View -->
       <section id="view-factions" class="view">
         <div class="view-header">
-          <h1>Factions &amp; Reputation</h1>
+          <h1>Factions & Reputation</h1>
           <button id="new-faction-btn" class="btn primary">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
             Add Faction
@@ -217,13 +217,23 @@
           <h1>Tools</h1>
         </div>
         <div class="tools-grid">
+          <div class="card tool-card span-2">
+            <h3>Generators — Living Campaign Fuel</h3>
+            <p class="view-desc" style="margin-bottom:0.75rem">Quick random content aligned with Eldoria’s tone. Use the 🎲 button when adding Factions or Forces for the same generators inside the form.</p>
+            <div class="gen-buttons">
+              <button id="tool-gen-faction" class="btn primary">🎲 Random Faction</button>
+              <button id="tool-gen-force" class="btn primary">🎲 Random Active Force</button>
+              <button id="tool-gen-complication" class="btn secondary">🎲 World Complication</button>
+            </div>
+            <div id="tool-generator-output" class="generator-output"></div>
+          </div>
           <div class="card tool-card">
             <h3>Quick Reference — Seven Worlds</h3>
             <ul class="world-list">
               <li><strong>Luminaris</strong> — Light, order, radiant institutions</li>
               <li><strong>Umbraria</strong> — Shadow, corruption, hidden bargains</li>
               <li><strong>Eternum</strong> — Time, memory, ancient continuity</li>
-              <li><strong>Solara</strong> — Sun, heat, survival &amp; empire</li>
+              <li><strong>Solara</strong> — Sun, heat, survival & empire</li>
               <li><strong>Aetheria</strong> — Sky, travel, celestial gateways</li>
               <li><strong>Harmonia</strong> — Balance, music, living systems</li>
               <li><strong>Celestia</strong> — Higher planes, prophecy, cosmic stakes</li>
@@ -250,9 +260,14 @@
             </ul>
           </div>
           <div class="card tool-card">
+            <h3>Dynamic Influence Engine</h3>
+            <p>Track only forces that can change situations the characters care about. Between sessions use <strong>Advance Forces</strong> on the Forces tab to let the world move — goals, resources, and status update without requiring the heroes’ presence.</p>
+            <p class="muted">A hungry power does not forget its hunger because the heroes sailed away.</p>
+          </div>
+          <div class="card tool-card">
             <h3>About This Companion</h3>
             <p>Built for <em>The Dark Sun Chronicles: Dungeon Master’s Guide</em>. Data is stored locally in your browser. Export regularly. Works offline once loaded.</p>
-            <p class="muted">Compatible with 5e (2014 &amp; 2024) living campaigns across Eldoria’s seven worlds.</p>
+            <p class="muted">Compatible with 5e (2014 & 2024) living campaigns across Eldoria’s seven worlds.</p>
           </div>
         </div>
       </section>
