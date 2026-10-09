@@ -658,6 +658,71 @@ textarea { resize: vertical; min-height: 60px; }
   gap: 1rem;
 }
 
+.tools-grid .span-2 { grid-column: span 2; }
+@media (max-width: 700px) {
+  .tools-grid .span-2 { grid-column: span 1; }
+}
+
+.gen-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.generator-output { min-height: 2rem; }
+
+.gen-result {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.gen-result h4 {
+  color: var(--accent);
+  margin-bottom: 0.4rem;
+  font-size: 1.05rem;
+}
+
+.gen-result p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.input-with-btn {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.input-with-btn input { flex: 1; }
+
+.gen-btn {
+  flex-shrink: 0;
+  min-width: 2.5rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.action-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.action-bar .small { font-size: 0.8rem; }
+
+.advance-list {
+  margin: 0.75rem 0;
+  padding-left: 1.2rem;
+  color: var(--text-muted);
+}
+
+.advance-list li { margin-bottom: 0.5rem; }
+
 .tool-card ul, .tool-card ol {
   padding-left: 1.2rem;
   font-size: 0.9rem;
@@ -691,7 +756,7 @@ textarea { resize: vertical; min-height: 60px; }
 }
 
 .rep.-3, .rep.-2, .rep.-1 { color: var(--rep-neg); }
-.rep.\+1, .rep.\+2, .rep.\+3 { color: var(--rep-pos); }
+.rep.\\+1, .rep.\\+2, .rep.\\+3 { color: var(--rep-pos); }
 .rep.0 { color: var(--text-muted); }
 
 .muted { color: var(--text-dim); font-size: 0.85rem; margin-top: 0.5rem; }
