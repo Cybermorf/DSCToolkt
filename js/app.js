@@ -546,7 +546,7 @@
     else if (viewName === 'party') renderParty();
     else if (viewName === 'combat') renderCombat();
     else if (viewName === 'bestiary') renderBestiary();
-    else if (viewName === 'umbralites') renderUmbralites();
+    else if (viewName === 'umbrarians') renderUmbrarians();
     else if (viewName === 'factions') renderFactions();
     else if (viewName === 'forces') renderForces();
     else if (viewName === 'notes') renderNotes();
@@ -1091,13 +1091,14 @@
     }
     function refreshRaceTraits() {
       const rname = raceSel ? raceSel.value : '';
-      if (rname === 'Umbralites' && window.UMBRALITES && features) {
-        const traits = window.UMBRALITES.traits.map(t => `${t.name}: ${t.text}`).join('\n');
-        if (!features.value.includes('Shadow Step')) {
-          features.value = (features.value ? features.value + '\n\n' : '') + '— Umbralite Traits —\n' + traits;
-        }
-        if (worldSel && !worldSel.value) worldSel.value = 'Umbraria';
-      }
+      const race = getPhbRaces().find(r => r.name === rname);
+      if (!race || !features) return;
+      if (race.world && worldSel && !worldSel.value) worldSel.value = race.world;
+      if (!race.traits || !race.traits.length) return;
+      const marker = `— ${race.name} Traits —`;
+      if (features.value.includes(marker)) return;
+      const traits = race.traits.map(t => `${t.name}: ${t.text}`).join('\n');
+      features.value = (features.value ? features.value + '\n\n' : '') + marker + '\n' + traits;
     }
     classSel?.addEventListener('change', refreshClassUI);
     levelInp?.addEventListener('change', refreshProf);
@@ -2699,40 +2700,51 @@
     return String(o || '').toLowerCase().replace(/\s+/g, '-');
   }
 
-  function renderUmbralites() {
-    const root = $('#umbralites-content');
+  function renderUmbrarians() {
+    const root = $('#umbrarians-content');
     if (!root) return;
-    const u = (typeof window !== 'undefined' && window.UMBRALITES) ? window.UMBRALITES : null;
+    const u = (typeof window !== 'undefined' && window.UMBRARIANS) ? window.UMBRARIANS : null;
+    const race = getPhbRaces().find(r => r.name === 'Umbralites');
     if (!u) {
-      root.innerHTML = '<p class="muted">Umbralites data not loaded.</p>';
+      root.innerHTML = '<p class="muted">Umbrarians data not loaded.</p>';
       return;
+    }
+    let raceHtml = '';
+    if (race) {
+      raceHtml = `
+        <div class="detail-block">
+          <div class="detail-label">Related Race — Umbralites (PHB)</div>
+          <p class="detail-text"><em>${escapeHtml(race.tagline)}</em>. ${escapeHtml(race.intro)}</p>
+          <p class="detail-text"><strong>Traits:</strong> ${race.traits.map(t => escapeHtml(t.name)).join(' · ')}</p>
+          <ul class="trait-list">
+            ${race.traits.map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}
+          </ul>
+        </div>`;
     }
     root.innerHTML = `
       <article class="race-card">
         <header class="race-header">
           <h2>${escapeHtml(u.name)}</h2>
-          <p class="race-tagline">${escapeHtml(u.tagline)}</p>
+          <p class="race-tagline">${escapeHtml(u.subtitle)}</p>
         </header>
-        <div class="detail-block"><div class="detail-label">Overview</div><p class="detail-text">${escapeHtml(u.intro)}</p></div>
-        <div class="detail-block"><div class="detail-label">Appearance</div><p class="detail-text">${escapeHtml(u.appearance)}</p></div>
-        <div class="detail-block"><div class="detail-label">Life Span</div><p class="detail-text">${escapeHtml(u.lifeSpan)}</p></div>
-        <div class="detail-block"><div class="detail-label">Culture &amp; Society</div><p class="detail-text">${escapeHtml(u.culture)}</p></div>
-        <div class="detail-block"><div class="detail-label">Beliefs &amp; Worldview</div><p class="detail-text">${escapeHtml(u.beliefs)}</p></div>
-        <div class="detail-block"><div class="detail-label">Names</div><p class="detail-text">${escapeHtml(u.names)}</p></div>
-        <div class="detail-block"><div class="detail-label">Adventurers</div><p class="detail-text">${escapeHtml(u.adventurers)}</p></div>
+        <div class="detail-block callout">
+          <div class="detail-label">Critical Distinction</div>
+          <p class="detail-text">${escapeHtml(u.criticalDistinction)}</p>
+        </div>
+        <div class="detail-block"><div class="detail-label">Definition (DMG)</div><p class="detail-text">${escapeHtml(u.definition)}</p></div>
+        <div class="detail-block"><div class="detail-label">Bound at Birth</div><p class="detail-text">${escapeHtml(u.boundAtBirth)}</p></div>
+        <div class="detail-block"><div class="detail-label">Campaign Framework</div><p class="detail-text">${escapeHtml(u.framework)}</p></div>
         <div class="detail-block">
-          <div class="detail-label">Traits</div>
+          <div class="detail-label">Corruption Stages</div>
           <ul class="trait-list">
-            ${u.traits.map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}
+            ${u.stages.map(s => `<li><strong>${escapeHtml(s.name)}.</strong> ${escapeHtml(s.text)}</li>`).join('')}
           </ul>
         </div>
-        <div class="detail-block">
-          <div class="detail-label">Creating an Umbralite Character</div>
-          <ul class="trait-list">
-            ${u.questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}
-          </ul>
-        </div>
-        <p class="muted small">Source: Dark Sun Chronicles Player’s Handbook, Chapter 5 — Unique Races.</p>
+        <div class="detail-block"><div class="detail-label">Gifts &amp; Bargains</div><p class="detail-text">${escapeHtml(u.gifts)}</p></div>
+        <div class="detail-block"><div class="detail-label">Umbraria Context (World + Culture)</div><p class="detail-text">${escapeHtml(u.umbrariaContext)}</p></div>
+        ${raceHtml}
+        <div class="detail-block"><div class="detail-label">Player Characters</div><p class="detail-text">${escapeHtml(u.pcGuidance)}</p></div>
+        <p class="muted small">${escapeHtml(u.sources)}</p>
       </article>`;
   }
 
