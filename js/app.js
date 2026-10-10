@@ -1002,6 +1002,7 @@
       attacks: ch.attacks || '',
       features: ch.features || '',
       equipment: ch.equipment || '',
+      inventory: Array.isArray(ch.inventory) ? ch.inventory.map(normalizeInventoryItem) : [],
       corruption: clamp(Number(ch.corruption) || 0, 0, 6),
       isUmbrarian: !!ch.isUmbrarian,
       umbrarianStage: ch.umbrarianStage || '',
@@ -1241,7 +1242,132 @@
 
   /** Feature sections that can be updated independently without wiping others. */
   
-  const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
+  
+  function getEquipmentList() {
+    return (typeof window !== 'undefined' && window.EQUIPMENT) ? window.EQUIPMENT : [];
+  }
+
+  function normalizeInventoryItem(it) {
+    if (!it) return null;
+    return {
+      uid: it.uid || uid(),
+      id: it.id || '',
+      name: it.name || 'Item',
+      category: it.category || 'gear',
+      qty: Math.max(1, Number(it.qty) || 1),
+      equipped: !!it.equipped,
+      armorType: it.armorType || '',
+      acBase: it.acBase != null ? Number(it.acBase) : null,
+      acDexMax: it.acDexMax != null ? it.acDexMax : null,
+      acBonus: it.acBonus != null ? Number(it.acBonus) : 0,
+      damage: it.damage || '',
+      damageType: it.damageType || '',
+      props: it.props || '',
+      weaponType: it.weaponType || '',
+      notes: it.notes || '',
+      cost: it.cost || '',
+      weight: it.weight != null ? Number(it.weight) : 0
+    };
+  }
+
+  function catalogItemToInventory(cat) {
+    return normalizeInventoryItem({
+      id: cat.id,
+      name: cat.name,
+      category: cat.category,
+      qty: 1,
+      equipped: cat.category === 'armor' || cat.category === 'shield' || cat.category === 'weapon',
+      armorType: cat.armorType || '',
+      acBase: cat.acBase,
+      acDexMax: cat.acDexMax,
+      acBonus: cat.acBonus || 0,
+      damage: cat.damage || '',
+      damageType: cat.damageType || '',
+      props: cat.props || '',
+      weaponType: cat.weaponType || '',
+      notes: cat.notes || '',
+      cost: cat.cost || '',
+      weight: cat.weight
+    });
+  }
+
+  function calcAcFromInventory(inventory, scores, className) {
+    const dex = abilityModNum(scores.dex != null ? scores.dex : 10);
+    const con = abilityModNum(scores.con != null ? scores.con : 10);
+    const wis = abilityModNum(scores.wis != null ? scores.wis : 10);
+    const inv = inventory || [];
+    const armor = inv.find(i => i.equipped && i.category === 'armor');
+    const shield = inv.find(i => i.equipped && i.category === 'shield');
+    let ac;
+    if (armor && armor.acBase != null) {
+      let dexBonus = dex;
+      if (armor.acDexMax === 0) dexBonus = 0;
+      else if (armor.acDexMax != null) dexBonus = Math.min(dex, Number(armor.acDexMax));
+      ac = armor.acBase + dexBonus;
+    } else if (className === 'Barbarian') {
+      ac = 10 + dex + con;
+    } else if (className === 'Monk') {
+      ac = 10 + dex + wis;
+    } else {
+      ac = 10 + dex;
+    }
+    if (shield) ac += (shield.acBonus || 2);
+    return ac;
+  }
+
+  function inventoryWeight(inventory) {
+    return (inventory || []).reduce((s, i) => s + (Number(i.weight) || 0) * (Number(i.qty) || 1), 0);
+  }
+
+  function equipmentSearchHtml(query, category) {
+    const q = (query || '').trim().toLowerCase();
+    let list = getEquipmentList();
+    if (category && category !== 'all') list = list.filter(e => e.category === category);
+    if (q) {
+      list = list.filter(e =>
+        e.name.toLowerCase().includes(q) ||
+        (e.category || '').includes(q) ||
+        (e.weaponType || '').toLowerCase().includes(q) ||
+        (e.armorType || '').toLowerCase().includes(q) ||
+        (e.notes || '').toLowerCase().includes(q) ||
+        (e.props || '').toLowerCase().includes(q)
+      );
+    }
+    list = list.slice(0, 40);
+    if (!list.length) return '<p class="muted small">No equipment matches.</p>';
+    return `<ul class="equip-search-results">${list.map(e => {
+      const detail = e.category === 'armor'
+        ? `AC ${e.acBase}${e.acDexMax === 0 ? '' : e.acDexMax != null ? ' + Dex (max ' + e.acDexMax + ')' : ' + Dex'} · ${e.armorType}`
+        : e.category === 'shield'
+          ? `+${e.acBonus || 2} AC`
+          : e.category === 'weapon'
+            ? `${e.damage || ''} ${e.damageType || ''} · ${e.props || ''}`
+            : (e.notes || e.cost || '');
+      return `<li class="equip-result" data-equip-id="${escapeAttr(e.id)}">
+        <div class="equip-result-main"><strong>${escapeHtml(e.name)}</strong> <span class="muted small">${escapeHtml(e.category)}${e.cost ? ' · ' + escapeHtml(e.cost) : ''}</span></div>
+        <div class="muted small">${escapeHtml(detail)}</div>
+        <button type="button" class="btn secondary btn-tiny add-equip" data-equip-id="${escapeAttr(e.id)}">Add</button>
+      </li>`;
+    }).join('')}</ul>`;
+  }
+
+  function inventoryListHtml(inventory) {
+    const inv = inventory || [];
+    if (!inv.length) return '<p class="muted small" id="m-inv-empty">Inventory is empty. Search and add items below.</p>';
+    return `<ul class="inv-list" id="m-inv-list">${inv.map((it, idx) => {
+      const canEquip = it.category === 'armor' || it.category === 'shield' || it.category === 'weapon';
+      return `<li class="inv-item" data-uid="${escapeAttr(it.uid)}">
+        <label class="inv-equip">${canEquip ? `<input type="checkbox" class="inv-equipped" data-uid="${escapeAttr(it.uid)}" ${it.equipped ? 'checked' : ''} title="Equipped"/>` : '<span class="inv-equip-spacer"></span>'}
+        <span class="inv-name">${escapeHtml(it.name)}</span></label>
+        <span class="muted small inv-meta">${escapeHtml(it.category)}${it.damage ? ' · ' + escapeHtml(it.damage) + ' ' + escapeHtml(it.damageType || '') : ''}${it.acBase != null ? ' · AC ' + it.acBase : ''}${it.acBonus ? ' · +' + it.acBonus + ' AC' : ''}</span>
+        <input type="number" class="inv-qty" data-uid="${escapeAttr(it.uid)}" min="1" value="${it.qty}" title="Qty" />
+        <button type="button" class="btn danger btn-tiny inv-remove" data-uid="${escapeAttr(it.uid)}">✕</button>
+      </li>`;
+    }).join('')}</ul>
+    <p class="muted small">Weight: ${inventoryWeight(inv).toFixed(1)} lb · Check box to equip armor/shield/weapon (affects AC &amp; attacks).</p>`;
+  }
+
+const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
   const POINT_BUY_COST = {8:0,9:1,10:2,11:3,12:4,13:5,14:7,15:9};
   const POINT_BUY_BUDGET = 27;
   const ABS = ['str','dex','con','int','wis','cha'];
@@ -1371,6 +1497,109 @@ const FEATURE_SECTION = {
     return lines;
   }
 
+
+  function wireInventoryUI() {
+    const display = $('#m-inv-display');
+    const results = $('#m-equip-results');
+    const search = $('#m-equip-search');
+    const cat = $('#m-equip-cat');
+    if (!display) return;
+
+    function sync() {
+      if (!window.__draftInventory) window.__draftInventory = [];
+      display.innerHTML = inventoryListHtml(window.__draftInventory);
+      // refresh AC from equipment
+      const acEl = $('#m-ac');
+      if (acEl) {
+        delete acEl.dataset.manual;
+        const totals = {};
+        ['str','dex','con','int','wis','cha'].forEach(a => {
+          totals[a] = parseInt($('#m-total-' + a)?.textContent, 10) || parseInt($('#m-' + a)?.value, 10) || 10;
+        });
+        acEl.value = calcAcFromInventory(window.__draftInventory, totals, $('#m-class')?.value || '');
+      }
+      // Rebuild attacks from equipped weapons if not manual
+      const attacksInp = $('#m-attacks');
+      if (attacksInp && attacksInp.dataset.manual !== '1') {
+        const equippedWeapons = (window.__draftInventory || []).filter(i => i.equipped && i.category === 'weapon');
+        if (equippedWeapons.length) {
+          const lvl = clamp(parseInt($('#m-level')?.value, 10) || 1, 1, 20);
+          const pb = parseInt($('#m-prof')?.value, 10) || 2;
+          const str = abilityModNum(parseInt($('#m-total-str')?.textContent, 10) || 10);
+          const dex = abilityModNum(parseInt($('#m-total-dex')?.textContent, 10) || 10);
+          const lines = equippedWeapons.map(w => {
+            const finesse = (w.props || '').toLowerCase().includes('finesse');
+            const ranged = (w.weaponType || '').includes('ranged') || (w.props || '').toLowerCase().includes('ammunition');
+            const mod = (finesse || ranged) ? Math.max(str, dex) : str;
+            const modDmg = mod >= 0 ? `+${mod}` : `${mod}`;
+            const atk = mod + pb;
+            const atkStr = atk >= 0 ? `+${atk}` : `${atk}`;
+            return `${w.name}: ${atkStr} to hit, ${w.damage || '?'}${modDmg} ${w.damageType || ''}`.trim();
+          });
+          attacksInp.value = lines.join('\n');
+        }
+      }
+      bindInvItemHandlers();
+    }
+
+    function bindInvItemHandlers() {
+      display.querySelectorAll('.inv-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const uid_ = btn.dataset.uid;
+          window.__draftInventory = window.__draftInventory.filter(i => i.uid !== uid_);
+          sync();
+        });
+      });
+      display.querySelectorAll('.inv-equipped').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const uid_ = cb.dataset.uid;
+          const item = window.__draftInventory.find(i => i.uid === uid_);
+          if (!item) return;
+          item.equipped = cb.checked;
+          // only one armor / one shield
+          if (item.equipped && item.category === 'armor') {
+            window.__draftInventory.forEach(i => { if (i.category === 'armor' && i.uid !== uid_) i.equipped = false; });
+          }
+          if (item.equipped && item.category === 'shield') {
+            window.__draftInventory.forEach(i => { if (i.category === 'shield' && i.uid !== uid_) i.equipped = false; });
+          }
+          sync();
+        });
+      });
+      display.querySelectorAll('.inv-qty').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const item = window.__draftInventory.find(i => i.uid === inp.dataset.uid);
+          if (item) item.qty = Math.max(1, parseInt(inp.value, 10) || 1);
+          sync();
+        });
+      });
+    }
+
+    function refreshSearch() {
+      if (results) results.innerHTML = equipmentSearchHtml(search?.value || '', cat?.value || 'all');
+      results?.querySelectorAll('.add-equip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.equipId;
+          const catItem = getEquipmentList().find(e => e.id === id);
+          if (!catItem) return;
+          const invItem = catalogItemToInventory(catItem);
+          // stacking gear by id
+          if (catItem.category === 'gear' || catItem.category === 'tool') {
+            const existing = window.__draftInventory.find(i => i.id === id && !i.equipped);
+            if (existing) { existing.qty += 1; sync(); return; }
+          }
+          window.__draftInventory.push(invItem);
+          sync();
+        });
+      });
+    }
+
+    search?.addEventListener('input', refreshSearch);
+    cat?.addEventListener('change', refreshSearch);
+    refreshSearch();
+    sync();
+  }
+
   function wireCharacterFormHelpers() {
     const classSel = $('#m-class');
     const levelInp = $('#m-level');
@@ -1435,7 +1664,8 @@ const FEATURE_SECTION = {
         if (hpCur && !hpCur.dataset.manual) hpCur.value = hpEl.value;
       }
       if (acEl && !acEl.dataset.manual) {
-        acEl.value = suggestedAc(cname, totals);
+        const inv = window.__draftInventory || [];
+        acEl.value = calcAcFromInventory(inv, totals, cname);
       }
       if (spdEl && !spdEl.dataset.manual && raceName) {
         spdEl.value = suggestedSpeed(raceName, cname);
@@ -1693,7 +1923,31 @@ const FEATURE_SECTION = {
         <div class="field" style="margin-top:0.5rem"><label>Skills (text summary)</label><textarea id="m-skills" rows="2" placeholder="Auto-filled from checkboxes, or type freely">${escapeHtml(ch.skills)}</textarea></div>
         <div class="field"><label>Attacks &amp; Spell Attack</label><textarea id="m-attacks" rows="2" placeholder="Longbow +7 (1d8+3), Fire Bolt +5 (1d10)">${escapeHtml(ch.attacks)}</textarea></div>
         <div class="field"><label>Features &amp; Traits</label><textarea id="m-features" rows="3" placeholder="Class features, racial traits, feats…">${escapeHtml(ch.features)}</textarea></div>
-        <div class="field"><label>Equipment</label><textarea id="m-equipment" rows="2" placeholder="Armor, weapons, tools, magic items…">${escapeHtml(ch.equipment)}</textarea></div>
+        <div class="field full-width">
+          <label>Inventory &amp; Equipment</label>
+          <div id="m-inventory-panel" class="inventory-panel">
+            <div id="m-inv-display">${inventoryListHtml(ch.inventory || [])}</div>
+            <div class="equip-browser">
+              <div class="form-row">
+                <div class="field"><label>Quick Search</label>
+                  <input type="search" id="m-equip-search" placeholder="Search armor, weapons, gear…" autocomplete="off" />
+                </div>
+                <div class="field"><label>Category</label>
+                  <select id="m-equip-cat">
+                    <option value="all">All</option>
+                    <option value="armor">Armor</option>
+                    <option value="shield">Shields</option>
+                    <option value="weapon">Weapons</option>
+                    <option value="gear">Adventuring Gear</option>
+                    <option value="tool">Tools</option>
+                  </select>
+                </div>
+              </div>
+              <div id="m-equip-results" class="equip-results">${equipmentSearchHtml('', 'all')}</div>
+            </div>
+            <textarea id="m-equipment" rows="2" class="hidden" placeholder="Legacy notes">${escapeHtml(ch.equipment)}</textarea>
+          </div>
+        </div>
         <div class="field"><label>Notes (bonds, ideals, flaws, status)</label><textarea id="m-notes" rows="2">${escapeHtml(ch.notes)}</textarea></div>
       </div>
     `;
@@ -1743,7 +1997,8 @@ const FEATURE_SECTION = {
           skills: skillsText,
           attacks: $('#m-attacks').value.trim(),
           features: $('#m-features').value.trim(),
-          equipment: $('#m-equipment').value.trim(),
+          equipment: ($('#m-equipment')?.value || '').trim() || (window.__draftInventory || []).map(i => i.name + (i.qty > 1 ? ' ×' + i.qty : '') + (i.equipped ? ' (equipped)' : '')).join(', '),
+          inventory: (window.__draftInventory || []).map(normalizeInventoryItem),
           notes: $('#m-notes').value.trim()
         };
         if (existing) Object.assign(existing, data);
@@ -1753,7 +2008,9 @@ const FEATURE_SECTION = {
         return true;
       },
       afterOpen: () => {
+        window.__draftInventory = (ch.inventory || []).map(normalizeInventoryItem);
         wireCharacterFormHelpers();
+        wireInventoryUI();
         const grid = $('#ability-grid');
         if (grid) {
           grid.querySelectorAll('.ability-score').forEach(inp => {
@@ -1845,70 +2102,102 @@ const FEATURE_SECTION = {
     const cls = findPhbClass(ch.class);
     const path = findMoonPath(ch.subclass);
     const bon = getRaceBonuses(ch.race || '');
-    const abRows = ABS.map(a => {
+    const inv = ch.inventory || [];
+    const equipped = inv.filter(i => i.equipped);
+    const armor = equipped.find(i => i.category === 'armor');
+    const shield = equipped.find(i => i.category === 'shield');
+    const weapons = equipped.filter(i => i.category === 'weapon');
+    const acCalc = calcAcFromInventory(inv, ch, ch.class);
+
+    const abBlock = ABS.map(a => {
       const total = ch[a] || 10;
-      const b = bon[a] || 0;
-      const base = total - b;
-      return `<tr><td>${a.toUpperCase()}</td><td>${base}</td><td>${b ? '+' + b : '—'}</td><td><strong>${total}</strong></td><td>${modStr(total)}</td></tr>`;
+      return `<div class="cs-ability">
+        <div class="cs-ab-label">${a.toUpperCase()}</div>
+        <div class="cs-ab-mod">${modStr(total)}</div>
+        <div class="cs-ab-score">${total}</div>
+      </div>`;
     }).join('');
+
+    const invRows = inv.length ? inv.map(i =>
+      `<tr class="${i.equipped ? 'equipped-row' : ''}">
+        <td>${i.equipped ? '●' : ''}</td>
+        <td>${escapeHtml(i.name)}${i.qty > 1 ? ' ×' + i.qty : ''}</td>
+        <td>${escapeHtml(i.category)}</td>
+        <td>${i.weight ? (i.weight * i.qty) + ' lb' : '—'}</td>
+      </tr>`
+    ).join('') : '<tr><td colspan="4" class="muted">No items</td></tr>';
+
     return `
-      <div class="full-sheet">
-        <header class="full-sheet-header">
-          <h2>${escapeHtml(ch.name || 'Unnamed')}</h2>
-          <p class="muted">${escapeHtml(ch.player || 'NPC')} · ${escapeHtml(ch.race || '—')} ${ch.class ? '· ' + escapeHtml(ch.class) : ''}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · Level ${ch.level}
-          ${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</p>
-        </header>
-        <div class="full-sheet-grid">
-          <div class="detail-block">
-            <div class="detail-label">Combat</div>
-            <p><strong>AC</strong> ${ch.ac} · <strong>HP</strong> ${ch.hp} / ${ch.hpMax} · <strong>Speed</strong> ${escapeHtml(ch.speed || '30 ft.')} · <strong>PB</strong> +${ch.profBonus || 2}</p>
-            <p class="muted small">Suggested unarmored AC ${suggestedAc(ch.class, ch)}; HP by class/level/CON ${suggestedHpMax(ch.class, ch.level, ch.con)}</p>
+      <div class="cs-sheet">
+        <div class="cs-top">
+          <div class="cs-portrait-block">
+            <div class="cs-portrait-ring"><span>${escapeHtml((ch.name || '?').charAt(0).toUpperCase())}</span></div>
+            <div class="cs-name-block">
+              <div class="cs-char-name">${escapeHtml(ch.name || 'Unnamed')}</div>
+              <div class="cs-char-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
+              <div class="cs-char-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}</div>
+              <div class="cs-char-meta muted">${escapeHtml(ch.player || '')}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
+            </div>
           </div>
-          <div class="detail-block">
-            <div class="detail-label">Ability Scores</div>
-            <table class="prog-table">
-              <thead><tr><th>Ability</th><th>Base</th><th>Racial</th><th>Total</th><th>Mod</th></tr></thead>
-              <tbody>${abRows}</tbody>
-            </table>
+          <div class="cs-combat-row">
+            <div class="cs-stat-box"><div class="cs-stat-val">${ch.ac}</div><div class="cs-stat-label">Armor Class</div><div class="cs-stat-sub muted small">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''} · calc ${acCalc}</div></div>
+            <div class="cs-stat-box"><div class="cs-stat-val">${ch.hp}<span class="cs-hp-max">/${ch.hpMax}</span></div><div class="cs-stat-label">Hit Points</div></div>
+            <div class="cs-stat-box"><div class="cs-stat-val">${escapeHtml((ch.speed || '30 ft.').replace(' ft.',''))}</div><div class="cs-stat-label">Speed</div></div>
+            <div class="cs-stat-box"><div class="cs-stat-val">+${ch.profBonus || 2}</div><div class="cs-stat-label">Prof Bonus</div></div>
+            ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="cs-stat-box cs-corrupt"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>` : ''}
           </div>
-          <div class="detail-block">
-            <div class="detail-label">Saves &amp; Skills</div>
-            <p><strong>Saves:</strong> ${escapeHtml(ch.saves || '—')}</p>
-            <p><strong>Skills:</strong> ${escapeHtml(ch.skills || '—')}</p>
-          </div>
-          <div class="detail-block">
-            <div class="detail-label">Attacks</div>
-            <pre class="sheet-pre">${escapeHtml(ch.attacks || '—')}</pre>
-          </div>
-          <div class="detail-block">
-            <div class="detail-label">Features &amp; Traits</div>
-            <pre class="sheet-pre">${escapeHtml(ch.features || '—')}</pre>
-          </div>
-          <div class="detail-block">
-            <div class="detail-label">Equipment</div>
-            <pre class="sheet-pre">${escapeHtml(ch.equipment || '—')}</pre>
-          </div>
-          ${ch.isUmbrarian ? `<div class="detail-block callout">
-            <div class="detail-label">Umbrarian</div>
-            <p>Stage: <strong>${escapeHtml(ch.umbrarianStage || '—')}</strong> · Shard: <strong>${escapeHtml(ch.shard || '—')}</strong> · Ability: ${escapeHtml(ch.shardAbility || '—')} · Corruption ${ch.corruption}/6</p>
-          </div>` : ''}
-          ${race ? `<div class="detail-block">
-            <div class="detail-label">Race — ${escapeHtml(race.name)}</div>
-            <p class="muted small">${escapeHtml(race.tagline || race.short || '')}</p>
-            <ul class="trait-list">${(race.traits||[]).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
-          </div>` : ''}
-          ${cls ? `<div class="detail-block">
-            <div class="detail-label">Class — ${escapeHtml(cls.name)}</div>
-            <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)}</p>
-            <p>${escapeHtml(cls.summary || '')}</p>
-          </div>` : ''}
-          ${path ? `<div class="detail-block">
-            <div class="detail-label">${escapeHtml(path.name)}</div>
-            <p class="muted small">${escapeHtml(path.summary || '')}</p>
-            <ul class="trait-list">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
-          </div>` : ''}
-          ${ch.notes ? `<div class="detail-block"><div class="detail-label">Notes</div><pre class="sheet-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
         </div>
+
+        <div class="cs-main">
+          <div class="cs-col-left">
+            <div class="cs-panel">
+              <div class="cs-panel-title">Ability Scores</div>
+              <div class="cs-abilities">${abBlock}</div>
+            </div>
+            <div class="cs-panel">
+              <div class="cs-panel-title">Saving Throws</div>
+              <div class="cs-body">${escapeHtml(ch.saves || '—')}</div>
+            </div>
+            <div class="cs-panel">
+              <div class="cs-panel-title">Skills</div>
+              <div class="cs-body">${escapeHtml(ch.skills || '—')}</div>
+            </div>
+            ${ch.isUmbrarian ? `<div class="cs-panel cs-umb">
+              <div class="cs-panel-title">Umbrarian</div>
+              <div class="cs-body">${escapeHtml(ch.umbrarianStage || '—')} · ${escapeHtml(ch.shard || 'Shard')} · ${escapeHtml(ch.shardAbility || '')}</div>
+            </div>` : ''}
+          </div>
+          <div class="cs-col-right">
+            <div class="cs-panel">
+              <div class="cs-panel-title">Attacks &amp; Spellcasting</div>
+              <pre class="cs-pre">${escapeHtml(ch.attacks || '—')}</pre>
+              ${weapons.length ? `<div class="muted small">Equipped: ${weapons.map(w => escapeHtml(w.name)).join(', ')}</div>` : ''}
+            </div>
+            <div class="cs-panel">
+              <div class="cs-panel-title">Features &amp; Traits</div>
+              <pre class="cs-pre cs-pre-scroll">${escapeHtml(ch.features || '—')}</pre>
+            </div>
+            <div class="cs-panel">
+              <div class="cs-panel-title">Equipment</div>
+              <table class="cs-inv-table">
+                <thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead>
+                <tbody>${invRows}</tbody>
+              </table>
+              <div class="muted small">Total weight: ${inventoryWeight(inv).toFixed(1)} lb</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cs-footer-panels">
+          ${race ? `<div class="cs-panel"><div class="cs-panel-title">Race — ${escapeHtml(race.name)}</div>
+            <ul class="trait-list compact">${(race.traits||[]).slice(0,8).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
+          </div>` : ''}
+          ${path ? `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(path.name)}</div>
+            <ul class="trait-list compact">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
+          </div>` : ''}
+          ${ch.notes ? `<div class="cs-panel"><div class="cs-panel-title">Notes</div><pre class="cs-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
+        </div>
+        <p class="cs-footer-brand muted small">The Dark Sun Chronicles · Character Sheet</p>
       </div>`;
   }
 
