@@ -446,7 +446,7 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        state.campaigns = parsed.campaigns || [];
+        state.campaigns = (parsed.campaigns || []).map(ensureCampaignShape);
         state.activeCampaignId = parsed.activeCampaignId || null;
         state.diceHistory = parsed.diceHistory || [];
       }
@@ -537,6 +537,7 @@
     else if (viewName === 'overview') renderOverview();
     else if (viewName === 'sessions') renderSessions();
     else if (viewName === 'party') renderParty();
+    else if (viewName === 'combat') renderCombat();
     else if (viewName === 'factions') renderFactions();
     else if (viewName === 'forces') renderForces();
     else if (viewName === 'notes') renderNotes();
@@ -578,6 +579,8 @@
       notes: data.notes || '',
       sessions: [],
       party: [],
+      villains: [],
+      combat: null,
       factions: [],
       forces: [],
       createdAt: new Date().toISOString(),
@@ -587,6 +590,16 @@
     state.activeCampaignId = c.id;
     save();
     updateNavEnabled();
+    return c;
+  }
+
+  function ensureCampaignShape(c) {
+    if (!Array.isArray(c.party)) c.party = [];
+    if (!Array.isArray(c.villains)) c.villains = [];
+    if (!Array.isArray(c.factions)) c.factions = [];
+    if (!Array.isArray(c.forces)) c.forces = [];
+    if (!Array.isArray(c.sessions)) c.sessions = [];
+    if (c.combat === undefined) c.combat = null;
     return c;
   }
 
@@ -735,10 +748,12 @@
     $('#campaign-status').value = c.status || '';
     $('#campaign-goals').value = c.goals || '';
 
+    ensureCampaignShape(c);
     const stats = $('#quick-stats');
     stats.innerHTML = `
       <span class="stat-pill"><strong>${c.sessions.length}</strong> sessions</span>
       <span class="stat-pill"><strong>${c.party.length}</strong> characters</span>
+      <span class="stat-pill"><strong>${c.villains.length}</strong> villains</span>
       <span class="stat-pill"><strong>${c.factions.length}</strong> factions</span>
       <span class="stat-pill"><strong>${c.forces.length}</strong> active forces</span>
     `;
@@ -911,6 +926,7 @@
       id: ch.id,
       name: ch.name || '',
       player: ch.player || '',
+      type: ch.type || (ch.player === 'NPC' ? 'ally' : 'pc'),
       class: ch.class || '',
       subclass: ch.subclass || '',
       level: clamp(Number(ch.level) || 1, 1, 20),
@@ -1014,9 +1030,11 @@
         const name = $('#m-name').value.trim();
         if (!name) { toast('Name required'); return false; }
         const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 20);
+        const playerVal = $('#m-player').value.trim();
         const data = {
           name,
-          player: $('#m-player').value.trim(),
+          player: playerVal,
+          type: existing?.type || (playerVal === 'NPC' ? 'ally' : 'pc'),
           class: $('#m-class').value.trim(),
           subclass: $('#m-subclass').value.trim(),
           level,
@@ -1073,70 +1091,206 @@
     }
   }
 
+  function characterCardHtml(ch, roleLabel, roleClass) {
+    const corrClass = ch.corruption >= 5 ? 'high' : ch.corruption >= 3 ? 'mid' : '';
+    return `
+      <div class="char-top">
+        <div>
+          <h3>${escapeHtml(ch.name)}<span class="role-badge ${roleClass}">${roleLabel}</span></h3>
+          <div class="level">${escapeHtml(ch.class || 'Adventurer')}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · Level ${ch.level}${ch.race ? ' · ' + escapeHtml(ch.race) : ''}${ch.player && ch.player !== 'NPC' ? ' · ' + escapeHtml(ch.player) : ''}</div>
+        </div>
+        <div class="char-combat">
+          <span class="stat-chip" title="Armor Class">AC ${ch.ac}</span>
+          <span class="stat-chip" title="Hit Points">HP ${ch.hp}/${ch.hpMax || '—'}</span>
+          ${ch.corruption > 0 ? `<span class="stat-chip corruption ${corrClass}" title="Corruption">☠ ${ch.corruption}</span>` : ''}
+        </div>
+      </div>
+      <div class="ability-mini">
+        <span>STR ${ch.str} (${modStr(ch.str)})</span>
+        <span>DEX ${ch.dex} (${modStr(ch.dex)})</span>
+        <span>CON ${ch.con} (${modStr(ch.con)})</span>
+        <span>INT ${ch.int} (${modStr(ch.int)})</span>
+        <span>WIS ${ch.wis} (${modStr(ch.wis)})</span>
+        <span>CHA ${ch.cha} (${modStr(ch.cha)})</span>
+      </div>
+      ${ch.attacks ? `<div class="notes"><strong>Attacks:</strong> ${escapeHtml(ch.attacks)}</div>` : ''}
+      ${ch.notes ? `<div class="notes">${escapeHtml(ch.notes)}</div>` : ''}
+      <div class="actions">
+        <button class="btn primary edit-char">Open Sheet</button>
+        <button class="btn danger delete-char">Remove</button>
+      </div>
+    `;
+  }
+
   function renderParty() {
     const c = getActive();
     if (!c) return setView('campaigns');
+    ensureCampaignShape(c);
 
     const list = $('#party-list');
     const empty = $('#empty-party');
+    const vList = $('#villains-list');
+    const vEmpty = $('#empty-villains');
     list.innerHTML = '';
+    vList.innerHTML = '';
 
     if (c.party.length === 0) {
       empty.classList.remove('hidden');
-      return;
-    }
-    empty.classList.add('hidden');
-
-    c.party.forEach(raw => {
-      const ch = normalizeCharacter(raw);
-      Object.assign(raw, ch);
-      const card = document.createElement('div');
-      card.className = 'character-card sheet-card';
-      const corrClass = ch.corruption >= 5 ? 'high' : ch.corruption >= 3 ? 'mid' : '';
-      card.innerHTML = `
-        <div class="char-top">
-          <div>
-            <h3>${escapeHtml(ch.name)}</h3>
-            <div class="level">${escapeHtml(ch.class || 'Adventurer')}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · Level ${ch.level}${ch.race ? ' · ' + escapeHtml(ch.race) : ''}${ch.player ? ' · ' + escapeHtml(ch.player) : ''}</div>
-          </div>
-          <div class="char-combat">
-            <span class="stat-chip" title="Armor Class">AC ${ch.ac}</span>
-            <span class="stat-chip" title="Hit Points">HP ${ch.hp}/${ch.hpMax || '—'}</span>
-            ${ch.corruption > 0 ? `<span class="stat-chip corruption ${corrClass}" title="Corruption">☠ ${ch.corruption}</span>` : ''}
-          </div>
-        </div>
-        <div class="ability-mini">
-          <span>STR ${ch.str} (${modStr(ch.str)})</span>
-          <span>DEX ${ch.dex} (${modStr(ch.dex)})</span>
-          <span>CON ${ch.con} (${modStr(ch.con)})</span>
-          <span>INT ${ch.int} (${modStr(ch.int)})</span>
-          <span>WIS ${ch.wis} (${modStr(ch.wis)})</span>
-          <span>CHA ${ch.cha} (${modStr(ch.cha)})</span>
-        </div>
-        ${ch.attacks ? `<div class="notes"><strong>Attacks:</strong> ${escapeHtml(ch.attacks)}</div>` : ''}
-        ${ch.notes ? `<div class="notes">${escapeHtml(ch.notes)}</div>` : ''}
-        <div class="actions">
-          <button class="btn primary edit-char">Open Sheet</button>
-          <button class="btn danger delete-char">Remove</button>
-        </div>
-      `;
-      card.querySelector('.edit-char').addEventListener('click', () => promptCharacter(raw));
-      card.querySelector('.delete-char').addEventListener('click', async () => {
-        const ok = await openModal({
-          title: 'Remove Character?',
-          bodyHtml: `<p>Remove <strong>${escapeHtml(ch.name)}</strong> from the party?</p>`,
-          confirmText: 'Remove',
-          onConfirm: () => {
-            c.party = c.party.filter(x => x.id !== raw.id);
-            c.updatedAt = new Date().toISOString();
-            save();
-            return true;
-          }
+    } else {
+      empty.classList.add('hidden');
+      c.party.forEach(raw => {
+        const ch = normalizeCharacter(raw);
+        Object.assign(raw, ch);
+        const isAlly = ch.type === 'ally' || ch.player === 'NPC';
+        const card = document.createElement('div');
+        card.className = 'character-card sheet-card';
+        card.innerHTML = characterCardHtml(ch, isAlly ? 'Ally' : 'PC', isAlly ? 'ally' : 'pc');
+        card.querySelector('.edit-char').addEventListener('click', () => promptCharacter(raw));
+        card.querySelector('.delete-char').addEventListener('click', async () => {
+          const ok = await openModal({
+            title: 'Remove Character?',
+            bodyHtml: `<p>Remove <strong>${escapeHtml(ch.name)}</strong> from the roster?</p>`,
+            confirmText: 'Remove',
+            onConfirm: () => {
+              c.party = c.party.filter(x => x.id !== raw.id);
+              c.updatedAt = new Date().toISOString();
+              save();
+              return true;
+            }
+          });
+          if (ok) { toast('Removed'); renderParty(); }
         });
-        if (ok) { toast('Character removed'); renderParty(); }
+        list.appendChild(card);
       });
-      list.appendChild(card);
+    }
+
+    if (c.villains.length === 0) {
+      vEmpty.classList.remove('hidden');
+    } else {
+      vEmpty.classList.add('hidden');
+      c.villains.forEach(raw => {
+        const ch = normalizeCharacter(raw);
+        Object.assign(raw, ch);
+        const card = document.createElement('div');
+        card.className = 'character-card sheet-card villain-card';
+        card.innerHTML = characterCardHtml(ch, 'Villain', 'villain');
+        card.querySelector('.edit-char').addEventListener('click', () => promptVillain(raw));
+        card.querySelector('.delete-char').addEventListener('click', async () => {
+          const ok = await openModal({
+            title: 'Remove Villain?',
+            bodyHtml: `<p>Remove <strong>${escapeHtml(ch.name)}</strong> from villains?</p>`,
+            confirmText: 'Remove',
+            onConfirm: () => {
+              c.villains = c.villains.filter(x => x.id !== raw.id);
+              c.updatedAt = new Date().toISOString();
+              save();
+              return true;
+            }
+          });
+          if (ok) { toast('Villain removed'); renderParty(); }
+        });
+        vList.appendChild(card);
+      });
+    }
+  }
+
+  async function promptVillain(existing = null) {
+    // Reuse character sheet modal but save to villains list
+    const c = getActive();
+    if (!c) return;
+    const ch = existing ? normalizeCharacter(existing) : normalizeCharacter({ level: 1, player: 'NPC', type: 'villain', str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, ac: 10, speed: '30 ft.', profBonus: 2 });
+    // Temporarily treat as existing character for form, then route save
+    const confirmed = await openModal({
+      title: existing ? `Villain Sheet — ${ch.name || 'Edit'}` : 'New Villain',
+      wide: true,
+      bodyHtml: (() => {
+        // Build same body as promptCharacter by calling internal structure
+        return `
+      <div class="sheet-section">
+        <div class="form-row">
+          <div class="field"><label>Name</label><input type="text" id="m-name" value="${escapeAttr(ch.name)}" placeholder="Villain name" /></div>
+          <div class="field"><label>Role / Class</label><input type="text" id="m-class" value="${escapeAttr(ch.class)}" placeholder="e.g. Cult leader, Warlord" /></div>
+        </div>
+        <div class="form-row triple">
+          <div class="field"><label>Level / CR</label><input type="number" id="m-level" min="1" max="20" value="${ch.level}" /></div>
+          <div class="field"><label>World</label>
+            <select id="m-world">
+              <option value="">—</option>
+              ${WORLDS.map(w => `<option value="${w}" ${ch.world === w ? 'selected' : ''}>${w}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label>Corruption</label><input type="number" id="m-corruption" min="0" max="10" value="${ch.corruption}" /></div>
+        </div>
+      </div>
+      <div class="sheet-section">
+        <span class="section-label">Ability Scores</span>
+        <div class="ability-grid">${abilityRowHtml('m', ch)}</div>
+      </div>
+      <div class="sheet-section">
+        <div class="form-row triple">
+          <div class="field"><label>HP</label><input type="number" id="m-hp" min="0" value="${ch.hp}" /></div>
+          <div class="field"><label>HP Max</label><input type="number" id="m-hpmax" min="0" value="${ch.hpMax}" /></div>
+          <div class="field"><label>AC</label><input type="number" id="m-ac" min="1" value="${ch.ac}" /></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>Speed</label><input type="text" id="m-speed" value="${escapeAttr(ch.speed)}" /></div>
+          <div class="field"><label>Prof. Bonus</label><input type="number" id="m-prof" min="2" max="9" value="${ch.profBonus}" /></div>
+        </div>
+      </div>
+      <div class="sheet-section">
+        <div class="field"><label>Attacks</label><textarea id="m-attacks" rows="2">${escapeHtml(ch.attacks)}</textarea></div>
+        <div class="field"><label>Features &amp; Traits</label><textarea id="m-features" rows="2">${escapeHtml(ch.features)}</textarea></div>
+        <div class="field"><label>Notes / Secret</label><textarea id="m-notes" rows="2">${escapeHtml(ch.notes)}</textarea></div>
+      </div>`;
+      })(),
+      afterOpen: () => {
+        $$('.ability-score').forEach(inp => {
+          inp.addEventListener('input', () => {
+            const k = inp.dataset.ab;
+            const modEl = $(`#m-mod-${k}`);
+            if (modEl) modEl.textContent = modStr(parseInt(inp.value, 10) || 10);
+          });
+        });
+      },
+      onConfirm: () => {
+        const name = $('#m-name').value.trim();
+        if (!name) { toast('Name required'); return false; }
+        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 20);
+        const data = {
+          name,
+          player: 'NPC',
+          type: 'villain',
+          class: $('#m-class').value.trim(),
+          level,
+          world: $('#m-world').value,
+          corruption: clamp(parseInt($('#m-corruption').value, 10) || 0, 0, 10),
+          str: parseInt($('#m-str').value, 10) || 10,
+          dex: parseInt($('#m-dex').value, 10) || 10,
+          con: parseInt($('#m-con').value, 10) || 10,
+          int: parseInt($('#m-int').value, 10) || 10,
+          wis: parseInt($('#m-wis').value, 10) || 10,
+          cha: parseInt($('#m-cha').value, 10) || 10,
+          hp: parseInt($('#m-hp').value, 10) || 0,
+          hpMax: parseInt($('#m-hpmax').value, 10) || 0,
+          ac: parseInt($('#m-ac').value, 10) || 10,
+          speed: $('#m-speed').value.trim() || '30 ft.',
+          profBonus: parseInt($('#m-prof').value, 10) || profBonusForLevel(level),
+          attacks: $('#m-attacks').value.trim(),
+          features: $('#m-features').value.trim(),
+          notes: $('#m-notes').value.trim(),
+          subclass: '', race: '', background: '', alignment: '', saves: '', skills: '', equipment: ''
+        };
+        if (existing) Object.assign(existing, data);
+        else c.villains.push({ id: uid(), ...data });
+        c.updatedAt = new Date().toISOString();
+        save();
+        return true;
+      }
     });
+    if (confirmed) {
+      toast(existing ? 'Villain updated' : 'Villain added');
+      renderParty();
+    }
   }
 
   // ─── Factions (with generator) ───────────────────────────────────────────
@@ -1762,44 +1916,395 @@
             <p class="npc-sub">${escapeHtml(block.subtitle)}</p>
             ${block.lines.map(l => `<p>${escapeHtml(l)}</p>`).join('')}
             <div class="npc-actions">
-              <button class="btn secondary use-npc-party">Add as Party Ally/Contact</button>
+              <button class="btn secondary use-npc-party">Add as Ally/Contact</button>
+              <button class="btn danger use-npc-villain">Add as Villain</button>
               <button class="btn secondary reroll-npc">🎲 Reroll</button>
             </div>
           </div>
         `;
+        const makeNpcRecord = (type) => ({
+          id: uid(),
+          name: npc.name,
+          player: 'NPC',
+          type,
+          class: npc.role,
+          level: Math.max(1, Math.round(Number(npc.cr) || 1)),
+          race: '',
+          background: '',
+          world: npc.world,
+          alignment: '',
+          str: npc.str, dex: npc.dex, con: npc.con, int: npc.int, wis: npc.wis, cha: npc.cha,
+          hp: npc.hp, hpMax: npc.hpMax, ac: npc.ac, speed: npc.speed,
+          profBonus: 2,
+          saves: '',
+          skills: `Perception (passive ${npc.perception})`,
+          attacks: npc.attacks,
+          features: npc.traits,
+          equipment: '',
+          corruption: 0,
+          notes: `CR ${npc.cr}. Secret: ${npc.secret}`
+        });
         out.querySelector('.use-npc-party')?.addEventListener('click', () => {
           const c = getActive();
           if (!c) { toast('Open or create a campaign first'); return; }
-          // Store as a lightweight character-like contact on party with NPC flag
-          c.party.push({
-            id: uid(),
-            name: npc.name,
-            player: 'NPC',
-            class: npc.role,
-            level: Math.max(1, Math.round(Number(npc.cr) || 1)),
-            race: '',
-            background: '',
-            world: npc.world,
-            alignment: '',
-            str: npc.str, dex: npc.dex, con: npc.con, int: npc.int, wis: npc.wis, cha: npc.cha,
-            hp: npc.hp, hpMax: npc.hpMax, ac: npc.ac, speed: npc.speed,
-            profBonus: 2,
-            saves: '',
-            skills: `Perception (passive ${npc.perception})`,
-            attacks: npc.attacks,
-            features: npc.traits,
-            equipment: '',
-            corruption: 0,
-            notes: `CR ${npc.cr}. Secret: ${npc.secret}`
-          });
+          ensureCampaignShape(c);
+          c.party.push(makeNpcRecord('ally'));
           c.updatedAt = new Date().toISOString();
           save();
-          toast('NPC added to Party list');
+          toast('NPC added as Ally/Contact');
+          updateNavEnabled();
+        });
+        out.querySelector('.use-npc-villain')?.addEventListener('click', () => {
+          const c = getActive();
+          if (!c) { toast('Open or create a campaign first'); return; }
+          ensureCampaignShape(c);
+          c.villains.push(makeNpcRecord('villain'));
+          c.updatedAt = new Date().toISOString();
+          save();
+          toast('NPC added as Villain');
           updateNavEnabled();
         });
         out.querySelector('.reroll-npc')?.addEventListener('click', () => genNpcBtn.click());
       });
     }
+  }
+
+  // ─── Combat Tracker ──────────────────────────────────────────────────────
+  function getCombat(c) {
+    ensureCampaignShape(c);
+    if (!c.combat || !Array.isArray(c.combat.combatants)) {
+      c.combat = { round: 1, turnIndex: 0, combatants: [] };
+    }
+    return c.combat;
+  }
+
+  function combatantFromChar(ch, side) {
+    const n = normalizeCharacter(ch);
+    const dexMod = abilityMod(n.dex);
+    return {
+      id: uid(),
+      sourceId: n.id || null,
+      name: n.name,
+      init: 10 + dexMod,
+      hp: n.hp,
+      hpMax: n.hpMax || n.hp,
+      ac: n.ac,
+      conditions: '',
+      side: side || 'party',
+      notes: n.attacks || ''
+    };
+  }
+
+  function renderCombat() {
+    const c = getActive();
+    if (!c) return setView('campaigns');
+    const combat = getCombat(c);
+    const list = $('#combat-list');
+    const empty = $('#empty-combat');
+    list.innerHTML = '';
+
+    $('#combat-round').textContent = combat.round;
+
+    if (combat.combatants.length === 0) {
+      empty.classList.remove('hidden');
+      $('#combat-turn-label').textContent = '—';
+      return;
+    }
+    empty.classList.add('hidden');
+
+    // Clamp turn index
+    if (combat.turnIndex >= combat.combatants.length) combat.turnIndex = 0;
+    if (combat.turnIndex < 0) combat.turnIndex = 0;
+
+    const active = combat.combatants[combat.turnIndex];
+    $('#combat-turn-label').textContent = active ? `Turn: ${active.name}` : '—';
+
+    combat.combatants.forEach((cb, idx) => {
+      const row = document.createElement('div');
+      const dead = cb.hp <= 0;
+      row.className = `combatant-row side-${cb.side || 'neutral'}${idx === combat.turnIndex ? ' active-turn' : ''}${dead ? ' dead' : ''}`;
+      const hpPct = cb.hpMax > 0 ? cb.hp / cb.hpMax : 1;
+      let hpClass = '';
+      if (dead) hpClass = 'dead-hp';
+      else if (hpPct <= 0.25) hpClass = 'critical';
+      else if (hpPct <= 0.5) hpClass = 'hurt';
+
+      row.innerHTML = `
+        <div class="combat-init" title="Click to edit initiative" data-idx="${idx}">${cb.init}</div>
+        <div class="combat-name-block">
+          <div class="combat-name">${escapeHtml(cb.name)}</div>
+          <div class="combat-sub">AC ${cb.ac}${cb.notes ? ' · ' + escapeHtml(cb.notes.slice(0, 40)) : ''}</div>
+        </div>
+        <div class="combat-hp-controls">
+          <button type="button" class="hp-minus" data-idx="${idx}" title="-1 HP">−</button>
+          <button type="button" class="hp-minus5" data-idx="${idx}" title="-5 HP">−5</button>
+          <span class="combat-hp-val ${hpClass}" data-idx="${idx}" title="Click to set HP">${cb.hp}/${cb.hpMax}</span>
+          <button type="button" class="hp-plus" data-idx="${idx}" title="+1 HP">+</button>
+          <button type="button" class="hp-plus5" data-idx="${idx}" title="+5 HP">+5</button>
+        </div>
+        <div class="combat-actions">
+          <button type="button" class="icon-btn combat-remove" data-idx="${idx}" title="Remove">✕</button>
+        </div>
+        <div class="combat-conditions">
+          <input type="text" class="cond-input" data-idx="${idx}" value="${escapeAttr(cb.conditions || '')}" placeholder="Conditions (poisoned, prone…)" />
+        </div>
+      `;
+      list.appendChild(row);
+    });
+
+    // Wire HP buttons
+    list.querySelectorAll('.hp-minus').forEach(btn => {
+      btn.addEventListener('click', () => adjustHp(parseInt(btn.dataset.idx, 10), -1));
+    });
+    list.querySelectorAll('.hp-minus5').forEach(btn => {
+      btn.addEventListener('click', () => adjustHp(parseInt(btn.dataset.idx, 10), -5));
+    });
+    list.querySelectorAll('.hp-plus').forEach(btn => {
+      btn.addEventListener('click', () => adjustHp(parseInt(btn.dataset.idx, 10), 1));
+    });
+    list.querySelectorAll('.hp-plus5').forEach(btn => {
+      btn.addEventListener('click', () => adjustHp(parseInt(btn.dataset.idx, 10), 5));
+    });
+    list.querySelectorAll('.combat-hp-val').forEach(el => {
+      el.addEventListener('click', async () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        const cb = getCombat(c).combatants[idx];
+        if (!cb) return;
+        const ok = await openModal({
+          title: `Set HP — ${cb.name}`,
+          bodyHtml: `
+            <div class="form-row">
+              <div class="field"><label>Current HP</label><input type="number" id="m-hp" value="${cb.hp}" /></div>
+              <div class="field"><label>Max HP</label><input type="number" id="m-hpmax" value="${cb.hpMax}" /></div>
+            </div>`,
+          onConfirm: () => {
+            cb.hp = parseInt($('#m-hp').value, 10) || 0;
+            cb.hpMax = parseInt($('#m-hpmax').value, 10) || cb.hpMax;
+            save();
+            return true;
+          }
+        });
+        if (ok) renderCombat();
+      });
+    });
+    list.querySelectorAll('.combat-init').forEach(el => {
+      el.addEventListener('click', async () => {
+        const idx = parseInt(el.dataset.idx, 10);
+        const cb = getCombat(c).combatants[idx];
+        if (!cb) return;
+        const ok = await openModal({
+          title: `Initiative — ${cb.name}`,
+          bodyHtml: `<div class="field"><label>Initiative</label><input type="number" id="m-init" value="${cb.init}" /></div>`,
+          onConfirm: () => {
+            cb.init = parseInt($('#m-init').value, 10) || 0;
+            save();
+            return true;
+          }
+        });
+        if (ok) renderCombat();
+      });
+    });
+    list.querySelectorAll('.combat-remove').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx, 10);
+        const combat = getCombat(c);
+        combat.combatants.splice(idx, 1);
+        if (combat.turnIndex >= combat.combatants.length) combat.turnIndex = Math.max(0, combat.combatants.length - 1);
+        save();
+        renderCombat();
+      });
+    });
+    list.querySelectorAll('.cond-input').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const idx = parseInt(inp.dataset.idx, 10);
+        const cb = getCombat(c).combatants[idx];
+        if (cb) {
+          cb.conditions = inp.value.trim();
+          save();
+        }
+      });
+    });
+  }
+
+  function adjustHp(idx, delta) {
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    const cb = combat.combatants[idx];
+    if (!cb) return;
+    cb.hp = Math.max(0, (cb.hp || 0) + delta);
+    if (cb.hp > cb.hpMax) cb.hp = cb.hpMax;
+    save();
+    renderCombat();
+  }
+
+  function combatNextTurn() {
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    if (combat.combatants.length === 0) return;
+    combat.turnIndex = (combat.turnIndex + 1) % combat.combatants.length;
+    if (combat.turnIndex === 0) combat.round += 1;
+    save();
+    renderCombat();
+  }
+
+  function combatClear() {
+    const c = getActive();
+    if (!c) return;
+    c.combat = { round: 1, turnIndex: 0, combatants: [] };
+    save();
+    renderCombat();
+    toast('Combat cleared');
+  }
+
+  function combatSortInit() {
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    const activeId = combat.combatants[combat.turnIndex]?.id;
+    combat.combatants.sort((a, b) => (b.init || 0) - (a.init || 0));
+    if (activeId) {
+      const newIdx = combat.combatants.findIndex(x => x.id === activeId);
+      combat.turnIndex = newIdx >= 0 ? newIdx : 0;
+    } else {
+      combat.turnIndex = 0;
+    }
+    save();
+    renderCombat();
+    toast('Sorted by initiative');
+  }
+
+  function combatRollInit() {
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    combat.combatants.forEach(cb => {
+      // d20 + keep relative dex bias if we stored notes; simple d20 for now, preserve existing as base offset
+      cb.init = Math.floor(Math.random() * 20) + 1;
+    });
+    combat.combatants.sort((a, b) => (b.init || 0) - (a.init || 0));
+    combat.turnIndex = 0;
+    combat.round = 1;
+    save();
+    renderCombat();
+    toast('Initiative rolled');
+  }
+
+  async function combatPickFromList(list, side, title) {
+    const c = getActive();
+    if (!c) return;
+    ensureCampaignShape(c);
+    const items = list || [];
+    if (items.length === 0) {
+      toast(side === 'enemy' ? 'No villains in roster' : 'No party members');
+      return;
+    }
+    const options = items.map((ch, i) =>
+      `<label class="pick-row" style="display:flex;align-items:center;gap:0.5rem;margin:0.35rem 0;cursor:pointer">
+        <input type="checkbox" class="pick-cb" value="${i}" />
+        <span>${escapeHtml(ch.name)} <span class="muted small">(AC ${ch.ac || 10}, HP ${ch.hp || 0}/${ch.hpMax || ch.hp || 0})</span></span>
+      </label>`
+    ).join('');
+    const ok = await openModal({
+      title,
+      bodyHtml: `<p class="muted small" style="margin-bottom:0.75rem">Select one or more to add to combat.</p>${options}`,
+      confirmText: 'Add Selected',
+      onConfirm: () => {
+        const checked = $$('.pick-cb:checked');
+        if (checked.length === 0) { toast('Select at least one'); return false; }
+        const combat = getCombat(c);
+        checked.forEach(cb => {
+          const ch = items[parseInt(cb.value, 10)];
+          if (ch) combat.combatants.push(combatantFromChar(ch, side));
+        });
+        c.updatedAt = new Date().toISOString();
+        save();
+        return true;
+      }
+    });
+    if (ok) {
+      toast('Added to combat');
+      renderCombat();
+    }
+  }
+
+  async function combatQuickAdd() {
+    const c = getActive();
+    if (!c) return;
+    const ok = await openModal({
+      title: 'Quick Add Combatant',
+      bodyHtml: `
+        <div class="form-row">
+          <div class="field"><label>Name</label><input type="text" id="m-name" placeholder="Goblin 1" /></div>
+          <div class="field"><label>Side</label>
+            <select id="m-side">
+              <option value="enemy">Enemy</option>
+              <option value="party">Party</option>
+              <option value="neutral">Neutral</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row triple">
+          <div class="field"><label>Init</label><input type="number" id="m-init" value="10" /></div>
+          <div class="field"><label>HP</label><input type="number" id="m-hp" value="10" /></div>
+          <div class="field"><label>AC</label><input type="number" id="m-ac" value="12" /></div>
+        </div>
+        <div class="field"><label>Notes / Attacks</label><input type="text" id="m-notes" placeholder="Scimitar +4 (1d6+2)" /></div>
+      `,
+      confirmText: 'Add',
+      onConfirm: () => {
+        const name = $('#m-name').value.trim();
+        if (!name) { toast('Name required'); return false; }
+        const combat = getCombat(c);
+        const hp = parseInt($('#m-hp').value, 10) || 1;
+        combat.combatants.push({
+          id: uid(),
+          sourceId: null,
+          name,
+          init: parseInt($('#m-init').value, 10) || 0,
+          hp,
+          hpMax: hp,
+          ac: parseInt($('#m-ac').value, 10) || 10,
+          conditions: '',
+          side: $('#m-side').value || 'enemy',
+          notes: $('#m-notes').value.trim()
+        });
+        save();
+        return true;
+      }
+    });
+    if (ok) {
+      toast('Combatant added');
+      renderCombat();
+    }
+  }
+
+  function bindCombatListeners() {
+    $('#combat-next-btn')?.addEventListener('click', combatNextTurn);
+    $('#combat-clear-btn')?.addEventListener('click', async () => {
+      const ok = await openModal({
+        title: 'Clear Combat?',
+        bodyHtml: '<p>Remove all combatants and reset the round counter?</p>',
+        confirmText: 'Clear',
+        onConfirm: () => true
+      });
+      if (ok) combatClear();
+    });
+    $('#combat-add-party-btn')?.addEventListener('click', () => {
+      const c = getActive();
+      if (!c) return;
+      combatPickFromList(c.party, 'party', 'Add from Party');
+    });
+    $('#combat-add-villain-btn')?.addEventListener('click', () => {
+      const c = getActive();
+      if (!c) return;
+      ensureCampaignShape(c);
+      combatPickFromList(c.villains, 'enemy', 'Add from Villains');
+    });
+    $('#combat-quick-add-btn')?.addEventListener('click', combatQuickAdd);
+    $('#combat-roll-init-btn')?.addEventListener('click', combatRollInit);
+    $('#combat-sort-btn')?.addEventListener('click', combatSortInit);
   }
 
   // ─── Dice Roller ─────────────────────────────────────────────────────────
@@ -2021,6 +2526,7 @@
 
     bindOverviewListeners();
     bindNotes();
+    bindCombatListeners();
     setupDice();
 
     $('#export-btn').addEventListener('click', exportData);

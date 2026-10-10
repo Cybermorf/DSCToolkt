@@ -1314,3 +1314,149 @@ label.small {
   .ability-grid { grid-template-columns: repeat(3, 1fr); }
   .modal-panel.wide { width: 100%; }
 }
+
+/* ─── Roster (Party / Villains) ─────────────────────────────────────────── */
+.roster-heading {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.roster-heading.villains-heading { color: var(--danger); border-color: rgba(196, 92, 74, 0.35); }
+.role-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 4px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+  font-weight: 600;
+}
+.role-badge.pc { background: rgba(232, 168, 56, 0.15); color: var(--accent); }
+.role-badge.ally { background: rgba(106, 158, 106, 0.2); color: var(--success); }
+.role-badge.villain { background: rgba(196, 92, 74, 0.2); color: var(--danger); }
+.character-card.villain-card { border-color: rgba(196, 92, 74, 0.35); }
+
+/* ─── Combat Tracker ────────────────────────────────────────────────────── */
+.combat-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.combat-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.header-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.combat-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.combatant-row {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr auto auto;
+  gap: 0.6rem 0.75rem;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.combatant-row.active-turn {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 1px rgba(232, 168, 56, 0.25), 0 0 16px rgba(232, 168, 56, 0.08);
+}
+.combatant-row.dead { opacity: 0.55; }
+.combatant-row.side-party { border-left: 3px solid var(--success); }
+.combatant-row.side-enemy { border-left: 3px solid var(--danger); }
+.combatant-row.side-neutral { border-left: 3px solid var(--text-dim); }
+.combat-init {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  min-width: 2.5rem;
+}
+.combat-init:hover { color: #f0b84a; }
+.combat-name-block { min-width: 0; }
+.combat-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.combat-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+.combat-hp-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.combat-hp-controls button {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.combat-hp-controls button:hover { background: var(--bg-hover); }
+.combat-hp-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 4.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+.combat-hp-val.hurt { color: #e09040; }
+.combat-hp-val.critical { color: var(--danger); }
+.combat-hp-val.dead-hp { color: var(--text-dim); text-decoration: line-through; }
+.combat-actions {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.combat-conditions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.combat-conditions input {
+  flex: 1;
+  min-width: 120px;
+  font-size: 0.82rem;
+  padding: 0.3rem 0.5rem;
+}
+.cond-tag {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(232, 168, 56, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(232, 168, 56, 0.3);
+}
+@media (max-width: 640px) {
+  .combatant-row {
+    grid-template-columns: 2.8rem 1fr;
+  }
+  .combat-hp-controls, .combat-actions {
+    grid-column: 1 / -1;
+  }
+  .combat-actions { justify-content: flex-end; }
+}

@@ -53,7 +53,11 @@
         </button>
         <button class="nav-item" data-view="party" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Party
+          Party &amp; Roster
+        </button>
+        <button class="nav-item" data-view="combat" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5L18 3h3v3l-3.5 3.5"/></svg>
+          Combat
         </button>
         <button class="nav-item" data-view="factions" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -155,18 +159,54 @@
         </div>
       </section>
 
-      <!-- Party View -->
+      <!-- Party & Roster View -->
       <section id="view-party" class="view">
         <div class="view-header">
-          <h1>Party</h1>
+          <h1>Party &amp; Roster</h1>
           <button id="new-character-btn" class="btn primary">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
             Add Character
           </button>
         </div>
+        <p class="view-desc">Player characters, allies/contacts, and villains. Generate NPCs in Tools and add them as allies or villains. Use Combat to pull combatants from either list.</p>
+        <h2 class="roster-heading">Player Characters &amp; Allies</h2>
         <div id="party-list" class="party-list"></div>
         <div id="empty-party" class="empty-state hidden">
-          <p>No characters yet. Add full player character sheets (abilities, HP, AC, attacks, corruption) or import NPCs from Tools.</p>
+          <p>No characters yet. Add full player character sheets or import NPCs from Tools as allies.</p>
+        </div>
+        <h2 class="roster-heading villains-heading">Villains &amp; Enemies</h2>
+        <div id="villains-list" class="party-list"></div>
+        <div id="empty-villains" class="empty-state hidden">
+          <p>No villains yet. Generate an NPC in Tools and choose <strong>Add as Villain</strong>, or add one manually from Combat.</p>
+        </div>
+      </section>
+
+      <!-- Combat Tracker View -->
+      <section id="view-combat" class="view">
+        <div class="view-header">
+          <h1>Combat Tracker</h1>
+          <div class="header-actions">
+            <button id="combat-clear-btn" class="btn danger ghost">Clear</button>
+            <button id="combat-next-btn" class="btn primary">Next Turn</button>
+          </div>
+        </div>
+        <p class="view-desc">Track initiative, HP, and conditions. Add combatants from Party, Villains, or create temporary ones. State is saved with the campaign.</p>
+        <div class="combat-toolbar">
+          <div class="combat-meta">
+            <span class="stat-pill">Round <strong id="combat-round">1</strong></span>
+            <span class="stat-pill" id="combat-turn-label">—</span>
+          </div>
+          <div class="tool-btns">
+            <button id="combat-add-party-btn" class="btn secondary">+ From Party</button>
+            <button id="combat-add-villain-btn" class="btn secondary">+ From Villains</button>
+            <button id="combat-quick-add-btn" class="btn secondary">Quick Add</button>
+            <button id="combat-roll-init-btn" class="btn secondary">Roll Init</button>
+            <button id="combat-sort-btn" class="btn secondary">Sort by Init</button>
+          </div>
+        </div>
+        <div id="combat-list" class="combat-list"></div>
+        <div id="empty-combat" class="empty-state">
+          <p>No combatants. Add from Party, Villains, or Quick Add to start tracking.</p>
         </div>
       </section>
 
