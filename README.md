@@ -76,7 +76,7 @@ It checks out the repo and deploys the static files to GitHub Pages. No build st
 ## Project structure
 
 ```
-.
+dark-sun-companion/
 ├── index.html          # App shell & markup
 ├── css/
 │   └── styles.css      # Dark fantasy theme (void + amber sun)
