@@ -959,7 +959,11 @@
       attacks: ch.attacks || '',
       features: ch.features || '',
       equipment: ch.equipment || '',
-      corruption: clamp(Number(ch.corruption) || 0, 0, 10),
+      corruption: clamp(Number(ch.corruption) || 0, 0, 6),
+      isUmbrarian: !!ch.isUmbrarian,
+      umbrarianStage: ch.umbrarianStage || '',
+      shard: ch.shard || '',
+      shardAbility: ch.shardAbility || '',
       notes: ch.notes || ''
     };
   }
@@ -1136,7 +1140,38 @@
         </div>
         <div class="form-row">
           <div class="field"><label>Home World</label><select id="m-world"><option value="">—</option>${WORLDS.map(w => `<option value="${w}" ${ch.world === w ? 'selected' : ''}>${w}</option>`).join('')}</select></div>
-          <div class="field"><label>Corruption (0–10)</label><input type="number" id="m-corruption" min="0" max="10" value="${ch.corruption}" title="Shard / dark influence track" /></div>
+          <div class="field"><label>Corruption (0–6)</label><input type="number" id="m-corruption" min="0" max="6" value="${ch.corruption}" title="Umbrarian Corruption Track (DMG)" /></div>
+        </div>
+        <div class="umbrarian-box">
+          <label class="checkbox-row">
+            <input type="checkbox" id="m-umbrarian" ${ch.isUmbrarian ? 'checked' : ''} />
+            <span><strong>Apply Umbrarian template</strong> — host of a Dark Shard (DMG). Not a race; stacks with any ancestry.</span>
+          </label>
+          <div id="m-umbrarian-fields" class="umbrarian-fields ${ch.isUmbrarian ? '' : 'hidden'}">
+            <div class="form-row triple">
+              <div class="field"><label>Stage</label>
+                <select id="m-umb-stage">
+                  <option value="dormant" ${ch.umbrarianStage==='dormant'?'selected':''}>Dormant</option>
+                  <option value="awakened" ${(!ch.umbrarianStage||ch.umbrarianStage==='awakened')?'selected':''}>Awakened</option>
+                  <option value="ascendant" ${ch.umbrarianStage==='ascendant'?'selected':''}>Ascendant</option>
+                </select>
+              </div>
+              <div class="field"><label>Dark Shard / Sword</label>
+                <select id="m-umb-shard">
+                  <option value="">— Select —</option>
+                  ${(window.UMBRARIANS?.shards||[]).map(s => `<option value="${s.name}" ${ch.shard===s.name?'selected':''}>${s.name} (${s.world})</option>`).join('')}
+                </select>
+              </div>
+              <div class="field"><label>Shard Ability (DC)</label>
+                <select id="m-umb-ability">
+                  <option value="INT" ${ch.shardAbility==='INT'?'selected':''}>Intelligence</option>
+                  <option value="WIS" ${(!ch.shardAbility||ch.shardAbility==='WIS')?'selected':''}>Wisdom</option>
+                  <option value="CHA" ${ch.shardAbility==='CHA'?'selected':''}>Charisma</option>
+                </select>
+              </div>
+            </div>
+            <p class="muted small" id="m-umb-hint">Adds Shard Mark, Resonant Sense, Dark Bargain access, and stage notes to Features.</p>
+          </div>
         </div>
       </div>
       <div class="sheet-section">
@@ -1195,7 +1230,11 @@
           background: $('#m-background').value.trim(),
           alignment: $('#m-alignment').value.trim(),
           world: $('#m-world').value,
-          corruption: clamp(parseInt($('#m-corruption').value, 10) || 0, 0, 10),
+          corruption: clamp(parseInt($('#m-corruption').value, 10) || 0, 0, 6),
+          isUmbrarian: !!$('#m-umbrarian')?.checked,
+          umbrarianStage: $('#m-umb-stage')?.value || '',
+          shard: $('#m-umb-shard')?.value || '',
+          shardAbility: $('#m-umb-ability')?.value || '',
           str: parseInt($('#m-str').value, 10) || 10,
           dex: parseInt($('#m-dex').value, 10) || 10,
           con: parseInt($('#m-con').value, 10) || 10,
@@ -1223,14 +1262,54 @@
       afterOpen: () => {
         wireCharacterFormHelpers();
         const grid = $('#ability-grid');
-        if (!grid) return;
-        grid.querySelectorAll('.ability-score').forEach(inp => {
-          inp.addEventListener('input', () => {
-            const ab = inp.dataset.ab;
-            const modEl = $(`#m-mod-${ab}`);
-            if (modEl) modEl.textContent = modStr(inp.value);
+        if (grid) {
+          grid.querySelectorAll('.ability-score').forEach(inp => {
+            inp.addEventListener('input', () => {
+              const ab = inp.dataset.ab;
+              const modEl = $(`#m-mod-${ab}`);
+              if (modEl) modEl.textContent = modStr(inp.value);
+            });
           });
-        });
+        }
+        const umbCb = $('#m-umbrarian');
+        const umbFields = $('#m-umbrarian-fields');
+        const features = $('#m-features');
+        function applyUmbrarianTemplate() {
+          if (!umbCb?.checked || !features) return;
+          const stage = $('#m-umb-stage')?.value || 'awakened';
+          const shard = $('#m-umb-shard')?.value || 'Unknown Shard';
+          const ab = $('#m-umb-ability')?.value || 'WIS';
+          const marker = '— Umbrarian Template —';
+          // remove previous template block if re-applying
+          if (features.value.includes(marker)) {
+            features.value = features.value.split(marker)[0].trim();
+          }
+          const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
+          const lines = [
+            marker,
+            `Stage: ${stageLabel}`,
+            `Shard: ${shard}`,
+            `Shard Ability: ${ab} (DC = 8 + PB + ${ab} mod)`,
+            'Shard Mark: Identifying mark; visible through mundane disguises while using Awakened/Ascendant Gifts.',
+            'Resonant Sense (1/Long Rest): Action, 30 ft. — GM reveals Shard / echo / Sword influence / Guardian ward (not which).',
+            'Dark Bargain: After failing a d20 test (1/Long Rest), may reroll (must use new result); Corruption +1. At Corruption 3+ reroll has advantage.',
+          ];
+          if (stage === 'awakened' || stage === 'ascendant') {
+            lines.push('Gifts: Choose Awakened Gift(s) from the Shard profile (DMG). Uses 1/Long Rest unless noted; overchannel via Dark Bargain.');
+          }
+          if (stage === 'ascendant') {
+            lines.push('Ascendant: Choose one Ascendant Gift; expect regional story consequences.');
+          }
+          features.value = (features.value ? features.value + '\n\n' : '') + lines.join('\n');
+        }
+        function syncUmbUI() {
+          if (umbFields) umbFields.classList.toggle('hidden', !umbCb?.checked);
+          if (umbCb?.checked) applyUmbrarianTemplate();
+        }
+        umbCb?.addEventListener('change', syncUmbUI);
+        $('#m-umb-stage')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });
+        $('#m-umb-shard')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });
+        $('#m-umb-ability')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });
       }
     });
 
@@ -1251,7 +1330,8 @@
         <div class="char-combat">
           <span class="stat-chip" title="Armor Class">AC ${ch.ac}</span>
           <span class="stat-chip" title="Hit Points">HP ${ch.hp}/${ch.hpMax || '—'}</span>
-          ${ch.corruption > 0 ? `<span class="stat-chip corruption ${corrClass}" title="Corruption">☠ ${ch.corruption}</span>` : ''}
+          ${ch.isUmbrarian ? `<span class="stat-chip umbrarian" title="${escapeAttr((ch.umbrarianStage||'') + ' · ' + (ch.shard||'Shard'))}">Umbrarian${ch.umbrarianStage ? ' · ' + ch.umbrarianStage : ''}</span>` : ''}
+          ${ch.corruption > 0 ? `<span class="stat-chip corruption ${corrClass}" title="Corruption">☠ ${ch.corruption}/6</span>` : ''}
         </div>
       </div>
       <div class="ability-mini">
@@ -2709,15 +2789,20 @@
       root.innerHTML = '<p class="muted">Umbrarians data not loaded.</p>';
       return;
     }
+    const stages = (u.stages || []).map(s => `<li><strong>${escapeHtml(s.name)}.</strong> ${escapeHtml(s.text)}</li>`).join('');
+    const traits = (u.commonTraits || []).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('');
+    const track = (u.corruptionTrack || []).map(r =>
+      `<tr><td>${r.score}</td><td>${escapeHtml(r.state)}</td><td>${escapeHtml(r.effect)}</td></tr>`).join('');
+    const shards = (u.shards || []).map(s =>
+      `<tr><td><strong>${escapeHtml(s.name)}</strong></td><td>${escapeHtml(s.world)}</td><td>${escapeHtml(s.awakens)}</td><td>${escapeHtml(s.theme)}</td></tr>`).join('');
     let raceHtml = '';
     if (race) {
       raceHtml = `
         <div class="detail-block">
           <div class="detail-label">Related Race — Umbralites (PHB)</div>
-          <p class="detail-text"><em>${escapeHtml(race.tagline)}</em>. ${escapeHtml(race.intro)}</p>
-          <p class="detail-text"><strong>Traits:</strong> ${race.traits.map(t => escapeHtml(t.name)).join(' · ')}</p>
+          <p class="detail-text"><em>${escapeHtml(race.tagline || '')}</em>. ${escapeHtml(race.intro || '')}</p>
           <ul class="trait-list">
-            ${race.traits.map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}
+            ${(race.traits || []).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}
           </ul>
         </div>`;
     }
@@ -2725,26 +2810,46 @@
       <article class="race-card">
         <header class="race-header">
           <h2>${escapeHtml(u.name)}</h2>
-          <p class="race-tagline">${escapeHtml(u.subtitle)}</p>
+          <p class="race-tagline">${escapeHtml(u.subtitle || '')}</p>
         </header>
         <div class="detail-block callout">
           <div class="detail-label">Critical Distinction</div>
           <p class="detail-text">${escapeHtml(u.criticalDistinction)}</p>
         </div>
-        <div class="detail-block"><div class="detail-label">Definition (DMG)</div><p class="detail-text">${escapeHtml(u.definition)}</p></div>
+        <div class="detail-block"><div class="detail-label">Definition</div><p class="detail-text">${escapeHtml(u.definition)}</p></div>
         <div class="detail-block"><div class="detail-label">Bound at Birth</div><p class="detail-text">${escapeHtml(u.boundAtBirth)}</p></div>
-        <div class="detail-block"><div class="detail-label">Campaign Framework</div><p class="detail-text">${escapeHtml(u.framework)}</p></div>
+        <div class="detail-block"><div class="detail-label">The Sleeping Shard</div><p class="detail-text">${escapeHtml(u.sleepingShard || '')}</p></div>
         <div class="detail-block">
-          <div class="detail-label">Corruption Stages</div>
-          <ul class="trait-list">
-            ${u.stages.map(s => `<li><strong>${escapeHtml(s.name)}.</strong> ${escapeHtml(s.text)}</li>`).join('')}
-          </ul>
+          <div class="detail-label">Common Traits (every true Umbrarian)</div>
+          <ul class="trait-list">${traits}</ul>
         </div>
-        <div class="detail-block"><div class="detail-label">Gifts &amp; Bargains</div><p class="detail-text">${escapeHtml(u.gifts)}</p></div>
-        <div class="detail-block"><div class="detail-label">Umbraria Context (World + Culture)</div><p class="detail-text">${escapeHtml(u.umbrariaContext)}</p></div>
+        <div class="detail-block">
+          <div class="detail-label">Stages</div>
+          <ul class="trait-list">${stages}</ul>
+          <p class="detail-text muted">${escapeHtml(u.gainingGifts || '')}</p>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Corruption Track (0–6)</div>
+          <table class="prog-table">
+            <thead><tr><th>Score</th><th>State</th><th>Effect</th></tr></thead>
+            <tbody>${track}</tbody>
+          </table>
+          <p class="muted small">Corruption rises through bargains, rituals, surrender, catastrophic exposure, and certain gifts. It falls only through costly resistance, restoration, or story milestones—not routine rests.</p>
+        </div>
+        <div class="detail-block"><div class="detail-label">Dark Bargains</div><p class="detail-text">${escapeHtml(u.darkBargains)}</p></div>
+        <div class="detail-block"><div class="detail-label">Shard Demands (Dominion+)</div><p class="detail-text">${escapeHtml(u.shardDemands)}</p></div>
+        <div class="detail-block">
+          <div class="detail-label">The Seven Shards</div>
+          <table class="prog-table">
+            <thead><tr><th>Shard</th><th>World</th><th>Common Awakening</th><th>Theme</th></tr></thead>
+            <tbody>${shards}</tbody>
+          </table>
+        </div>
+        <div class="detail-block"><div class="detail-label">Umbraria Context</div><p class="detail-text">${escapeHtml(u.umbrariaContext || '')}</p></div>
         ${raceHtml}
-        <div class="detail-block"><div class="detail-label">Player Characters</div><p class="detail-text">${escapeHtml(u.pcGuidance)}</p></div>
-        <p class="muted small">${escapeHtml(u.sources)}</p>
+        <div class="detail-block"><div class="detail-label">Running NPC Umbrarians</div><p class="detail-text">${escapeHtml(u.npcGuidance || '')}</p></div>
+        <div class="detail-block"><div class="detail-label">Player Characters</div><p class="detail-text">${escapeHtml(u.pcGuidance || '')}</p></div>
+        <p class="muted small">${escapeHtml(u.sources || '')}</p>
       </article>`;
   }
 

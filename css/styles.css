@@ -1658,3 +1658,25 @@ label.small {
   border-radius: var(--radius);
   padding: 0.85rem 1rem;
 }
+
+.umbrarian-box {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(196, 92, 74, 0.35);
+  border-radius: var(--radius);
+  background: rgba(196, 92, 74, 0.06);
+}
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.checkbox-row input { margin-top: 0.2rem; }
+.umbrarian-fields { margin-top: 0.65rem; }
+.stat-chip.umbrarian {
+  background: rgba(196, 92, 74, 0.2);
+  color: #e8a0a0;
+  border: 1px solid rgba(196, 92, 74, 0.4);
+}

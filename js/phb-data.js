@@ -622,26 +622,139 @@ window.PHB_RACES = [
 window.UMBRARIANS = {
   "name": "Umbrarians",
   "subtitle": "Hosts of the Dark Shards",
-  "criticalDistinction": "An Umbralite is a native people of Umbraria (a race from the Player’s Handbook). An Umbrarian is the mortal host of a Dark Shard (a condition from the Dungeon Master’s Guide). Any ancestry can be an Umbrarian. The two words are historically confused—sometimes with disastrous consequences.",
-  "definition": "An Umbrarian is the mortal host of a Dark Shard. Umbrarian is not a race, nation, or ordinary inherited condition. The term arose from incomplete histories linking early Shard activity to Umbraria. Some scholars still incorrectly assume that all Umbrarians are Umbralites or that every Shard originated beneath the twilight world. Both beliefs are false.",
-  "boundAtBirth": "Each Shard is normally bound to one host at birth. Bloodline, celestial alignment, proximity to ancient sites, intense future potential, and cult designs may all play a role—or the Sword may simply be testing possibilities. The infant does not ordinarily display overt corruption; a subtle birthmark often represents the bond.",
-  "framework": "The DMG gives a complete framework for using Umbrarians as adversaries, allies, mysteries, and—under careful supervision—player characters. The rules deliberately separate power from surrender: an Umbrarian can awaken extraordinary abilities while resisting the Shard, just as a seemingly uncorrupted host can remain dangerously dormant for years.",
-  "stages": [
+  "criticalDistinction": "An Umbralite is a native people of Umbraria (Player’s Handbook). An Umbrarian is the mortal host of a Dark Shard (Dungeon Master’s Guide). Any ancestry can be an Umbrarian. The two words are historically confused—sometimes with disastrous consequences.",
+  "definition": "An Umbrarian is the mortal host of a Dark Shard. It is not a race, nation, or ordinary inherited condition. The term arose from incomplete histories linking early Shard activity to Umbraria. Shadowmourne, for example, originated beneath Luminaris; later movement through Umbraria caused historians to call it “the Umbrarian Shard.”",
+  "boundAtBirth": "Each Shard is normally bound to one host at birth. Bloodline, celestial alignment, proximity to ancient sites, future potential, and cult designs may all play a role—or the Sword may simply be testing possibilities. The infant usually shows no overt corruption; a subtle birthmark represents the Sword. True sight, another Umbrarian, or a revealing ritual perceives its deeper form. When the Shard awakens, the mark glows with dark energy and may branch across the body.",
+  "sleepingShard": "A dormant Shard is not inactive. It observes through the host, learning language, attachment, fear, and desire. It may influence dreams or intensify impulses without revealing itself. Many hosts live for years without knowing what they carry.",
+  "commonTraits": [
     {
-      "name": "Dormant",
-      "text": "The Shard is bound but largely silent. The host may live a full life with only subtle marks, dreams, or unexplained instincts."
+      "name": "Shard Mark",
+      "text": "The host bears the Shard’s identifying mark. While using an Awakened or Ascendant Gift, the mark is visible through mundane disguises."
     },
     {
-      "name": "Awakened",
-      "text": "The host becomes aware of the Shard’s voice and can accept Dark Bargains. On first becoming Awakened, choose one Awakened Gift from the Shard’s profile. Shard save DC = 8 + proficiency bonus + chosen mental ability modifier."
+      "name": "Resonant Sense",
+      "text": "As an action, concentrate on a creature, object, or location within 30 feet. The GM reveals whether it carries a true Shard, a Shard echo, Sword influence, or a Primordial Guardian ward. Does not identify which influence. Blocked by Guardian or Ascendant protections. Once per long rest."
     },
     {
-      "name": "Ascendant",
-      "text": "Deep alignment with the Sword’s will. Choose an Ascendant Gift. Reserved for major campaign turning points; a second Ascendant Gift belongs only in mythic endgames."
+      "name": "Dark Bargain",
+      "text": "The host can accept Dark Bargains (see rules below)."
+    },
+    {
+      "name": "Shard Save DC",
+      "text": "Choose Intelligence, Wisdom, or Charisma when the Shard awakens. Shard save DC = 8 + proficiency bonus + chosen ability modifier. Shard attack modifier = proficiency bonus + chosen ability modifier. Choice cannot normally be changed."
     }
   ],
-  "gifts": "Resonant Sense (action, 30 ft.): the GM reveals whether a target carries a true Shard, Shard echo, Sword influence, or Guardian ward—once per long rest. Dark Bargain: the host can accept bargains as described in the DMG Corruption chapter. Gift visibility: at higher stages the mark may show through mundane disguises.",
-  "umbrariaContext": "Umbraria is the twilight world of Ashbringer, associated with privacy, shelter, and chosen revelation. Its dominant people are the Umbralites (PHB). Ashbringer’s pressure produces Swordborn that burn shelters from within and turn preserved things to aggressive ash; Wardenborn answers restore accountable privacy. Ghostblade traditions and living-shadow techniques are among Umbraria’s distinctive contributions to interworld culture—not the same as bearing a Dark Shard.",
-  "pcGuidance": "Player-character Umbrarians require Game Master approval and experienced players prepared for shared narrative responsibility. Power is never free: every Gift and Bargain should cost something the table can feel.",
-  "sources": "Player’s Handbook Ch. 5 (Umbralites race, Umbraria culture) · Dungeon Master’s Guide Ch. 3 (Shards, Umbrarians, and Corruption) and related campaign framework."
+  "stages": [
+    {
+      "id": "dormant",
+      "name": "Dormant",
+      "text": "Shard bound but largely silent. Host may live a full life with only subtle marks, dreams, or instincts. NPC: add Shard Mark, Resonant Sense, and one mannerism or recurring dream—no supernatural combat abilities required."
+    },
+    {
+      "id": "awakened",
+      "name": "Awakened",
+      "text": "Host is aware of the Shard’s voice and can accept Dark Bargains. On first becoming Awakened, choose one Awakened Gift from the Shard’s profile. At a later major milestone, the GM may grant a second. NPC: add two Awakened Gifts, resistance to one Shard-associated damage type, and one already-accepted Dark Bargain."
+    },
+    {
+      "id": "ascendant",
+      "name": "Ascendant",
+      "text": "Deep alignment with the Sword’s will. Choose one Ascendant Gift. A second Ascendant Gift belongs only in mythic campaigns and should be matched by national- or world-scale consequences. NPC: add one Ascendant Gift, a visible regional effect, and a personal vulnerability rooted in the host’s identity."
+    }
+  ],
+  "gainingGifts": "Unless a gift says otherwise, it can be used once and is regained after a long rest. A host may overchannel a spent gift by accepting a Dark Bargain before resolving its effect.",
+  "corruptionTrack": [
+    {
+      "score": 0,
+      "state": "Clear",
+      "effect": "The Shard can observe but has no established leverage."
+    },
+    {
+      "score": 1,
+      "state": "Murmur",
+      "effect": "Recurring dreams and impulses begin. No mechanical penalty."
+    },
+    {
+      "score": 2,
+      "state": "Resonance",
+      "effect": "The Shard learns a Bond, Ideal, fear, or secret and speaks through it."
+    },
+    {
+      "score": 3,
+      "state": "Stain",
+      "effect": "The mark manifests more readily. Disadvantage on attempts to conceal Shard influence from an informed observer."
+    },
+    {
+      "score": 4,
+      "state": "Dominion",
+      "effect": "The Shard can issue a Demand after a Dark Bargain or major failure. Refusal never forces an action, but imposes the Dominion consequence."
+    },
+    {
+      "score": 5,
+      "state": "Eclipse",
+      "effect": "Bargains become spectacular and catastrophic. The host’s shadow, reflection, or voice may act independently."
+    },
+    {
+      "score": 6,
+      "state": "Transformation",
+      "effect": "Identity and body face permanent change. For a PC, requires prior agreement or a clearly communicated, avoidable consequence."
+    }
+  ],
+  "darkBargains": "Once per long rest, after an Umbrarian fails a d20 test, the Shard may offer a Dark Bargain. If accepted, the player rerolls and must use the new result; Corruption increases by 1. At Corruption 3+, the reroll is made with advantage. At Corruption 5, the GM may instead offer automatic success, an extraordinary manifestation, or survival against an otherwise fatal consequence—plus a severe Shard-appropriate complication. Always state the benefit, immediate price, and that Corruption will increase.",
+  "shardDemands": "At Dominion (Corruption 4+), the Shard may attach a Demand to a bargain or major use of power. Demands must be concrete (spare an enemy, destroy a ward, conceal evidence, isolate an ally, carry an object, open a path). Refusing never transfers PC control to the GM. Instead the host takes psychic damage equal to twice character level and cannot accept another Dark Bargain until finishing a long rest.",
+  "shards": [
+    {
+      "id": "shadowmourne",
+      "name": "Shadowmourne",
+      "world": "Luminaris",
+      "awakens": "Devastating loss, grief, betrayal, or the desire to disappear from pain.",
+      "theme": "Concealment, erasure, isolation of witnesses."
+    },
+    {
+      "id": "ashbringer",
+      "name": "Ashbringer",
+      "world": "Umbraria",
+      "awakens": "Trial by fire, consuming rage, reckless bravery, or the desire to burn away an intolerable past.",
+      "theme": "Consuming exposure, privacy violated by fire."
+    },
+    {
+      "id": "plaguebringer",
+      "name": "Plaguebringer",
+      "world": "Eternum",
+      "awakens": "Surviving deadly illness or desperately seeking power to heal what ordinary medicine cannot.",
+      "theme": "Decay, adaptive corruption, false recovery."
+    },
+    {
+      "id": "scourgeborne",
+      "name": "Scourgeborne",
+      "world": "Solara",
+      "awakens": "Confronting death and surviving, especially when the host cannot accept another’s passing.",
+      "theme": "Mortality, hollowed remembrance, stolen vitality."
+    },
+    {
+      "id": "thundersoul",
+      "name": "Thundersoul",
+      "world": "Aetheria",
+      "awakens": "Survival of a great storm or lightning strike, or a moment of demanding absolute control.",
+      "theme": "Command, forced routes, obedience of motion."
+    },
+    {
+      "id": "chaosbringer",
+      "name": "Chaosbringer",
+      "world": "Harmonia",
+      "awakens": "Severe trauma, collapsing certainty, or choosing to destroy an order the host believes has failed.",
+      "theme": "Forced sameness, broken cooperation, false consensus."
+    },
+    {
+      "id": "felmourne",
+      "name": "Felmourne",
+      "world": "Celestia",
+      "awakens": "Contact with corrupting outsiders, a forbidden pact, or the belief that no price is too great for necessary power.",
+      "theme": "Annexed identity, coerced thresholds, spiritual tithe."
+    }
+  ],
+  "npcGuidance": "Begin with an existing stat block and add only what the scene needs. Give the Shard a goal and the host a goal—they may overlap without being identical. An Ascendant Umbrarian should be a story problem as much as a combat encounter.",
+  "pcGuidance": "Player-character Umbrarians require Game Master approval and experienced players prepared for shared narrative responsibility. Power is never free: every Gift and Bargain should cost something the table can feel. Corruption never falls from a routine rest—only costly resistance, restoration, or story milestones.",
+  "umbrariaContext": "Umbraria is the twilight world of Ashbringer (privacy, shelter, chosen revelation). Its dominant people are Umbralites. Ghostblade and living-shadow traditions are cultural contributions of Umbraria—not the same as bearing a Dark Shard.",
+  "sources": "PHB Ch. 5 (Umbralites / Umbraria) · DMG Ch. 3 (Shards, Umbrarians & Corruption)"
 };
+
