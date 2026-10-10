@@ -225,6 +225,10 @@ window.PHB_RACES = [
     "beliefs": "Many Luminari revere Luna. A common teaching states: “Light reveals the path. Wisdom decides whether it should be followed.” Light can heal—or blind and expose.",
     "names": "Aurelia, Selene, Seraphina, Lyra, Elara, Caelion, Erevan, Lucien, Orion, Solenar, Aelion, Vaelis. Epithets: Sunweaver, Starwhisper, Moonshadow, Everglow, Lightweaver, Dawnspire, Crystalborn.",
     "adventurers": "Scholars, guardians, healers, diplomats, pilgrims, explorers, or exiles seeking knowledge beyond Luminaris’s libraries.",
+    "bonuses": {"int": 2, "wis": 1},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -280,6 +284,10 @@ window.PHB_RACES = [
     "beliefs": "Light and shadow define one another. Darkness is associated with rest, concealment, reflection, protection, and the unknown as much as with danger.",
     "names": "Xalith, Seraphina, Malachi, Nyxara, Vesper, Kaelis, Nerezza, Vael, Theren, Isryn, Selvaris. Titles: Nightshade, Shadowcaster, Veilborn, Duskwalker, Eclipsebound, Gloamveil, Nocturne.",
     "adventurers": "Spies, diplomats, scholars, occult investigators, merchants, guardians, fugitives, and seekers of forbidden truths.",
+    "bonuses": {"dex": 2, "cha": 1},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -339,6 +347,10 @@ window.PHB_RACES = [
     "beliefs": "Endurance and recovery after ruin define worth more than unscarred purity.",
     "names": "Kael, Varek, Nyra, Draven, Sera, Malen, Raska, Toren, Vaela, Kor, Elira, Rhaz. Clan names: Ashwalker, Ironblood, Veilscar, Redhand, Stoneborn, Oathkeeper, Emberfall, Lastwatch.",
     "adventurers": "Mercenaries, scouts, healers, monster hunters, salvagers, diplomats, rebels, scholars, and protectors.",
+    "bonuses": {"con": 2, "wis": 1},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -398,6 +410,10 @@ window.PHB_RACES = [
     "beliefs": "Light, vitality, and leadership are responsibilities—not merely gifts.",
     "names": "Names often evoke sun, grain, and bright stone. Family titles may reference dawn, harvest, or memorial fire.",
     "adventurers": "Leaders, healers, soldiers, pilgrims, and those who carry Solara’s light beyond its borders.",
+    "bonuses": {"str": 2, "cha": 1},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -453,6 +469,10 @@ window.PHB_RACES = [
     "beliefs": "Responsible motion keeps the skies alive. Freedom without connection is only drift.",
     "names": "Zephyra, Aurelia, Seraph, Lyra, Aeron, Caelis, Ilyra, Zephren, Aris, Vaela, Nym, Aeriel. Titles: Windrider, Skywake, Cloudspan.",
     "adventurers": "Explorers, pilots, couriers, scouts, and diplomats of the open routes.",
+    "bonuses": {"dex": 2, "int": 1},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -504,6 +524,10 @@ window.PHB_RACES = [
     "beliefs": "Cooperation requires meaningful difference. Forced sameness is a form of violence.",
     "names": "Names vary by community; titles often reference song, braid, concord, or balance.",
     "adventurers": "Mediators, artists, diplomats, guardians of concord, and those who seek balance beyond Harmonia.",
+    "bonuses": {"wis": 2, "cha": 1},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -555,6 +579,10 @@ window.PHB_RACES = [
     "beliefs": "A recurring question asks whether wisdom is measured by what one knows or by what one chooses to do with knowledge.",
     "names": "Names may be formal or chosen; titles often reference covenant, threshold, star, or lantern.",
     "adventurers": "Those who leave because institutions claim too much truth, or because ordinary mortal life fascinates more than eternity.",
+    "bonuses": {"wis": 1, "cha": 2},
+    "size": "Medium",
+    "speed": 30,
+    "source": "DSC",
     "traits": [
       {
         "name": "Creature Type",
@@ -617,6 +645,421 @@ window.PHB_RACES = [
     "traits": [],
     "questions": []
   }
+,
+{
+  "id": "human",
+  "name": "Human",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Versatile and ambitious",
+  "short": "The most adaptable of the common peoples.",
+  "intro": "Humans are the most adaptable and ambitious people among the common races. They settle every land and pursue every calling.",
+  "size": "Medium",
+  "speed": 30,
+  "bonuses": {
+    "str": 1,
+    "dex": 1,
+    "con": 1,
+    "int": 1,
+    "wis": 1,
+    "cha": 1
+  },
+  "bonusNote": "Variant Human (optional): +1 to two abilities of your choice, a skill proficiency, and a feat instead of +1 to all.",
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "30 feet."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and one extra language of your choice."
+    },
+    {
+      "name": "Ability Score Increase",
+      "text": "Your ability scores each increase by 1."
+    }
+  ]
+},
+{
+  "id": "elf",
+  "name": "Elf",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Graceful, long-lived, and keen-sensed",
+  "short": "Elves are a magical people of otherworldly grace.",
+  "intro": "Elves are a magical people of otherworldly grace, living in places of ethereal beauty.",
+  "size": "Medium",
+  "speed": 30,
+  "bonuses": {
+    "dex": 2
+  },
+  "bonusNote": "Subrace adds further bonuses (High Elf +1 INT; Wood Elf +1 WIS; Drow +1 CHA).",
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "30 feet."
+    },
+    {
+      "name": "Darkvision",
+      "text": "60 feet."
+    },
+    {
+      "name": "Keen Senses",
+      "text": "Proficiency in Perception."
+    },
+    {
+      "name": "Fey Ancestry",
+      "text": "Advantage on saves against being charmed; magic can’t put you to sleep."
+    },
+    {
+      "name": "Trance",
+      "text": "4 hours of trance counts as a long rest."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Elvish."
+    }
+  ]
+},
+{
+  "id": "dwarf",
+  "name": "Dwarf",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Bold, hardy, and ancient of craft",
+  "short": "Kingdoms of stone and the iron of tradition.",
+  "intro": "Bold and hardy, dwarves are known as skilled warriors, miners, and workers of stone and metal.",
+  "size": "Medium",
+  "speed": 25,
+  "bonuses": {
+    "con": 2
+  },
+  "bonusNote": "Subrace: Hill Dwarf +1 WIS; Mountain Dwarf +2 STR.",
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "25 feet. Not reduced by heavy armor."
+    },
+    {
+      "name": "Darkvision",
+      "text": "60 feet."
+    },
+    {
+      "name": "Dwarven Resilience",
+      "text": "Advantage on saves against poison; resistance to poison damage."
+    },
+    {
+      "name": "Dwarven Combat Training",
+      "text": "Proficiency with battleaxe, handaxe, light hammer, and warhammer."
+    },
+    {
+      "name": "Tool Proficiency",
+      "text": "Smith, brewer, or mason tools."
+    },
+    {
+      "name": "Stonecunning",
+      "text": "Add double PB on History checks related to stonework."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Dwarvish."
+    }
+  ]
+},
+{
+  "id": "halfling",
+  "name": "Halfling",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Small folk of luck and cheer",
+  "short": "Practical, curious, and surprisingly brave.",
+  "intro": "The comforts of home are the goals of most halflings’ lives—but adventuring ones are the exception.",
+  "size": "Small",
+  "speed": 25,
+  "bonuses": {
+    "dex": 2
+  },
+  "bonusNote": "Subrace: Lightfoot +1 CHA; Stout +1 CON.",
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Small."
+    },
+    {
+      "name": "Speed",
+      "text": "25 feet."
+    },
+    {
+      "name": "Lucky",
+      "text": "When you roll a 1 on a d20 for an attack, ability check, or save, you can reroll and must use the new roll."
+    },
+    {
+      "name": "Brave",
+      "text": "Advantage on saves against being frightened."
+    },
+    {
+      "name": "Halfling Nimbleness",
+      "text": "Move through the space of any creature that is of a size larger than yours."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Halfling."
+    }
+  ]
+},
+{
+  "id": "dragonborn",
+  "name": "Dragonborn",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Draconic heritage made flesh",
+  "short": "Draconic ancestry grants breath and resistance.",
+  "intro": "Dragonborn look like dragons standing upright in humanoid form, though they lack wings or a tail.",
+  "size": "Medium",
+  "speed": 30,
+  "bonuses": {
+    "str": 2,
+    "cha": 1
+  },
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "30 feet."
+    },
+    {
+      "name": "Draconic Ancestry",
+      "text": "Choose a dragon type for breath weapon and damage resistance."
+    },
+    {
+      "name": "Breath Weapon",
+      "text": "Action: exhalation of energy in a line or cone; save for half. Uses scale with level."
+    },
+    {
+      "name": "Damage Resistance",
+      "text": "Resistance to the damage type associated with your draconic ancestry."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Draconic."
+    }
+  ]
+},
+{
+  "id": "gnome",
+  "name": "Gnome",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Curious innovators and illusionists",
+  "short": "Small, bright-eyed, and endlessly inquisitive.",
+  "intro": "A gnome’s energy and enthusiasm for living shine through every inch of their small frame.",
+  "size": "Small",
+  "speed": 25,
+  "bonuses": {
+    "int": 2
+  },
+  "bonusNote": "Subrace: Forest Gnome +1 DEX; Rock Gnome +1 CON.",
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Small."
+    },
+    {
+      "name": "Speed",
+      "text": "25 feet."
+    },
+    {
+      "name": "Darkvision",
+      "text": "60 feet."
+    },
+    {
+      "name": "Gnome Cunning",
+      "text": "Advantage on INT, WIS, and CHA saves against magic."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Gnomish."
+    }
+  ]
+},
+{
+  "id": "half-elf",
+  "name": "Half-Elf",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Between two worlds",
+  "short": "Diplomats and wanderers with fey ancestry.",
+  "intro": "Half-elves combine what some say are the best qualities of humans and elves.",
+  "size": "Medium",
+  "speed": 30,
+  "bonuses": {
+    "cha": 2
+  },
+  "bonusNote": "+1 to two other ability scores of your choice.",
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "30 feet."
+    },
+    {
+      "name": "Darkvision",
+      "text": "60 feet."
+    },
+    {
+      "name": "Fey Ancestry",
+      "text": "Advantage on saves against being charmed; magic can’t put you to sleep."
+    },
+    {
+      "name": "Skill Versatility",
+      "text": "Proficiency in two skills of your choice."
+    },
+    {
+      "name": "Languages",
+      "text": "Common, Elvish, and one extra language."
+    }
+  ]
+},
+{
+  "id": "half-orc",
+  "name": "Half-Orc",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Fierce and relentless",
+  "short": "Strength and endurance forged between orc and human blood.",
+  "intro": "Half-orcs inherit a measure of orc bloodlust and human adaptability.",
+  "size": "Medium",
+  "speed": 30,
+  "bonuses": {
+    "str": 2,
+    "con": 1
+  },
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "30 feet."
+    },
+    {
+      "name": "Darkvision",
+      "text": "60 feet."
+    },
+    {
+      "name": "Menacing",
+      "text": "Proficiency in Intimidation."
+    },
+    {
+      "name": "Relentless Endurance",
+      "text": "When you are reduced to 0 HP but not killed, you can drop to 1 HP instead (1/Long Rest)."
+    },
+    {
+      "name": "Savage Attacks",
+      "text": "On a melee critical hit, roll one extra weapon damage die."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Orc."
+    }
+  ]
+},
+{
+  "id": "tiefling",
+  "name": "Tiefling",
+  "world": "",
+  "source": "PHB",
+  "tagline": "Infernal heritage",
+  "short": "Marked by a touch of the infernal.",
+  "intro": "Tieflings are derived from human bloodlines touched by the infernal.",
+  "size": "Medium",
+  "speed": 30,
+  "bonuses": {
+    "int": 1,
+    "cha": 2
+  },
+  "traits": [
+    {
+      "name": "Creature Type",
+      "text": "Humanoid."
+    },
+    {
+      "name": "Size",
+      "text": "Medium."
+    },
+    {
+      "name": "Speed",
+      "text": "30 feet."
+    },
+    {
+      "name": "Darkvision",
+      "text": "60 feet."
+    },
+    {
+      "name": "Hellish Resistance",
+      "text": "Resistance to fire damage."
+    },
+    {
+      "name": "Infernal Legacy",
+      "text": "Thaumaturgy cantrip; at 3rd Hellish Rebuke; at 5th Darkness (CHA spellcasting)."
+    },
+    {
+      "name": "Languages",
+      "text": "Common and Infernal."
+    }
+  ]
+}
 ];
 
 

@@ -1012,19 +1012,23 @@
   }
 
   function abilityRowHtml(prefix, ch) {
-    const abs = [
-      ['str', 'STR'], ['dex', 'DEX'], ['con', 'CON'],
-      ['int', 'INT'], ['wis', 'WIS'], ['cha', 'CHA']
-    ];
-    return abs.map(([k, label]) => {
-      const v = ch[k] ?? 10;
-      return `<div class="ability-box">
+    const raceBon = getRaceBonuses(ch.race || '');
+    // Interpret stored scores as totals; derive display base = total - racial (min 8)
+    return ABS.map(k => {
+      const label = k.toUpperCase();
+      const total = Number(ch[k]) || 10;
+      const bon = raceBon[k] || 0;
+      const base = Math.max(3, total - bon);
+      return `<div class="ability-box" data-ab="${k}">
         <label class="small">${label}</label>
-        <input type="number" id="${prefix}-${k}" min="1" max="30" value="${v}" class="ability-score" data-ab="${k}" />
-        <span class="ability-mod" id="${prefix}-mod-${k}">${modStr(v)}</span>
+        <input type="number" id="${prefix}-${k}" min="3" max="20" value="${base}" class="ability-score" data-ab="${k}" data-base="1" title="Base score (before racial bonus)" />
+        <div class="ability-bonus-line"><span class="racial-bon" id="${prefix}-rbon-${k}">${bon ? '+' + bon : '—'}</span></div>
+        <span class="ability-total" id="${prefix}-total-${k}">${total}</span>
+        <span class="ability-mod" id="${prefix}-mod-${k}">${modStr(total)}</span>
       </div>`;
     }).join('');
   }
+
 
   function getPhbClasses() {
     return (typeof window !== 'undefined' && window.PHB_CLASSES) ? window.PHB_CLASSES : [];
@@ -1063,15 +1067,27 @@
 
   function raceOptionsHtml(selected) {
     const races = getPhbRaces();
-    let html = `<option value="">— Select ancestry —</option>`;
-    races.forEach(r => {
-      html += `<option value="${escapeAttr(r.name)}" ${selected === r.name ? 'selected' : ''}>${escapeHtml(r.name)}${r.world ? ' (' + r.world + ')' : ''}</option>`;
-    });
-    if (selected && !races.some(r => r.name === selected)) {
-      html += `<option value="${escapeAttr(selected)}" selected>${escapeHtml(selected)}</option>`;
+    const dsc = races.filter(r => r.source === 'DSC' || (r.world && r.source !== 'PHB'));
+    const official = races.filter(r => r.source === 'PHB');
+    const other = races.filter(r => !dsc.includes(r) && !official.includes(r));
+    const opt = (r) => {
+      const sel = r.name === selected ? 'selected' : '';
+      const bon = r.bonuses ? ' (' + ABS.filter(a => r.bonuses[a]).map(a => `${a.toUpperCase()}+${r.bonuses[a]}`).join(', ') + ')' : '';
+      return `<option value="${escapeAttr(r.name)}" ${sel}>${escapeHtml(r.name)}${bon}</option>`;
+    };
+    let html = `<option value="">— Select race —</option>`;
+    if (dsc.length) {
+      html += `<optgroup label="Eldoria Peoples">` + dsc.map(opt).join('') + `</optgroup>`;
+    }
+    if (official.length) {
+      html += `<optgroup label="Official D&D Races">` + official.map(opt).join('') + `</optgroup>`;
+    }
+    if (other.length) {
+      html += `<optgroup label="Other">` + other.map(opt).join('') + `</optgroup>`;
     }
     return html;
   }
+
 
   function skillPickerHtml(className, selectedSkills) {
     const cls = findPhbClass(className);
@@ -1224,7 +1240,87 @@
 
 
   /** Feature sections that can be updated independently without wiping others. */
-  const FEATURE_SECTION = {
+  
+  const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
+  const POINT_BUY_COST = {8:0,9:1,10:2,11:3,12:4,13:5,14:7,15:9};
+  const POINT_BUY_BUDGET = 27;
+  const ABS = ['str','dex','con','int','wis','cha'];
+
+  function getRaceBonuses(raceName) {
+    const race = getPhbRaces().find(r => r.name === raceName);
+    const b = { str:0, dex:0, con:0, int:0, wis:0, cha:0 };
+    if (race && race.bonuses) {
+      ABS.forEach(a => { b[a] = Number(race.bonuses[a]) || 0; });
+    }
+    return b;
+  }
+
+  function pointBuyCost(score) {
+    const s = clamp(Number(score) || 8, 8, 15);
+    return POINT_BUY_COST[s] != null ? POINT_BUY_COST[s] : 99;
+  }
+
+  function pointBuyTotal(bases) {
+    return ABS.reduce((sum, a) => sum + pointBuyCost(bases[a]), 0);
+  }
+
+  function hitDieSides(className) {
+    const cls = findPhbClass(className);
+    if (!cls || !cls.hitDie) return 8;
+    const m = String(cls.hitDie).match(/d(\d+)/i);
+    return m ? parseInt(m[1], 10) : 8;
+  }
+
+  function suggestedHpMax(className, level, conScore) {
+    const sides = hitDieSides(className);
+    const lvl = clamp(Number(level) || 1, 1, 20);
+    const conMod = abilityModNum(conScore);
+    // Max at 1st, average rounded up each level after
+    let hp = sides + conMod;
+    const avg = Math.floor(sides / 2) + 1;
+    for (let i = 2; i <= lvl; i++) hp += avg + conMod;
+    return Math.max(1, hp);
+  }
+
+  function suggestedAc(className, scores) {
+    const dex = abilityModNum(scores.dex);
+    const con = abilityModNum(scores.con);
+    const wis = abilityModNum(scores.wis);
+    if (className === 'Barbarian') return 10 + dex + con;
+    if (className === 'Monk') return 10 + dex + wis;
+    // Default unarmored / light
+    return 10 + dex;
+  }
+
+  function suggestedSpeed(raceName, className) {
+    const race = getPhbRaces().find(r => r.name === raceName);
+    let spd = (race && race.speed) ? race.speed : 30;
+    if (className === 'Monk') {/* unarmored movement not auto */}
+    return `${spd} ft.`;
+  }
+
+  function abilityTotalsFromBases(bases, raceName) {
+    const bon = getRaceBonuses(raceName);
+    const totals = {};
+    ABS.forEach(a => { totals[a] = (Number(bases[a]) || 10) + (bon[a] || 0); });
+    return totals;
+  }
+
+  function abilityMethodBarHtml(method) {
+    const m = method || 'manual';
+    return `
+      <div class="ability-method-bar">
+        <label class="method-opt"><input type="radio" name="m-ab-method" value="manual" ${m==='manual'?'checked':''}/> Manual</label>
+        <label class="method-opt"><input type="radio" name="m-ab-method" value="standard" ${m==='standard'?'checked':''}/> Standard Array</label>
+        <label class="method-opt"><input type="radio" name="m-ab-method" value="pointbuy" ${m==='pointbuy'?'checked':''}/> Point Buy (27)</label>
+        <span class="pointbuy-status muted small" id="m-pb-status"></span>
+      </div>
+      <div class="standard-array-row hidden" id="m-std-row">
+        <span class="muted small">Assign: 15, 14, 13, 12, 10, 8 — pick each score once.</span>
+      </div>`;
+  }
+
+const FEATURE_SECTION = {
     race: '— Race Traits —',
     path: '— Moon Path —',
     umbrarian: '— Umbrarian Template —'
@@ -1289,15 +1385,88 @@
     const pathWrap = $('#m-moon-path-wrap');
     const pathSel = $('#m-moon-path');
 
+    function basesFromForm() {
+      const b = {};
+      ABS.forEach(a => { b[a] = parseInt($('#m-' + a)?.value, 10) || 10; });
+      return b;
+    }
     function scoresFromForm() {
-      return {
-        str: parseInt($('#m-str')?.value, 10) || 10,
-        dex: parseInt($('#m-dex')?.value, 10) || 10,
-        con: parseInt($('#m-con')?.value, 10) || 10,
-        int: parseInt($('#m-int')?.value, 10) || 10,
-        wis: parseInt($('#m-wis')?.value, 10) || 10,
-        cha: parseInt($('#m-cha')?.value, 10) || 10
-      };
+      return abilityTotalsFromBases(basesFromForm(), raceSel?.value || '');
+    }
+    function refreshAbilityDisplay() {
+      const raceName = raceSel?.value || '';
+      const bon = getRaceBonuses(raceName);
+      const bases = basesFromForm();
+      const totals = abilityTotalsFromBases(bases, raceName);
+      ABS.forEach(a => {
+        const rEl = $('#m-rbon-' + a);
+        const tEl = $('#m-total-' + a);
+        const mEl = $('#m-mod-' + a);
+        if (rEl) rEl.textContent = bon[a] ? '+' + bon[a] : '—';
+        if (tEl) tEl.textContent = String(totals[a]);
+        if (mEl) mEl.textContent = modStr(totals[a]);
+      });
+      // Point buy status
+      const method = document.querySelector('input[name="m-ab-method"]:checked')?.value || 'manual';
+      const pbStatus = $('#m-pb-status');
+      if (pbStatus) {
+        if (method === 'pointbuy') {
+          const spent = pointBuyTotal(bases);
+          const left = POINT_BUY_BUDGET - spent;
+          pbStatus.textContent = `Points: ${spent}/${POINT_BUY_BUDGET} (${left} left)` + (left < 0 ? ' — over budget!' : '');
+          pbStatus.classList.toggle('error-text', left < 0);
+        } else if (method === 'standard') {
+          const used = ABS.map(a => bases[a]).sort((x,y)=>y-x);
+          const ok = STANDARD_ARRAY.every((v,i) => used[i] === v);
+          pbStatus.textContent = ok ? 'Standard array assigned' : 'Assign each of 15,14,13,12,10,8 once';
+        } else {
+          pbStatus.textContent = '';
+        }
+      }
+      // Suggest HP / AC
+      const cname = classSel?.value || '';
+      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
+      const hpEl = $('#m-hpmax');
+      const acEl = $('#m-ac');
+      const spdEl = $('#m-speed');
+      if (hpEl && !hpEl.dataset.manual) {
+        hpEl.value = suggestedHpMax(cname, lvl, totals.con);
+        const hpCur = $('#m-hp');
+        if (hpCur && !hpCur.dataset.manual) hpCur.value = hpEl.value;
+      }
+      if (acEl && !acEl.dataset.manual) {
+        acEl.value = suggestedAc(cname, totals);
+      }
+      if (spdEl && !spdEl.dataset.manual && raceName) {
+        spdEl.value = suggestedSpeed(raceName, cname);
+      }
+    }
+    function applyScoreMethod(method) {
+      const stdRow = $('#m-std-row');
+      if (stdRow) stdRow.classList.toggle('hidden', method !== 'standard');
+      if (method === 'standard') {
+        // assign defaults if not already a permutation
+        const bases = basesFromForm();
+        const vals = ABS.map(a => bases[a]).sort((a,b)=>b-a);
+        const isStd = STANDARD_ARRAY.every((v,i) => vals[i] === v);
+        if (!isStd) {
+          // default assignment order STR..CHA
+          STANDARD_ARRAY.forEach((v, i) => {
+            const el = $('#m-' + ABS[i]);
+            if (el) el.value = v;
+          });
+        }
+      } else if (method === 'pointbuy') {
+        ABS.forEach(a => {
+          const el = $('#m-' + a);
+          if (el) {
+            let v = parseInt(el.value, 10) || 10;
+            el.value = clamp(v, 8, 15);
+          }
+        });
+      }
+      refreshAbilityDisplay();
+      refreshAttacks(true);
     }
 
     function refreshAttacks(force) {
@@ -1369,6 +1538,12 @@
       if (pathWrap) pathWrap.classList.toggle('hidden', cname !== 'Moon Guardian');
       const cls = findPhbClass(cname);
       if (cls && $('#m-saves') && !$('#m-saves').value) $('#m-saves').value = cls.saves;
+      // Reset auto HP/AC when class changes unless user locked them
+      const hpEl = $('#m-hpmax');
+      const acEl = $('#m-ac');
+      if (hpEl) delete hpEl.dataset.manual;
+      if (acEl) delete acEl.dataset.manual;
+      refreshAbilityDisplay();
       refreshAttacks(true);
     }
 
@@ -1391,8 +1566,34 @@
     });
     attacksInp?.addEventListener('input', () => { attacksInp.dataset.manual = '1'; });
     ['m-str','m-dex','m-con','m-int','m-wis','m-cha'].forEach(id => {
-      document.getElementById(id)?.addEventListener('change', () => refreshAttacks(true));
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        const method = document.querySelector('input[name="m-ab-method"]:checked')?.value || 'manual';
+        if (method === 'pointbuy') {
+          el.value = clamp(parseInt(el.value, 10) || 8, 8, 15);
+        }
+        refreshAbilityDisplay();
+        refreshAttacks(true);
+      });
+      el.addEventListener('change', () => {
+        refreshAbilityDisplay();
+        refreshAttacks(true);
+      });
     });
+    document.querySelectorAll('input[name="m-ab-method"]').forEach(r => {
+      r.addEventListener('change', () => applyScoreMethod(r.value));
+    });
+    // Mark HP/AC/speed manual if user edits
+    ['m-hp','m-hpmax','m-ac','m-speed'].forEach(id => {
+      document.getElementById(id)?.addEventListener('input', function() { this.dataset.manual = '1'; });
+    });
+    // Race change also refreshes ability totals + HP/AC
+    raceSel?.addEventListener('change', () => {
+      refreshAbilityDisplay();
+      refreshAttacks(true);
+    });
+    refreshAbilityDisplay();
     refreshClassUI();
   }
 
@@ -1468,9 +1669,11 @@
         <label class="section-label">Class Progression</label>
         <div id="m-class-prog">${progressionTableHtml(ch.class)}</div>
       </div>
-      <div class="sheet-section">
+            <div class="sheet-section">
         <label class="section-label">Ability Scores</label>
+        ${abilityMethodBarHtml(ch.scoreMethod || 'manual')}
         <div class="ability-grid" id="ability-grid">${abilityRowHtml('m', ch)}</div>
+        <p class="muted small">Totals include racial bonuses. Mods use the total score.</p>
       </div>
       <div class="sheet-section">
         <div class="form-row triple">
@@ -1525,12 +1728,12 @@
           umbrarianStage: $('#m-umb-stage')?.value || '',
           shard: $('#m-umb-shard')?.value || '',
           shardAbility: $('#m-umb-ability')?.value || '',
-          str: parseInt($('#m-str').value, 10) || 10,
-          dex: parseInt($('#m-dex').value, 10) || 10,
-          con: parseInt($('#m-con').value, 10) || 10,
-          int: parseInt($('#m-int').value, 10) || 10,
-          wis: parseInt($('#m-wis').value, 10) || 10,
-          cha: parseInt($('#m-cha').value, 10) || 10,
+          str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str').value, 10) || 10,
+          dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex').value, 10) || 10,
+          con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con').value, 10) || 10,
+          int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int').value, 10) || 10,
+          wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis').value, 10) || 10,
+          cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha').value, 10) || 10,
           hp: parseInt($('#m-hp').value, 10) || 0,
           hpMax: parseInt($('#m-hpmax').value, 10) || 0,
           ac: parseInt($('#m-ac').value, 10) || 10,
@@ -1615,34 +1818,111 @@
   function characterCardHtml(ch, roleLabel, roleClass) {
     const corrClass = ch.corruption >= 5 ? 'high' : ch.corruption >= 3 ? 'mid' : '';
     return `
-      <div class="char-top">
+      <div class="sheet-card-header">
         <div>
-          <h3>${escapeHtml(ch.name)}<span class="role-badge ${roleClass}">${roleLabel}</span></h3>
-          <div class="level">${escapeHtml(ch.class || 'Adventurer')}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · Level ${ch.level}${ch.race ? ' · ' + escapeHtml(ch.race) : ''}${ch.player && ch.player !== 'NPC' ? ' · ' + escapeHtml(ch.player) : ''}</div>
+          <h3>${escapeHtml(ch.name || 'Unnamed')}</h3>
+          <p class="muted small">${escapeHtml(roleLabel)} · ${escapeHtml(ch.race || '—')} ${ch.class ? '· ' + escapeHtml(ch.class) : ''}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · L${ch.level}</p>
         </div>
-        <div class="char-combat">
-          <span class="stat-chip" title="Armor Class">AC ${ch.ac}</span>
-          <span class="stat-chip" title="Hit Points">HP ${ch.hp}/${ch.hpMax || '—'}</span>
+        <div class="sheet-card-stats">
+          <span class="stat-chip" title="AC">AC ${ch.ac}</span>
+          <span class="stat-chip" title="HP">HP ${ch.hp}/${ch.hpMax}</span>
           ${ch.isUmbrarian ? `<span class="stat-chip umbrarian" title="${escapeAttr((ch.umbrarianStage||'') + ' · ' + (ch.shard||'Shard'))}">Umbrarian${ch.umbrarianStage ? ' · ' + ch.umbrarianStage : ''}</span>` : ''}
           ${ch.corruption > 0 ? `<span class="stat-chip corruption ${corrClass}" title="Corruption">☠ ${ch.corruption}/6</span>` : ''}
         </div>
       </div>
-      <div class="ability-mini">
-        <span>STR ${ch.str} (${modStr(ch.str)})</span>
-        <span>DEX ${ch.dex} (${modStr(ch.dex)})</span>
-        <span>CON ${ch.con} (${modStr(ch.con)})</span>
-        <span>INT ${ch.int} (${modStr(ch.int)})</span>
-        <span>WIS ${ch.wis} (${modStr(ch.wis)})</span>
-        <span>CHA ${ch.cha} (${modStr(ch.cha)})</span>
+      <div class="sheet-card-abilities">
+        ${ABS.map(a => `<span><strong>${a.toUpperCase()}</strong> ${ch[a]} (${modStr(ch[a])})</span>`).join('')}
       </div>
-      ${ch.attacks ? `<div class="notes"><strong>Attacks:</strong> ${escapeHtml(ch.attacks)}</div>` : ''}
-      ${ch.notes ? `<div class="notes">${escapeHtml(ch.notes)}</div>` : ''}
-      <div class="actions">
-        <button class="btn primary edit-char">Open Sheet</button>
+      <div class="sheet-card-actions">
+        <button class="btn primary view-sheet">View Sheet</button>
+        <button class="btn secondary edit-char">Edit</button>
         <button class="btn danger delete-char">Remove</button>
-      </div>
-    `;
+      </div>`;
   }
+
+  function characterSheetViewHtml(ch) {
+    const race = getPhbRaces().find(r => r.name === ch.race);
+    const cls = findPhbClass(ch.class);
+    const path = findMoonPath(ch.subclass);
+    const bon = getRaceBonuses(ch.race || '');
+    const abRows = ABS.map(a => {
+      const total = ch[a] || 10;
+      const b = bon[a] || 0;
+      const base = total - b;
+      return `<tr><td>${a.toUpperCase()}</td><td>${base}</td><td>${b ? '+' + b : '—'}</td><td><strong>${total}</strong></td><td>${modStr(total)}</td></tr>`;
+    }).join('');
+    return `
+      <div class="full-sheet">
+        <header class="full-sheet-header">
+          <h2>${escapeHtml(ch.name || 'Unnamed')}</h2>
+          <p class="muted">${escapeHtml(ch.player || 'NPC')} · ${escapeHtml(ch.race || '—')} ${ch.class ? '· ' + escapeHtml(ch.class) : ''}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · Level ${ch.level}
+          ${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</p>
+        </header>
+        <div class="full-sheet-grid">
+          <div class="detail-block">
+            <div class="detail-label">Combat</div>
+            <p><strong>AC</strong> ${ch.ac} · <strong>HP</strong> ${ch.hp} / ${ch.hpMax} · <strong>Speed</strong> ${escapeHtml(ch.speed || '30 ft.')} · <strong>PB</strong> +${ch.profBonus || 2}</p>
+            <p class="muted small">Suggested unarmored AC ${suggestedAc(ch.class, ch)}; HP by class/level/CON ${suggestedHpMax(ch.class, ch.level, ch.con)}</p>
+          </div>
+          <div class="detail-block">
+            <div class="detail-label">Ability Scores</div>
+            <table class="prog-table">
+              <thead><tr><th>Ability</th><th>Base</th><th>Racial</th><th>Total</th><th>Mod</th></tr></thead>
+              <tbody>${abRows}</tbody>
+            </table>
+          </div>
+          <div class="detail-block">
+            <div class="detail-label">Saves &amp; Skills</div>
+            <p><strong>Saves:</strong> ${escapeHtml(ch.saves || '—')}</p>
+            <p><strong>Skills:</strong> ${escapeHtml(ch.skills || '—')}</p>
+          </div>
+          <div class="detail-block">
+            <div class="detail-label">Attacks</div>
+            <pre class="sheet-pre">${escapeHtml(ch.attacks || '—')}</pre>
+          </div>
+          <div class="detail-block">
+            <div class="detail-label">Features &amp; Traits</div>
+            <pre class="sheet-pre">${escapeHtml(ch.features || '—')}</pre>
+          </div>
+          <div class="detail-block">
+            <div class="detail-label">Equipment</div>
+            <pre class="sheet-pre">${escapeHtml(ch.equipment || '—')}</pre>
+          </div>
+          ${ch.isUmbrarian ? `<div class="detail-block callout">
+            <div class="detail-label">Umbrarian</div>
+            <p>Stage: <strong>${escapeHtml(ch.umbrarianStage || '—')}</strong> · Shard: <strong>${escapeHtml(ch.shard || '—')}</strong> · Ability: ${escapeHtml(ch.shardAbility || '—')} · Corruption ${ch.corruption}/6</p>
+          </div>` : ''}
+          ${race ? `<div class="detail-block">
+            <div class="detail-label">Race — ${escapeHtml(race.name)}</div>
+            <p class="muted small">${escapeHtml(race.tagline || race.short || '')}</p>
+            <ul class="trait-list">${(race.traits||[]).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
+          </div>` : ''}
+          ${cls ? `<div class="detail-block">
+            <div class="detail-label">Class — ${escapeHtml(cls.name)}</div>
+            <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)}</p>
+            <p>${escapeHtml(cls.summary || '')}</p>
+          </div>` : ''}
+          ${path ? `<div class="detail-block">
+            <div class="detail-label">${escapeHtml(path.name)}</div>
+            <p class="muted small">${escapeHtml(path.summary || '')}</p>
+            <ul class="trait-list">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
+          </div>` : ''}
+          ${ch.notes ? `<div class="detail-block"><div class="detail-label">Notes</div><pre class="sheet-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  async function viewCharacterSheet(ch) {
+    await openModal({
+      title: ch.name || 'Character Sheet',
+      bodyHtml: characterSheetViewHtml(ch),
+      confirmText: 'Close',
+      cancelText: '',
+      wide: true,
+      onConfirm: () => true
+    });
+  }
+
 
   function renderParty() {
     const c = getActive();
@@ -1667,6 +1947,7 @@
         const card = document.createElement('div');
         card.className = 'character-card sheet-card';
         card.innerHTML = characterCardHtml(ch, isAlly ? 'Ally' : 'PC', isAlly ? 'ally' : 'pc');
+        card.querySelector('.view-sheet')?.addEventListener('click', () => viewCharacterSheet(ch));
         card.querySelector('.edit-char').addEventListener('click', () => promptCharacter(raw));
         card.querySelector('.delete-char').addEventListener('click', async () => {
           const ok = await openModal({
@@ -1696,6 +1977,7 @@
         const card = document.createElement('div');
         card.className = 'character-card sheet-card villain-card';
         card.innerHTML = characterCardHtml(ch, 'Villain', 'villain');
+        card.querySelector('.view-sheet')?.addEventListener('click', () => viewCharacterSheet(ch));
         card.querySelector('.edit-char').addEventListener('click', () => promptVillain(raw));
         card.querySelector('.delete-char').addEventListener('click', async () => {
           const ok = await openModal({
@@ -1786,12 +2068,12 @@
           level,
           world: $('#m-world').value,
           corruption: clamp(parseInt($('#m-corruption').value, 10) || 0, 0, 10),
-          str: parseInt($('#m-str').value, 10) || 10,
-          dex: parseInt($('#m-dex').value, 10) || 10,
-          con: parseInt($('#m-con').value, 10) || 10,
-          int: parseInt($('#m-int').value, 10) || 10,
-          wis: parseInt($('#m-wis').value, 10) || 10,
-          cha: parseInt($('#m-cha').value, 10) || 10,
+          str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str').value, 10) || 10,
+          dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex').value, 10) || 10,
+          con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con').value, 10) || 10,
+          int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int').value, 10) || 10,
+          wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis').value, 10) || 10,
+          cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha').value, 10) || 10,
           hp: parseInt($('#m-hp').value, 10) || 0,
           hpMax: parseInt($('#m-hpmax').value, 10) || 0,
           ac: parseInt($('#m-ac').value, 10) || 10,
