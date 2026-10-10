@@ -290,8 +290,8 @@
     const conMod = abilityMod(scores.con);
     const strMod = abilityMod(scores.str);
     const wisMod = abilityMod(scores.wis);
+    const chaMod = abilityMod(scores.cha);
 
-    // HP / AC heuristics by CR
     let hpMax, ac, attackBonus, damage;
     const crn = Number(cr) || 0;
     if (crn <= 0.5) { hpMax = 8 + Math.floor(Math.random() * 12) + conMod; ac = 11 + Math.max(0, dexMod); attackBonus = 3 + Math.max(strMod, dexMod); damage = '1d6+' + Math.max(0, strMod); }
@@ -303,10 +303,43 @@
     const weapon = pick(weapons);
     const attackModStr = attackBonus >= 0 ? `+${attackBonus}` : `${attackBonus}`;
 
+    const asUmbrarian = !!opts.umbrarian;
+    const stages = ['dormant', 'awakened', 'ascendant'];
+    const umbStage = opts.umbrarianStage || (asUmbrarian ? pick(stages) : '');
+    const shards = (window.UMBRARIANS && window.UMBRARIANS.shards) ? window.UMBRARIANS.shards : [];
+    const shard = opts.shard || (asUmbrarian && shards.length ? pick(shards) : null);
+    const shardAbility = opts.shardAbility || pick(['INT', 'WIS', 'CHA']);
+    const levelApprox = Math.max(1, Math.round(Number(cr) || 1));
+    const pb = (window.PHB_PROF_BY_LEVEL && window.PHB_PROF_BY_LEVEL[levelApprox]) || 2;
+    const shardMod = shardAbility === 'INT' ? abilityMod(scores.int) : shardAbility === 'CHA' ? chaMod : wisMod;
+    const shardDC = 8 + pb + shardMod;
+
+    let traits = pick(GENERATORS.npcTraits);
+    let secret = pick(GENERATORS.npcSecrets);
+    let attacks = `${weapon} ${attackModStr} to hit, ${damage} damage`;
+    let corruption = 0;
+
+    if (asUmbrarian) {
+      corruption = umbStage === 'ascendant' ? pick([4, 5, 6]) : umbStage === 'awakened' ? pick([1, 2, 3]) : pick([0, 1]);
+      const shardName = shard ? shard.name : 'Unknown Shard';
+      const umbLines = [
+        `Umbrarian (${umbStage}) — Shard: ${shardName}`,
+        `Shard Mark; Resonant Sense 1/LR (30 ft.)`,
+        `Shard DC ${shardDC} (${shardAbility})`,
+        umbStage === 'dormant' ? 'Dormant: dreams/impulses only' :
+          umbStage === 'awakened' ? 'Awakened: 1–2 Gifts; Dark Bargains' :
+          'Ascendant: Ascendant Gift + regional effect'
+      ];
+      if (shard) umbLines.push(`Theme: ${shard.theme}`);
+      traits = umbLines.join(' · ');
+      if (umbStage !== 'dormant') attacks += `; Whisper Lash (action, DC ${shardDC} WIS, 2d8 psychic)`;
+      secret = `Bears ${shardName}. ${secret}`;
+    }
+
     return {
       name: generateNpcName(),
       role,
-      world,
+      world: shard && asUmbrarian ? (opts.world || shard.world || world) : world,
       cr: String(cr),
       ...scores,
       ac,
@@ -314,26 +347,36 @@
       hpMax,
       speed: '30 ft.',
       perception: 10 + wisMod + (Math.random() < 0.4 ? 2 : 0),
-      attacks: `${weapon} ${attackModStr} to hit, ${damage} damage`,
-      traits: pick(GENERATORS.npcTraits),
-      secret: pick(GENERATORS.npcSecrets),
-      notes: ''
+      attacks,
+      traits,
+      secret,
+      notes: '',
+      isUmbrarian: asUmbrarian,
+      umbrarianStage: umbStage,
+      shard: shard ? shard.name : '',
+      shardAbility: asUmbrarian ? shardAbility : '',
+      corruption,
+      features: traits
     };
   }
 
   function formatNpcBlock(npc) {
     const abs = `STR ${npc.str} (${modStr(npc.str)})  DEX ${npc.dex} (${modStr(npc.dex)})  CON ${npc.con} (${modStr(npc.con)})  INT ${npc.int} (${modStr(npc.int)})  WIS ${npc.wis} (${modStr(npc.wis)})  CHA ${npc.cha} (${modStr(npc.cha)})`;
+    const lines = [
+      `AC ${npc.ac} · HP ${npc.hp}/${npc.hpMax} · Speed ${npc.speed}`,
+      abs,
+      `Passive Perception ${npc.perception}`,
+      `Attacks: ${npc.attacks}`,
+      `Trait: ${npc.traits}`,
+      `Secret: ${npc.secret}`
+    ];
+    if (npc.isUmbrarian) {
+      lines.splice(3, 0, `Umbrarian · ${npc.umbrarianStage || '?'} · ${npc.shard || 'Shard'} · Corruption ${npc.corruption}/6`);
+    }
     return {
       title: npc.name,
-      subtitle: `${npc.role} · ${npc.world} · CR ${npc.cr}`,
-      lines: [
-        `AC ${npc.ac} · HP ${npc.hp}/${npc.hpMax} · Speed ${npc.speed}`,
-        abs,
-        `Passive Perception ${npc.perception}`,
-        `Attacks: ${npc.attacks}`,
-        `Trait: ${npc.traits}`,
-        `Secret: ${npc.secret}`
-      ]
+      subtitle: `${npc.role} · ${npc.world} · CR ${npc.cr}${npc.isUmbrarian ? ' · Umbrarian' : ''}`,
+      lines
     };
   }
 
@@ -1085,6 +1128,100 @@
       ${abilityHtml}`;
   }
 
+
+  function getMoonPaths() {
+    return (typeof window !== 'undefined' && window.MOON_PATHS) ? window.MOON_PATHS : [];
+  }
+
+  function findMoonPath(nameOrId) {
+    if (!nameOrId) return null;
+    const n = String(nameOrId).toLowerCase();
+    return getMoonPaths().find(p => p.id === n || p.name.toLowerCase() === n || p.world.toLowerCase() === n) || null;
+  }
+
+  function moonPathOptionsHtml(selected) {
+    let html = `<option value="">— Choose Moon Path —</option>`;
+    getMoonPaths().forEach(p => {
+      const sel = (selected === p.name || selected === p.id || selected === p.world) ? 'selected' : '';
+      html += `<option value="${escapeAttr(p.name)}" ${sel}>${escapeHtml(p.name)}</option>`;
+    });
+    return html;
+  }
+
+  function abilityModNum(score) {
+    return Math.floor(((Number(score) || 10) - 10) / 2);
+  }
+
+  function formatAttackBonus(mod, prof) {
+    const t = mod + prof;
+    return t >= 0 ? `+${t}` : `${t}`;
+  }
+
+  function cantripDiceForLevel(level) {
+    if (level >= 17) return '4d';
+    if (level >= 11) return '3d';
+    if (level >= 5) return '2d';
+    return '1d';
+  }
+
+  function buildAttacksForClass(className, level, scores, profBonus) {
+    const table = (window.CLASS_ATTACKS || {})[className];
+    if (!table) return '';
+    const lvl = clamp(Number(level) || 1, 1, 20);
+    const pb = Number(profBonus) || (window.PHB_PROF_BY_LEVEL ? window.PHB_PROF_BY_LEVEL[lvl] : 2);
+    const str = abilityModNum(scores.str);
+    const dex = abilityModNum(scores.dex);
+    const int = abilityModNum(scores.int);
+    const wis = abilityModNum(scores.wis);
+    const cha = abilityModNum(scores.cha);
+    let atkMod = str;
+    let style = table.style || 'str_melee';
+    if (style.includes('dex')) atkMod = dex;
+    if (style.includes('wis')) atkMod = Math.max(str, wis);
+    if (style === 'wis_spell') atkMod = wis;
+    if (style === 'cha_spell') atkMod = cha;
+    if (style === 'int_spell') atkMod = int;
+    if (style === 'wis_hybrid') atkMod = Math.max(str, dex);
+    if (style === 'dex_ranged') atkMod = dex;
+
+    const lines = [];
+    (table.weapons || []).forEach(([name, dice, dtype], idx) => {
+      const dmgMod = atkMod;
+      const dmgStr = dmgMod >= 0 ? `${dice}+${dmgMod}` : `${dice}${dmgMod}`;
+      lines.push(`${name}: ${formatAttackBonus(atkMod, pb)} to hit, ${dmgStr} ${dtype}`);
+    });
+    if (table.cantrip) {
+      const c = table.cantrip;
+      // scale dice if pattern like 1d10
+      let scaled = c;
+      const m = c.match(/(\d+)d(\d+)/);
+      if (m && (style.includes('spell') || className === 'Warlock' || className === 'Sorcerer' || className === 'Wizard' || className === 'Cleric' || className === 'Druid' || className === 'Bard')) {
+        const n = cantripDiceForLevel(lvl).replace('d','');
+        scaled = c.replace(/(\d+)d(\d+)/, `${cantripDiceForLevel(lvl)}${m[2]}`);
+      }
+      const spellMod = style.includes('cha') ? cha : style.includes('int') ? int : style.includes('wis') ? wis : atkMod;
+      if (/to hit|attack/i.test(scaled) || /Bolt|Blast|Flame/.test(scaled)) {
+        lines.push(`${scaled.split('(')[0].trim()}: ${formatAttackBonus(spellMod, pb)} to hit (${scaled.includes('(') ? scaled.slice(scaled.indexOf('(')+1).replace(')','') : 'see PHB'})`);
+      } else {
+        lines.push(scaled + ` [DC ${8 + pb + spellMod}]`);
+      }
+    }
+    if (table.note) lines.push(`Note: ${table.note}`);
+    // Extra Attack note
+    if (lvl >= 5 && ['Barbarian','Fighter','Paladin','Ranger','Monk','Moon Guardian','Bloodhunter','Ghostblade'].includes(className)) {
+      lines.push(lvl >= 20 && className === 'Fighter' ? 'Extra Attack (3)' : lvl >= 11 && className === 'Fighter' ? 'Extra Attack (2)' : 'Extra Attack (2 attacks)');
+    }
+    if (className === 'Rogue' || className === 'Shadowblade') {
+      const sa = Math.ceil(lvl / 2);
+      lines.push(`Sneak Attack: ${sa}d6 when eligible`);
+    }
+    if (className === 'Moon Guardian' && lvl >= 2) {
+      lines.push(`Spell save DC ${8 + pb + wis}; Spell attack ${formatAttackBonus(wis, pb)}`);
+      lines.push('Moonlight Infusion: spend Lunar Charges (see class features)');
+    }
+    return lines.join('\n');
+  }
+
   function wireCharacterFormHelpers() {
     const classSel = $('#m-class');
     const levelInp = $('#m-level');
@@ -1094,19 +1231,88 @@
     const skillBox = $('#m-skill-picker');
     const progBox = $('#m-class-prog');
     const features = $('#m-features');
+    const subclassInp = $('#m-subclass');
+    const attacksInp = $('#m-attacks');
+    const pathWrap = $('#m-moon-path-wrap');
+    const pathSel = $('#m-moon-path');
+
+    function scoresFromForm() {
+      return {
+        str: parseInt($('#m-str')?.value, 10) || 10,
+        dex: parseInt($('#m-dex')?.value, 10) || 10,
+        con: parseInt($('#m-con')?.value, 10) || 10,
+        int: parseInt($('#m-int')?.value, 10) || 10,
+        wis: parseInt($('#m-wis')?.value, 10) || 10,
+        cha: parseInt($('#m-cha')?.value, 10) || 10
+      };
+    }
+
+    function refreshAttacks(force) {
+      if (!attacksInp) return;
+      if (!force && attacksInp.dataset.manual === '1' && attacksInp.value.trim()) return;
+      const cname = classSel?.value || '';
+      if (!cname) return;
+      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
+      const pb = parseInt(profInp?.value, 10) || (window.PHB_PROF_BY_LEVEL?.[lvl] || 2);
+      const built = buildAttacksForClass(cname, lvl, scoresFromForm(), pb);
+      if (built) {
+        attacksInp.value = built;
+        attacksInp.dataset.manual = '0';
+      }
+    }
+
+    function applyMoonPathToFeatures() {
+      if (!features || !pathSel) return;
+      const path = findMoonPath(pathSel.value);
+      const marker = '— Moon Path —';
+      // strip old path block
+      if (features.value.includes(marker)) {
+        features.value = features.value.split(marker)[0].trim();
+      }
+      if (!path) return;
+      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
+      const lines = [marker, `${path.name} (${path.world}): ${path.summary}`];
+      (path.features || []).filter(f => f.lvl <= lvl).forEach(f => {
+        lines.push(`L${f.lvl} ${f.name}: ${f.text}`);
+      });
+      (path.features || []).filter(f => f.lvl > lvl).forEach(f => {
+        lines.push(`(L${f.lvl}) ${f.name}: locked until level ${f.lvl}`);
+      });
+      features.value = (features.value ? features.value + '\n\n' : '') + lines.join('\n');
+      if (subclassInp && !subclassInp.value) subclassInp.value = path.name;
+      if (worldSel && !worldSel.value) worldSel.value = path.world;
+    }
 
     function refreshClassUI() {
       const cname = classSel ? classSel.value : '';
       if (skillBox) skillBox.innerHTML = skillPickerHtml(cname, []);
-      if (progBox) progBox.innerHTML = progressionTableHtml(cname);
+      if (progBox) {
+        let html = progressionTableHtml(cname);
+        // Path features panel for Moon Guardian
+        if (cname === 'Moon Guardian') {
+          const path = findMoonPath(pathSel?.value);
+          if (path) {
+            html += `<div class="class-abilities"><div class="detail-label">${escapeHtml(path.name)} Features</div><ul class="trait-list">`;
+            path.features.forEach(f => {
+              html += `<li><strong>L${f.lvl} — ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`;
+            });
+            html += `</ul><p class="muted small">${escapeHtml(path.summary)}</p></div>`;
+          }
+        }
+        progBox.innerHTML = html;
+      }
+      if (pathWrap) pathWrap.classList.toggle('hidden', cname !== 'Moon Guardian');
       const cls = findPhbClass(cname);
       if (cls && $('#m-saves') && !$('#m-saves').value) $('#m-saves').value = cls.saves;
+      refreshAttacks(true);
     }
     function refreshProf() {
       const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
       if (profInp && window.PHB_PROF_BY_LEVEL) {
         profInp.value = window.PHB_PROF_BY_LEVEL[lvl] || 2;
       }
+      refreshAttacks(true);
+      if (classSel?.value === 'Moon Guardian') applyMoonPathToFeatures();
     }
     function refreshRaceTraits() {
       const rname = raceSel ? raceSel.value : '';
@@ -1123,6 +1329,14 @@
     levelInp?.addEventListener('change', refreshProf);
     levelInp?.addEventListener('input', refreshProf);
     raceSel?.addEventListener('change', refreshRaceTraits);
+    pathSel?.addEventListener('change', () => {
+      applyMoonPathToFeatures();
+      refreshClassUI();
+    });
+    attacksInp?.addEventListener('input', () => { attacksInp.dataset.manual = '1'; });
+    ['m-str','m-dex','m-con','m-int','m-wis','m-cha'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => refreshAttacks(true));
+    });
     refreshClassUI();
   }
 
@@ -1143,8 +1357,13 @@
           <div class="field"><label>Class</label>
             <select id="m-class">${classOptionsHtml(ch.class)}</select>
           </div>
-          <div class="field"><label>Subclass</label><input type="text" id="m-subclass" value="${escapeAttr(ch.subclass)}" placeholder="Optional" /></div>
+          <div class="field"><label>Subclass</label><input type="text" id="m-subclass" value="${escapeAttr(ch.subclass)}" placeholder="Optional / Moon Path" /></div>
           <div class="field"><label>Level</label><input type="number" id="m-level" min="1" max="20" value="${ch.level}" /></div>
+        </div>
+        <div class="form-row ${ch.class === 'Moon Guardian' || (ch.subclass||'').includes('Path of') ? '' : 'hidden'}" id="m-moon-path-wrap">
+          <div class="field"><label>Moon Guardian Path</label>
+            <select id="m-moon-path">${moonPathOptionsHtml(ch.subclass)}</select>
+          </div>
         </div>
         <div class="form-row triple">
           <div class="field"><label>Ancestry / Race</label>
@@ -2160,7 +2379,9 @@
     if (genNpcBtn && !genNpcBtn.dataset.wired) {
       genNpcBtn.dataset.wired = '1';
       genNpcBtn.addEventListener('click', () => {
-        const npc = generateNpc();
+        const umb = $('#npc-gen-umbrarian')?.checked;
+        const stage = $('#npc-gen-umb-stage')?.value || '';
+        const npc = generateNpc({ umbrarian: !!umb, umbrarianStage: stage || undefined });
         const block = formatNpcBlock(npc);
         out.innerHTML = `
           <div class="gen-result npc-block">
@@ -2191,9 +2412,13 @@
           saves: '',
           skills: `Perception (passive ${npc.perception})`,
           attacks: npc.attacks,
-          features: npc.traits,
+          features: npc.features || npc.traits,
           equipment: '',
-          corruption: 0,
+          corruption: npc.corruption || 0,
+          isUmbrarian: !!npc.isUmbrarian,
+          umbrarianStage: npc.umbrarianStage || '',
+          shard: npc.shard || '',
+          shardAbility: npc.shardAbility || '',
           notes: `CR ${npc.cr}. Secret: ${npc.secret}`
         });
         out.querySelector('.use-npc-party')?.addEventListener('click', () => {

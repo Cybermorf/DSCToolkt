@@ -1359,6 +1359,455 @@ window.CLASS_ABILITIES = {
     }
   ]
 };
+
+window.MOON_PATHS = [
+  {
+    "id": "luminaris",
+    "name": "Path of Luminaris",
+    "world": "Luminaris",
+    "summary": "Express Luna through radiant corroboration and accountable illumination.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Radiant Conduit",
+        "text": "You learn the Light cantrip (or another Moon Guardian cantrip if you already know it). Once on each of your turns when you deal radiant damage, one creature damaged by that effect glows until the start of your next turn: it cannot benefit from being Invisible, and the next attack against it before the glow ends gains +1d4."
+      },
+      {
+        "lvl": 7,
+        "name": "Radiant Burst",
+        "text": "Action: spend 2 Lunar Charges to emit light in a 15-foot radius. Chosen creatures make a CON save vs your spell save DC. Fail: 3d8 radiant (4d8 at 11th, 5d8 at 17th) and Blinded until the start of your next turn; success: half damage."
+      },
+      {
+        "lvl": 11,
+        "name": "Luminous Form",
+        "text": "While Celestial Form is active: bright light 30 ft. / dim 30 ft. beyond; Fly speed equal to Speed (Hover). When you restore HP or deal radiant damage, you may move 10 feet without provoking opportunity attacks (once per turn)."
+      },
+      {
+        "lvl": 15,
+        "name": "Radiant Ascendance",
+        "text": "While Celestial Form is active, once per turn when you deal radiant damage, the target makes a CON save or is Blinded until the end of its next turn (success: immune until your next turn). Your radiant damage ignores Resistance (not Immunity)."
+      }
+    ]
+  },
+  {
+    "id": "umbraria",
+    "name": "Path of Umbraria",
+    "world": "Umbraria",
+    "summary": "Express Luna through protective shadow, stealth, and chosen revelation.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Shadow Veil",
+        "text": "You learn Minor Illusion. Advantage on Dexterity (Stealth) checks in Dim Light or Darkness. You can see normally through magical Darkness created by your Moon Guardian spells and features out to 30 feet."
+      },
+      {
+        "lvl": 7,
+        "name": "Shadow Step",
+        "text": "Bonus Action while in Dim Light or Darkness: teleport up to 30 feet to an unoccupied space you can see that is in Dim Light or Darkness. Uses scale with Lunar Charges / path rules in the PHB."
+      },
+      {
+        "lvl": 11,
+        "name": "Umbral Form",
+        "text": "While Celestial Form is active, you are lightly obscured in Dim Light or Darkness, and opportunity attacks against you are made with disadvantage."
+      },
+      {
+        "lvl": 15,
+        "name": "Shadow Mastery",
+        "text": "When you roll damage for necrotic or umbral Moon Guardian effects, treat any 1 on a damage die as a 2. Enhanced stealth and darkness control while in Celestial Form."
+      }
+    ]
+  },
+  {
+    "id": "eternum",
+    "name": "Path of Eternum",
+    "world": "Eternum",
+    "summary": "Express Luna through endurance, conflict-hardened resolve, and recovery after ruin.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Battle Focus",
+        "text": "When you roll Initiative, you can gain temporary HP equal to your Moon Guardian level + WIS modifier (minimum 1)."
+      },
+      {
+        "lvl": 7,
+        "name": "Unbroken Advance",
+        "text": "Advantage on ability checks and saving throws against being Frightened or having your speed reduced. Move through difficult terrain caused by rubble or ruins without extra cost."
+      },
+      {
+        "lvl": 11,
+        "name": "Aura of Conflict",
+        "text": "While Celestial Form is active, enemies within 10 feet of you have disadvantage on death saving throws, and you gain resistance to one damage type chosen when you enter the Form."
+      },
+      {
+        "lvl": 15,
+        "name": "Eternal Champion",
+        "text": "Once per Long Rest when you are reduced to 0 HP but not killed outright, you can drop to 1 HP instead and immediately enter Celestial Form if you have Lunar Charges remaining."
+      }
+    ]
+  },
+  {
+    "id": "solara",
+    "name": "Path of Solara",
+    "world": "Solara",
+    "summary": "Express Luna through solar vitality, living light, and cleansing fire of remembrance.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Solar Conduit",
+        "text": "You gain Resistance to Fire damage. Once per turn when you deal radiant damage, add your WIS modifier to one damage roll."
+      },
+      {
+        "lvl": 7,
+        "name": "Solar Flare",
+        "text": "Action: spend Lunar Charges to unleash a cone or line of solar radiance (CON save; radiant/fire damage; fail also illuminated). Exact dice scale with level per PHB."
+      },
+      {
+        "lvl": 11,
+        "name": "Solar Fury",
+        "text": "While Celestial Form is active, your weapon attacks deal extra radiant damage equal to your WIS modifier, and you shed bright sunlight in a 20-foot radius."
+      },
+      {
+        "lvl": 15,
+        "name": "Solar Ascendance",
+        "text": "While Celestial Form is active, undead and fiends have disadvantage on saves against your Moon Guardian spells and features; your radiant damage ignores Resistance."
+      }
+    ]
+  },
+  {
+    "id": "aetheria",
+    "name": "Path of Aetheria",
+    "world": "Aetheria",
+    "summary": "Express Luna through freedom of motion, storm-paths, and maintained connection.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Cosmic Attunement",
+        "text": "When you roll Initiative, you can move up to half your speed without provoking opportunity attacks."
+      },
+      {
+        "lvl": 7,
+        "name": "Astral Wings",
+        "text": "Bonus Action: spend Lunar Charges to gain a Fly speed equal to your Speed until the end of your next turn (Hover optional per PHB)."
+      },
+      {
+        "lvl": 11,
+        "name": "Astral Burst",
+        "text": "While Celestial Form is active, once per turn when you hit with a weapon attack, deal extra force or thunder damage and push the target 10 feet."
+      },
+      {
+        "lvl": 15,
+        "name": "Aetherial Ascendance",
+        "text": "While Celestial Form is active, you have a permanent Fly speed equal to your Speed (Hover) and ignore difficult terrain of wind or unstable platforms."
+      }
+    ]
+  },
+  {
+    "id": "harmonia",
+    "name": "Path of Harmonia",
+    "world": "Harmonia",
+    "summary": "Express Luna through balance, mediation, and cooperative strength.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Serene Aura",
+        "text": "Allies within 10 feet of you gain a +1 bonus to saving throws against being Charmed or Frightened."
+      },
+      {
+        "lvl": 7,
+        "name": "Tranquil Resilience",
+        "text": "As a Bonus Action, spend a Lunar Charge to grant an ally within 30 feet temporary HP equal to your Moon Guardian level + WIS mod."
+      },
+      {
+        "lvl": 11,
+        "name": "Enchanted Harmony",
+        "text": "While Celestial Form is active, when you restore HP to an ally, another ally within 15 feet regains HP equal to your WIS modifier."
+      },
+      {
+        "lvl": 15,
+        "name": "Harmony’s Embrace",
+        "text": "While Celestial Form is active, you and allies within 15 feet have advantage on saves against being Charmed or Frightened; once per turn you can grant the Help action as a free interaction within that aura."
+      }
+    ]
+  },
+  {
+    "id": "celestia",
+    "name": "Path of Celestia",
+    "world": "Celestia",
+    "summary": "Express Luna through sacred thresholds, identity, and celestial authority.",
+    "features": [
+      {
+        "lvl": 3,
+        "name": "Celestial Presence",
+        "text": "You learn Sacred Flame if you don’t already know it. Advantage on Insight or Religion checks related to planar/celestial matters."
+      },
+      {
+        "lvl": 7,
+        "name": "Celestial Wings",
+        "text": "Bonus Action: spend Lunar Charges to gain spectral wings — Fly speed equal to Speed until the end of your next turn."
+      },
+      {
+        "lvl": 11,
+        "name": "Celestial Burst",
+        "text": "While Celestial Form is active, once per turn deal extra radiant damage on a weapon hit and force a WIS save or the target cannot willingly move closer to you until the end of its next turn."
+      },
+      {
+        "lvl": 15,
+        "name": "Celestial Ascendance",
+        "text": "While Celestial Form is active, you have resistance to necrotic and radiant damage, and your weapon attacks count as magical celestial for overcoming resistance."
+      }
+    ]
+  }
+];
+window.CLASS_ATTACKS = {
+  "Barbarian": {
+    "style": "str_melee",
+    "weapons": [
+      [
+        "Greataxe",
+        "1d12",
+        "slashing"
+      ],
+      [
+        "Handaxe",
+        "1d6",
+        "slashing"
+      ]
+    ]
+  },
+  "Bard": {
+    "style": "cha_spell",
+    "weapons": [
+      [
+        "Rapier",
+        "1d8",
+        "piercing"
+      ],
+      [
+        "Dagger",
+        "1d4",
+        "piercing"
+      ]
+    ],
+    "cantrip": "Vicious Mockery (WIS save, 1d4 psychic)"
+  },
+  "Cleric": {
+    "style": "wis_spell",
+    "weapons": [
+      [
+        "Mace",
+        "1d6",
+        "bludgeoning"
+      ],
+      [
+        "Light Crossbow",
+        "1d8",
+        "piercing"
+      ]
+    ],
+    "cantrip": "Sacred Flame (DEX save, 1d8 radiant)"
+  },
+  "Druid": {
+    "style": "wis_spell",
+    "weapons": [
+      [
+        "Quarterstaff",
+        "1d6",
+        "bludgeoning"
+      ],
+      [
+        "Scimitar",
+        "1d6",
+        "slashing"
+      ]
+    ],
+    "cantrip": "Produce Flame (1d8 fire)"
+  },
+  "Fighter": {
+    "style": "str_melee",
+    "weapons": [
+      [
+        "Longsword",
+        "1d8",
+        "slashing"
+      ],
+      [
+        "Longbow",
+        "1d8",
+        "piercing"
+      ]
+    ]
+  },
+  "Monk": {
+    "style": "dex_melee",
+    "weapons": [
+      [
+        "Unarmed Strike",
+        "1d6",
+        "bludgeoning"
+      ],
+      [
+        "Shortsword",
+        "1d6",
+        "piercing"
+      ]
+    ]
+  },
+  "Paladin": {
+    "style": "str_melee",
+    "weapons": [
+      [
+        "Longsword",
+        "1d8",
+        "slashing"
+      ],
+      [
+        "Javelin",
+        "1d6",
+        "piercing"
+      ]
+    ],
+    "note": "Divine Smite on melee hit (expend spell slot)"
+  },
+  "Ranger": {
+    "style": "dex_ranged",
+    "weapons": [
+      [
+        "Longbow",
+        "1d8",
+        "piercing"
+      ],
+      [
+        "Shortsword",
+        "1d6",
+        "piercing"
+      ]
+    ]
+  },
+  "Rogue": {
+    "style": "dex_melee",
+    "weapons": [
+      [
+        "Shortsword",
+        "1d6",
+        "piercing"
+      ],
+      [
+        "Shortbow",
+        "1d6",
+        "piercing"
+      ]
+    ],
+    "note": "Sneak Attack when eligible"
+  },
+  "Sorcerer": {
+    "style": "cha_spell",
+    "weapons": [
+      [
+        "Dagger",
+        "1d4",
+        "piercing"
+      ],
+      [
+        "Light Crossbow",
+        "1d8",
+        "piercing"
+      ]
+    ],
+    "cantrip": "Fire Bolt (1d10 fire)"
+  },
+  "Warlock": {
+    "style": "cha_spell",
+    "weapons": [
+      [
+        "Dagger",
+        "1d4",
+        "piercing"
+      ]
+    ],
+    "cantrip": "Eldritch Blast (1d10 force)"
+  },
+  "Wizard": {
+    "style": "int_spell",
+    "weapons": [
+      [
+        "Quarterstaff",
+        "1d6",
+        "bludgeoning"
+      ],
+      [
+        "Dagger",
+        "1d4",
+        "piercing"
+      ]
+    ],
+    "cantrip": "Fire Bolt (1d10 fire)"
+  },
+  "Moon Guardian": {
+    "style": "wis_hybrid",
+    "weapons": [
+      [
+        "Longsword",
+        "1d8",
+        "slashing"
+      ],
+      [
+        "Javelin",
+        "1d6",
+        "piercing"
+      ]
+    ],
+    "cantrip": "Moonlight Infusion (spend Lunar Charges)",
+    "note": "Spell attack / save DC from Wisdom"
+  },
+  "Bloodhunter": {
+    "style": "str_melee",
+    "weapons": [
+      [
+        "Longsword",
+        "1d8",
+        "slashing"
+      ],
+      [
+        "Hand Crossbow",
+        "1d6",
+        "piercing"
+      ]
+    ],
+    "note": "Blood Rite: extra necrotic/radiant = Blood Die"
+  },
+  "Ghostblade": {
+    "style": "dex_melee",
+    "weapons": [
+      [
+        "Spectral Blade",
+        "1d8",
+        "force"
+      ],
+      [
+        "Spectral Blade (offhand)",
+        "1d6",
+        "force"
+      ]
+    ],
+    "note": "Spectral weapons count as magical"
+  },
+  "Shadowblade": {
+    "style": "dex_melee",
+    "weapons": [
+      [
+        "Shortsword",
+        "1d6",
+        "piercing"
+      ],
+      [
+        "Hand Crossbow",
+        "1d6",
+        "piercing"
+      ]
+    ],
+    "note": "Sneak Attack / Shadow Strike when eligible"
+  }
+};
 window.UMBRARIANS = {
   "name": "Umbrarians",
   "subtitle": "Hosts of the Dark Shards",
