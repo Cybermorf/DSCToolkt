@@ -1222,6 +1222,59 @@
     return lines.join('\n');
   }
 
+
+  /** Feature sections that can be updated independently without wiping others. */
+  const FEATURE_SECTION = {
+    race: '— Race Traits —',
+    path: '— Moon Path —',
+    umbrarian: '— Umbrarian Template —'
+  };
+
+  function getFeatureSection(text, marker) {
+    if (!text || !marker) return '';
+    const idx = text.indexOf(marker);
+    if (idx < 0) return '';
+    const rest = text.slice(idx);
+    // end at next known section marker
+    let end = rest.length;
+    for (const m of Object.values(FEATURE_SECTION)) {
+      if (m === marker) continue;
+      const j = rest.indexOf(m, marker.length);
+      if (j > 0 && j < end) end = j;
+    }
+    return rest.slice(0, end).trim();
+  }
+
+  function setFeatureSection(text, marker, bodyLines) {
+    const base = String(text || '');
+    // Remove existing section for this marker
+    let without = base;
+    const idx = without.indexOf(marker);
+    if (idx >= 0) {
+      let end = without.length;
+      const rest = without.slice(idx);
+      for (const m of Object.values(FEATURE_SECTION)) {
+        if (m === marker) continue;
+        const j = rest.indexOf(m, marker.length);
+        if (j > 0 && j < end - idx) end = idx + j;
+      }
+      without = (without.slice(0, idx) + without.slice(end)).trim();
+    }
+    if (!bodyLines || (Array.isArray(bodyLines) && !bodyLines.length)) {
+      return without;
+    }
+    const block = Array.isArray(bodyLines) ? [marker, ...bodyLines].join('\n') : `${marker}\n${bodyLines}`;
+    return (without ? without + '\n\n' : '') + block;
+  }
+
+  function rebuildRaceFeatureBlock(raceName) {
+    const race = getPhbRaces().find(r => r.name === raceName);
+    if (!race || !race.traits || !race.traits.length) return null;
+    const lines = [`${race.name}${race.world ? ' (' + race.world + ')' : ''}`];
+    race.traits.forEach(t => lines.push(`${t.name}: ${t.text}`));
+    return lines;
+  }
+
   function wireCharacterFormHelpers() {
     const classSel = $('#m-class');
     const levelInp = $('#m-level');
@@ -1264,23 +1317,36 @@
     function applyMoonPathToFeatures() {
       if (!features || !pathSel) return;
       const path = findMoonPath(pathSel.value);
-      const marker = '— Moon Path —';
-      // strip old path block
-      if (features.value.includes(marker)) {
-        features.value = features.value.split(marker)[0].trim();
+      if (subclassInp) {
+        subclassInp.value = path ? path.name : (subclassInp.value.startsWith('Path of') ? '' : subclassInp.value);
       }
-      if (!path) return;
+      if (path && worldSel && (path.world === 'Luna' || !worldSel.value)) {
+        // Luna path does not force a world; leave world as-is unless empty is fine
+      } else if (path && worldSel && path.world && path.world !== 'Luna') {
+        worldSel.value = path.world;
+      }
+      if (!path) {
+        features.value = setFeatureSection(features.value, FEATURE_SECTION.path, null);
+        return;
+      }
       const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
-      const lines = [marker, `${path.name} (${path.world}): ${path.summary}`];
+      const lines = [`${path.name} (${path.world}): ${path.summary}`];
       (path.features || []).filter(f => f.lvl <= lvl).forEach(f => {
         lines.push(`L${f.lvl} ${f.name}: ${f.text}`);
       });
       (path.features || []).filter(f => f.lvl > lvl).forEach(f => {
         lines.push(`(L${f.lvl}) ${f.name}: locked until level ${f.lvl}`);
       });
-      features.value = (features.value ? features.value + '\n\n' : '') + lines.join('\n');
-      if (subclassInp && !subclassInp.value) subclassInp.value = path.name;
-      if (worldSel && !worldSel.value) worldSel.value = path.world;
+      features.value = setFeatureSection(features.value, FEATURE_SECTION.path, lines);
+    }
+
+    function refreshRaceTraits() {
+      if (!features) return;
+      const rname = raceSel ? raceSel.value : '';
+      const race = getPhbRaces().find(r => r.name === rname);
+      if (race && race.world && worldSel && !worldSel.value) worldSel.value = race.world;
+      const lines = rebuildRaceFeatureBlock(rname);
+      features.value = setFeatureSection(features.value, FEATURE_SECTION.race, lines);
     }
 
     function refreshClassUI() {
@@ -1288,15 +1354,14 @@
       if (skillBox) skillBox.innerHTML = skillPickerHtml(cname, []);
       if (progBox) {
         let html = progressionTableHtml(cname);
-        // Path features panel for Moon Guardian
         if (cname === 'Moon Guardian') {
           const path = findMoonPath(pathSel?.value);
           if (path) {
             html += `<div class="class-abilities"><div class="detail-label">${escapeHtml(path.name)} Features</div><ul class="trait-list">`;
-            path.features.forEach(f => {
+            (path.features || []).forEach(f => {
               html += `<li><strong>L${f.lvl} — ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`;
             });
-            html += `</ul><p class="muted small">${escapeHtml(path.summary)}</p></div>`;
+            html += `</ul><p class="muted small">${escapeHtml(path.summary || '')}</p></div>`;
           }
         }
         progBox.innerHTML = html;
@@ -1306,6 +1371,7 @@
       if (cls && $('#m-saves') && !$('#m-saves').value) $('#m-saves').value = cls.saves;
       refreshAttacks(true);
     }
+
     function refreshProf() {
       const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
       if (profInp && window.PHB_PROF_BY_LEVEL) {
@@ -1314,17 +1380,7 @@
       refreshAttacks(true);
       if (classSel?.value === 'Moon Guardian') applyMoonPathToFeatures();
     }
-    function refreshRaceTraits() {
-      const rname = raceSel ? raceSel.value : '';
-      const race = getPhbRaces().find(r => r.name === rname);
-      if (!race || !features) return;
-      if (race.world && worldSel && !worldSel.value) worldSel.value = race.world;
-      if (!race.traits || !race.traits.length) return;
-      const marker = `— ${race.name} Traits —`;
-      if (features.value.includes(marker)) return;
-      const traits = race.traits.map(t => `${t.name}: ${t.text}`).join('\n');
-      features.value = (features.value ? features.value + '\n\n' : '') + marker + '\n' + traits;
-    }
+
     classSel?.addEventListener('change', refreshClassUI);
     levelInp?.addEventListener('change', refreshProf);
     levelInp?.addEventListener('input', refreshProf);
@@ -1513,15 +1569,9 @@
           const stage = $('#m-umb-stage')?.value || 'awakened';
           const shard = $('#m-umb-shard')?.value || 'Unknown Shard';
           const ab = $('#m-umb-ability')?.value || 'WIS';
-          const marker = '— Umbrarian Template —';
-          // remove previous template block if re-applying
-          if (features.value.includes(marker)) {
-            features.value = features.value.split(marker)[0].trim();
-          }
           const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
           const u = window.UMBRARIANS || {};
           const lines = [
-            marker,
             `Stage: ${stageLabel}`,
             `Shard: ${shard}`,
             `Shard Ability: ${ab} (DC = 8 + PB + ${ab} mod; attack = PB + ${ab} mod)`,
@@ -1542,11 +1592,12 @@
           if (shardInfo) {
             lines.push(`Shard theme (${shardInfo.name}): ${shardInfo.theme}. Common awakening: ${shardInfo.awakens}`);
           }
-          features.value = (features.value ? features.value + '\n\n' : '') + lines.join('\n');
+          features.value = setFeatureSection(features.value, FEATURE_SECTION.umbrarian, lines);
         }
         function syncUmbUI() {
           if (umbFields) umbFields.classList.toggle('hidden', !umbCb?.checked);
           if (umbCb?.checked) applyUmbrarianTemplate();
+          else if (features) features.value = setFeatureSection(features.value, FEATURE_SECTION.umbrarian, null);
         }
         umbCb?.addEventListener('change', syncUmbUI);
         $('#m-umb-stage')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });

@@ -1361,6 +1361,35 @@ window.CLASS_ABILITIES = {
 };
 
 window.MOON_PATHS = [
+{
+  "id": "luna",
+  "name": "Path of Luna",
+  "world": "Luna",
+  "summary": "The rarest path: channel Luna without resonance to a single world. Requires Game Master approval; carries religious and narrative significance.",
+  "features": [
+    {
+      "lvl": 3,
+      "name": "Lunar Infusion",
+      "text": "When you hit with a melee weapon attack, expend one Moon Guardian spell slot to deal 2d8 extra Radiant or Necrotic damage (your choice), plus 1d8 per slot level above 1st (max 5d8). Cannot combine with Lunar Edge on the same hit. You can change your Lunar Aspect whenever you finish a Short Rest."
+    },
+    {
+      "lvl": 7,
+      "name": "Moonlit Veil",
+      "text": "Bonus Action: spend 2 Lunar Charges to cloak yourself in shifting moonlight for 1 minute. Opportunity Attacks against you have Disadvantage, and the first attack roll against you each round has Disadvantage. Ends early if you are Incapacitated."
+    },
+    {
+      "lvl": 11,
+      "name": "Lunar Empowerment",
+      "text": "When you cast a Moon Guardian spell that restores Hit Points or deals Radiant or Necrotic damage, spend 1 Lunar Charge to reroll a number of that spell’s healing or damage dice up to your Wisdom modifier (use the new rolls)."
+    },
+    {
+      "lvl": 15,
+      "name": "Lunar Radiance",
+      "text": "While Celestial Form is active, you and chosen allies within 30 feet have Advantage on saving throws against spells and magical effects. Once on each of their turns, when such a creature hits with a weapon attack, the attack deals an extra 1d8 Radiant damage."
+    }
+  ]
+},
+
   {
     "id": "luminaris",
     "name": "Path of Luminaris",
