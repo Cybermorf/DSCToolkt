@@ -619,6 +619,746 @@ window.PHB_RACES = [
   }
 ];
 
+
+window.CLASS_ABILITIES = {
+  "Barbarian": [
+    {
+      "lvl": 1,
+      "name": "Rage",
+      "text": "Bonus Action to enter Rage (PB/Long Rest at early levels; see progression). While raging: advantage on STR checks/saves, bonus melee damage, resistance to bludgeoning/piercing/slashing. Ends early if you don’t attack or take damage."
+    },
+    {
+      "lvl": 1,
+      "name": "Unarmored Defense",
+      "text": "While not wearing armor, AC = 10 + DEX mod + CON mod."
+    },
+    {
+      "lvl": 2,
+      "name": "Reckless Attack",
+      "text": "On your turn, gain advantage on melee weapon attacks using STR; attack rolls against you have advantage until your next turn."
+    },
+    {
+      "lvl": 2,
+      "name": "Danger Sense",
+      "text": "Advantage on DEX saves against effects you can see (not blinded, deafened, or incapacitated)."
+    },
+    {
+      "lvl": 3,
+      "name": "Primal Path",
+      "text": "Choose a subclass (e.g. Berserker, Totem). Gain path features at the levels listed in that path."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice when you take the Attack action."
+    },
+    {
+      "lvl": 5,
+      "name": "Fast Movement",
+      "text": "+10 ft. speed while not wearing heavy armor."
+    },
+    {
+      "lvl": 7,
+      "name": "Feral Instinct",
+      "text": "Advantage on initiative; if surprised and not incapacitated, you can act normally on your first turn if you enter Rage first."
+    },
+    {
+      "lvl": 9,
+      "name": "Brutal Critical",
+      "text": "Extra weapon damage die on melee critical hits (increases at higher levels)."
+    },
+    {
+      "lvl": 11,
+      "name": "Relentless Rage",
+      "text": "If you drop to 0 HP while raging, you can make a DC 10 CON save to drop to 1 HP instead (DC rises by 5 each use until rest)."
+    },
+    {
+      "lvl": 15,
+      "name": "Persistent Rage",
+      "text": "Rage only ends early if you fall unconscious or choose to end it."
+    },
+    {
+      "lvl": 18,
+      "name": "Indomitable Might",
+      "text": "If your total for a STR check is less than your STR score, you can use your STR score instead."
+    },
+    {
+      "lvl": 20,
+      "name": "Primal Champion",
+      "text": "+4 STR and CON (max 24)."
+    }
+  ],
+  "Bard": [
+    {
+      "lvl": 1,
+      "name": "Spellcasting",
+      "text": "CHA spellcasting. Ritual casting. Spell save DC = 8 + PB + CHA mod. Spell attack = PB + CHA mod."
+    },
+    {
+      "lvl": 1,
+      "name": "Bardic Inspiration",
+      "text": "Bonus Action: give a creature a Bardic Inspiration die (d6, improves with level) usable within 10 minutes on an ability check, attack, or save. Uses = CHA mod (min 1) per Long Rest (Font of Inspiration at 5th improves recovery)."
+    },
+    {
+      "lvl": 2,
+      "name": "Jack of All Trades",
+      "text": "Add half PB (round down) to ability checks that don’t already include PB."
+    },
+    {
+      "lvl": 2,
+      "name": "Song of Rest",
+      "text": "Allies who regain HP at the end of a short rest regain extra HP equal to your Song die."
+    },
+    {
+      "lvl": 3,
+      "name": "Bard College",
+      "text": "Choose a subclass. Expertise: double PB on two skill proficiencies."
+    },
+    {
+      "lvl": 5,
+      "name": "Font of Inspiration",
+      "text": "Regain all Bardic Inspiration uses when you finish a short or long rest."
+    },
+    {
+      "lvl": 6,
+      "name": "Countercharm",
+      "text": "Action: performance that gives you and allies within 30 ft. advantage on saves against being frightened or charmed until your next turn."
+    },
+    {
+      "lvl": 10,
+      "name": "Magical Secrets",
+      "text": "Learn spells from any class list (see progression for counts)."
+    },
+    {
+      "lvl": 20,
+      "name": "Superior Inspiration",
+      "text": "When you roll initiative with no Inspiration uses left, regain one."
+    }
+  ],
+  "Cleric": [
+    {
+      "lvl": 1,
+      "name": "Spellcasting",
+      "text": "WIS spellcasting. Prepare spells from the cleric list. Spell save DC = 8 + PB + WIS mod."
+    },
+    {
+      "lvl": 1,
+      "name": "Divine Domain",
+      "text": "Choose a domain. Domain spells are always prepared and don’t count against prepared total."
+    },
+    {
+      "lvl": 2,
+      "name": "Channel Divinity",
+      "text": "1/rest (more at higher levels). Includes Turn Undead and domain options."
+    },
+    {
+      "lvl": 5,
+      "name": "Destroy Undead",
+      "text": "When an undead fails its save against Turn Undead, it is destroyed if its CR is low enough (threshold rises with level)."
+    },
+    {
+      "lvl": 10,
+      "name": "Divine Intervention",
+      "text": "Action: beseech your deity; roll d100 ≤ level for success (automatic at 20th). 7 days between successful uses."
+    }
+  ],
+  "Druid": [
+    {
+      "lvl": 1,
+      "name": "Druidic",
+      "text": "Know the secret language of druids."
+    },
+    {
+      "lvl": 1,
+      "name": "Spellcasting",
+      "text": "WIS spellcasting. Prepare from the druid list. Ritual casting."
+    },
+    {
+      "lvl": 2,
+      "name": "Wild Shape",
+      "text": "Bonus Action/Action (per rules edition) to assume a beast form. Uses per rest; CR and limitations improve with level and circle."
+    },
+    {
+      "lvl": 2,
+      "name": "Druid Circle",
+      "text": "Choose a circle (e.g. Land, Moon) for additional features and Wild Shape options."
+    },
+    {
+      "lvl": 18,
+      "name": "Timeless Body",
+      "text": "Age more slowly; can’t be aged magically."
+    },
+    {
+      "lvl": 18,
+      "name": "Beast Spells",
+      "text": "Cast many druid spells while in Wild Shape (no material components with a cost)."
+    },
+    {
+      "lvl": 20,
+      "name": "Archdruid",
+      "text": "Unlimited Wild Shape (with limits) and ignore verbal/somatic components for many spells."
+    }
+  ],
+  "Fighter": [
+    {
+      "lvl": 1,
+      "name": "Fighting Style",
+      "text": "Choose a Fighting Style (e.g. Archery, Defense, Dueling, Great Weapon Fighting, Protection, Two-Weapon Fighting)."
+    },
+    {
+      "lvl": 1,
+      "name": "Second Wind",
+      "text": "Bonus Action: regain 1d10 + fighter level HP. 1/Short or Long Rest."
+    },
+    {
+      "lvl": 2,
+      "name": "Action Surge",
+      "text": "On your turn, take one additional action. 1/Short or Long Rest (2 at 17th)."
+    },
+    {
+      "lvl": 3,
+      "name": "Martial Archetype",
+      "text": "Choose a subclass (Champion, Battle Master, Eldritch Knight, etc.)."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice with the Attack action (3 at 11th, 4 at 20th)."
+    },
+    {
+      "lvl": 9,
+      "name": "Indomitable",
+      "text": "Reroll a failed save; must use the new roll. Uses increase with level."
+    }
+  ],
+  "Monk": [
+    {
+      "lvl": 1,
+      "name": "Unarmored Defense",
+      "text": "While unarmored and not using a shield, AC = 10 + DEX mod + WIS mod."
+    },
+    {
+      "lvl": 1,
+      "name": "Martial Arts",
+      "text": "Unarmed/monk weapons can use DEX; unarmed die scales with level; Bonus Action unarmed strike after Attack action."
+    },
+    {
+      "lvl": 2,
+      "name": "Ki",
+      "text": "Ki points = monk level. Spend for Flurry of Blows, Patient Defense, Step of the Wind. Regain on Short or Long Rest."
+    },
+    {
+      "lvl": 2,
+      "name": "Unarmored Movement",
+      "text": "+10 ft. speed while unarmored (increases with level); later vertical/water movement."
+    },
+    {
+      "lvl": 3,
+      "name": "Monastic Tradition",
+      "text": "Choose a tradition. Deflect Missiles: reaction to reduce ranged weapon damage; possibly catch and throw."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice with the Attack action."
+    },
+    {
+      "lvl": 5,
+      "name": "Stunning Strike",
+      "text": "Spend 1 ki when you hit with a melee attack: CON save or stunned until the end of your next turn."
+    },
+    {
+      "lvl": 7,
+      "name": "Evasion",
+      "text": "DEX saves for half damage: success = no damage, failure = half."
+    },
+    {
+      "lvl": 14,
+      "name": "Diamond Soul",
+      "text": "Proficiency in all saves; spend 1 ki to reroll a failed save."
+    }
+  ],
+  "Paladin": [
+    {
+      "lvl": 1,
+      "name": "Divine Sense",
+      "text": "Action: know location of celestials, fiends, and undead within 60 ft. (not fully concealed). Uses = 1 + CHA mod per Long Rest."
+    },
+    {
+      "lvl": 1,
+      "name": "Lay on Hands",
+      "text": "Pool of HP equal to paladin level × 5. Action to heal or cure disease/poison (5 HP cost)."
+    },
+    {
+      "lvl": 2,
+      "name": "Fighting Style",
+      "text": "Choose a Fighting Style."
+    },
+    {
+      "lvl": 2,
+      "name": "Spellcasting",
+      "text": "CHA half-caster. Prepare from the paladin list."
+    },
+    {
+      "lvl": 2,
+      "name": "Divine Smite",
+      "text": "When you hit with a melee weapon attack, expend a spell slot for +2d8 radiant (+1d8 per slot level above 1st; extra vs undead/fiends)."
+    },
+    {
+      "lvl": 3,
+      "name": "Sacred Oath",
+      "text": "Choose an oath. Divine Health: immunity to disease."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice with the Attack action."
+    },
+    {
+      "lvl": 6,
+      "name": "Aura of Protection",
+      "text": "You and friendly creatures within 10 ft. (30 ft. at 18th) add your CHA mod to saving throws."
+    },
+    {
+      "lvl": 11,
+      "name": "Improved Divine Smite",
+      "text": "+1d8 radiant on all melee weapon hits."
+    }
+  ],
+  "Ranger": [
+    {
+      "lvl": 1,
+      "name": "Favored Enemy / Favored Foe",
+      "text": "Bonuses when hunting chosen enemy types or marked foes (per rules used at your table)."
+    },
+    {
+      "lvl": 1,
+      "name": "Natural Explorer / Deft Explorer",
+      "text": "Expertise and travel benefits in favored terrain or general exploration features."
+    },
+    {
+      "lvl": 2,
+      "name": "Fighting Style",
+      "text": "Choose a Fighting Style."
+    },
+    {
+      "lvl": 2,
+      "name": "Spellcasting",
+      "text": "WIS half-caster. Known spells from the ranger list."
+    },
+    {
+      "lvl": 3,
+      "name": "Ranger Archetype",
+      "text": "Choose a subclass (Hunter, Beast Master, Gloom Stalker, etc.)."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice with the Attack action."
+    },
+    {
+      "lvl": 8,
+      "name": "Land’s Stride",
+      "text": "Move through nonmagical difficult terrain without extra cost; advantage vs plants that impede."
+    },
+    {
+      "lvl": 14,
+      "name": "Vanish",
+      "text": "Hide as a Bonus Action; can’t be tracked by nonmagical means unless you choose."
+    },
+    {
+      "lvl": 20,
+      "name": "Foe Slayer",
+      "text": "Add WIS mod to attack or damage vs favored/marked foe once per turn."
+    }
+  ],
+  "Rogue": [
+    {
+      "lvl": 1,
+      "name": "Expertise",
+      "text": "Double PB on two skill (or thieves’ tools) proficiencies; two more at 6th."
+    },
+    {
+      "lvl": 1,
+      "name": "Sneak Attack",
+      "text": "Once per turn, extra damage with finesse/ranged weapon if you have advantage, or an ally is within 5 ft. of the target and you don’t have disadvantage. Dice scale with level."
+    },
+    {
+      "lvl": 1,
+      "name": "Thieves’ Cant",
+      "text": "Secret mix of dialect, jargon, and codes."
+    },
+    {
+      "lvl": 2,
+      "name": "Cunning Action",
+      "text": "Bonus Action: Dash, Disengage, or Hide."
+    },
+    {
+      "lvl": 3,
+      "name": "Roguish Archetype",
+      "text": "Choose a subclass (Thief, Assassin, Arcane Trickster, etc.)."
+    },
+    {
+      "lvl": 5,
+      "name": "Uncanny Dodge",
+      "text": "Reaction: when hit by an attacker you can see, halve the attack’s damage."
+    },
+    {
+      "lvl": 7,
+      "name": "Evasion",
+      "text": "DEX saves for half: success = 0, failure = half."
+    },
+    {
+      "lvl": 11,
+      "name": "Reliable Talent",
+      "text": "Ability checks that use PB treat d20 rolls of 9 or lower as 10."
+    },
+    {
+      "lvl": 20,
+      "name": "Stroke of Luck",
+      "text": "Turn a miss into a hit, or a failed ability check into a 20. 1/Short or Long Rest."
+    }
+  ],
+  "Sorcerer": [
+    {
+      "lvl": 1,
+      "name": "Spellcasting",
+      "text": "CHA full caster. Known spells. Spell save DC = 8 + PB + CHA mod."
+    },
+    {
+      "lvl": 1,
+      "name": "Sorcerous Origin",
+      "text": "Choose an origin (Draconic, Wild Magic, etc.) for features and sometimes spells."
+    },
+    {
+      "lvl": 2,
+      "name": "Font of Magic",
+      "text": "Sorcery points = sorcerer level. Convert points ↔ spell slots (see tables)."
+    },
+    {
+      "lvl": 3,
+      "name": "Metamagic",
+      "text": "Spend sorcery points to alter spells (Careful, Distant, Empowered, Extended, Heightened, Quickened, Subtle, Twinned, etc.). Learn more with level."
+    },
+    {
+      "lvl": 20,
+      "name": "Sorcerous Restoration",
+      "text": "Regain 4 expended sorcery points on a short rest (1/Long Rest)."
+    }
+  ],
+  "Warlock": [
+    {
+      "lvl": 1,
+      "name": "Otherworldly Patron",
+      "text": "Choose a patron. Gain expanded spell list and patron features."
+    },
+    {
+      "lvl": 1,
+      "name": "Pact Magic",
+      "text": "CHA caster with fewer slots that recover on short rest; slots are all of one level (scale with warlock level)."
+    },
+    {
+      "lvl": 2,
+      "name": "Eldritch Invocations",
+      "text": "Choose invocations (e.g. Agonizing Blast, Armor of Shadows, Devil’s Sight). Gain more with level."
+    },
+    {
+      "lvl": 3,
+      "name": "Pact Boon",
+      "text": "Pact of the Blade, Chain, Tome, or Talisman."
+    },
+    {
+      "lvl": 11,
+      "name": "Mystic Arcanum",
+      "text": "Cast a 6th-level (then 7th/8th/9th) warlock spell once per Long Rest without a slot."
+    },
+    {
+      "lvl": 20,
+      "name": "Eldritch Master",
+      "text": "Spend 1 minute to regain all expended Pact Magic slots. 1/Long Rest."
+    }
+  ],
+  "Wizard": [
+    {
+      "lvl": 1,
+      "name": "Spellcasting",
+      "text": "INT full caster. Spellbook. Prepare INT mod + wizard level spells. Ritual casting from book."
+    },
+    {
+      "lvl": 1,
+      "name": "Arcane Recovery",
+      "text": "Once per day after a short rest, recover expended spell slots with combined level ≤ half wizard level (rounded up), none of 6th or higher."
+    },
+    {
+      "lvl": 2,
+      "name": "Arcane Tradition",
+      "text": "Choose a school or tradition (including Celestial Omens in this setting)."
+    },
+    {
+      "lvl": 18,
+      "name": "Spell Mastery",
+      "text": "Choose a 1st-level and a 2nd-level spell from your book; cast them at will at their lowest level."
+    },
+    {
+      "lvl": 20,
+      "name": "Signature Spells",
+      "text": "Choose two 3rd-level spells; always prepared; cast each once at 3rd level without a slot per Short or Long Rest."
+    }
+  ],
+  "Moon Guardian": [
+    {
+      "lvl": 1,
+      "name": "Moon Channel",
+      "text": "Channel celestial energy through body and weapon; foundation for Lunar Charges and Infusions."
+    },
+    {
+      "lvl": 1,
+      "name": "Lunar Attunement",
+      "text": "After each Long Rest, attune to lunar resonance. Sets Lunar Charge pool and Moon Path readiness."
+    },
+    {
+      "lvl": 2,
+      "name": "Spellcasting",
+      "text": "WIS half-caster. Spell save DC = 8 + PB + WIS mod. Prepares Moon Guardian spells; Path spells don’t count against prepared number."
+    },
+    {
+      "lvl": 2,
+      "name": "Lunar Charges",
+      "text": "Unique resource. Spend to power Moonlight Infusions and certain features. Regain on Long Rest (and via Lunar Recovery)."
+    },
+    {
+      "lvl": 2,
+      "name": "Moonlight Infusion",
+      "text": "Spend Lunar Charges to weave moonlight into attacks, defenses, or movement (Full/Waning/New Moon options—e.g. extra radiant damage, free movement without OA, Stealth advantage in dim light)."
+    },
+    {
+      "lvl": 3,
+      "name": "Moon Path",
+      "text": "Choose a Path (Luminaris, Umbraria, Eternum, Solara, Aetheria, Harmonia, Celestia). Gain Path Spells and Path features at 3rd, 7th, 11th, 15th."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice when you take the Attack action."
+    },
+    {
+      "lvl": 6,
+      "name": "Lunar Resilience",
+      "text": "Your bond with Luna hardens mind and spirit (advantage or resistance vs relevant effects—see PHB)."
+    },
+    {
+      "lvl": 7,
+      "name": "Lunar Recovery",
+      "text": "Once per Long Rest when you finish a Short Rest, recover some Lunar Charges."
+    },
+    {
+      "lvl": 9,
+      "name": "Celestial Form",
+      "text": "Bonus Action: manifest a Celestial Form fueled by Lunar Charges. Form features depend on Moon Path (flight, auras, damage types)."
+    },
+    {
+      "lvl": 13,
+      "name": "Lunar Empowerment",
+      "text": "When you activate Celestial Form, gain enhanced benefits."
+    },
+    {
+      "lvl": 17,
+      "name": "Lunar Mastery",
+      "text": "Improved Lunar Charge recovery and Form duration/power."
+    },
+    {
+      "lvl": 18,
+      "name": "Infusion Mastery",
+      "text": "Once on each of your turns, enhance an Infusion without spending an extra charge (per PHB)."
+    },
+    {
+      "lvl": 20,
+      "name": "Moon Guardian’s Resurgence",
+      "text": "Once per Long Rest, recover Lunar Charges and reassert Celestial Form under dire conditions."
+    },
+    {
+      "lvl": 3,
+      "name": "Path Feature (examples)",
+      "text": "Luminaris: Radiant Conduit / Radiant Burst / Luminous Form / Radiant Ascendance. Umbraria: Shadow Veil / Shadow Step / Umbral Form / Shadow Mastery. Other worlds grant conflict, solar, storm, harmony, or celestial path features."
+    }
+  ],
+  "Bloodhunter": [
+    {
+      "lvl": 1,
+      "name": "Hunter’s Bane",
+      "text": "Training against monstrosities and the unnatural; skill and lore benefits vs marked quarry (per PHB)."
+    },
+    {
+      "lvl": 1,
+      "name": "Blood Maledict",
+      "text": "Curse a creature using your own vitality. Amplify by taking damage (Blood Die). Save DC uses CON or key bloodhunter ability."
+    },
+    {
+      "lvl": 1,
+      "name": "Blood Rite",
+      "text": "Bonus Action: expend one Blood Die to empower a weapon for 1 minute. Once per turn on a hit, deal extra necrotic or radiant damage equal to one Blood Die. Ends if Incapacitated or you rite another weapon."
+    },
+    {
+      "lvl": 2,
+      "name": "Fighting Style",
+      "text": "Choose a Fighting Style."
+    },
+    {
+      "lvl": 3,
+      "name": "Bloodhunter Path",
+      "text": "Choose Order, Vitality, or Ruin (or table’s paths). Path features at 3rd, 7th, 11th, 15th/18th, 20th."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice with the Attack action."
+    },
+    {
+      "lvl": 6,
+      "name": "Brand of Castigation",
+      "text": "Brand a creature you damage; track and punish the branded foe (damage/teleport denial per PHB)."
+    },
+    {
+      "lvl": 10,
+      "name": "Dark Augmentation",
+      "text": "Bonus to speed, saves, or self-control as hemomancy hardens body and will."
+    },
+    {
+      "lvl": 14,
+      "name": "Hardened Soul",
+      "text": "Advantage or immunity vs common mental controls (charmed/frightened) as path defines."
+    },
+    {
+      "lvl": 20,
+      "name": "Crimson Apotheosis / Path Capstone",
+      "text": "Path-defining transformation (e.g. Ruin Incarnate maximizes Blood Rite dice vs bloodied foes)."
+    }
+  ],
+  "Ghostblade": [
+    {
+      "lvl": 1,
+      "name": "Spectral Armament",
+      "text": "Manifest spectral weapons (finesse melee). Count as magical for resistance/immunity. May shift between forms per PHB."
+    },
+    {
+      "lvl": 1,
+      "name": "Ethereal Sense",
+      "text": "Sense undead, spectral, or ethereal presence within a short range; advantage on related checks."
+    },
+    {
+      "lvl": 2,
+      "name": "Spirit Step",
+      "text": "Briefly phase through space or lightly ethereal movement (distance and uses per PHB/PB)."
+    },
+    {
+      "lvl": 3,
+      "name": "Ghostblade Discipline",
+      "text": "Choose a discipline. Gain discipline features at 3rd, 6th, 11th, 17th."
+    },
+    {
+      "lvl": 5,
+      "name": "Extra Attack",
+      "text": "Attack twice with the Attack action."
+    },
+    {
+      "lvl": 6,
+      "name": "Phase Strike",
+      "text": "Attacks ignore cover or phase through armor (partial force/psychic component per PHB)."
+    },
+    {
+      "lvl": 9,
+      "name": "Spirit Ward",
+      "text": "Reaction or aura that reduces necrotic/psychic damage for you or an ally."
+    },
+    {
+      "lvl": 14,
+      "name": "Ghostwalk",
+      "text": "Limited ethereal jaunt or insubstantial movement for a turn."
+    },
+    {
+      "lvl": 20,
+      "name": "Spectral Mastery",
+      "text": "Peak control of spectral armaments and ethereal movement."
+    }
+  ],
+  "Shadowblade": [
+    {
+      "lvl": 1,
+      "name": "Expertise",
+      "text": "Double PB on two skill or tool proficiencies (more at 6th)."
+    },
+    {
+      "lvl": 1,
+      "name": "Sneak Attack",
+      "text": "Once per turn, extra damage with finesse/ranged weapon if you have advantage, or an ally is within 5 ft. of the target and you don’t have disadvantage. Dice scale on the Shadowblade table."
+    },
+    {
+      "lvl": 1,
+      "name": "Umbral Veil",
+      "text": "Living-shadow techniques of concealment and misdirection (foundation for Shadow Points features)."
+    },
+    {
+      "lvl": 2,
+      "name": "Cunning Action",
+      "text": "Bonus Action: Dash, Disengage, or Hide."
+    },
+    {
+      "lvl": 2,
+      "name": "Shadow Points",
+      "text": "Unique resource for Shadow Arts. Regain on Long Rest; when you roll Initiative at 0 points, regain 2."
+    },
+    {
+      "lvl": 3,
+      "name": "Shadow Tradition / Discipline",
+      "text": "Choose e.g. Shadow Assassin or other disciplines. Assassinate (3rd): advantage vs creatures that haven’t acted; extra PB damage on Sneak Attack vs them."
+    },
+    {
+      "lvl": 5,
+      "name": "Uncanny Dodge",
+      "text": "Reaction: halve damage from an attack you can see."
+    },
+    {
+      "lvl": 6,
+      "name": "Shadow Blend (Discipline)",
+      "text": "When you Hide in Dim Light or Darkness, spend 1 Shadow Point to become Invisible until the start of your next turn (ends early if you attack, deal damage, or force a save)."
+    },
+    {
+      "lvl": 7,
+      "name": "Evasion",
+      "text": "DEX saves for half: success = 0, failure = half."
+    },
+    {
+      "lvl": 9,
+      "name": "Shadow Step (Class)",
+      "text": "Teleport through shadow (Shadow Point cost; dim/dark requirements per PHB)."
+    },
+    {
+      "lvl": 11,
+      "name": "Reliable Talent",
+      "text": "PB checks treat d20 rolls of 9 or lower as 10."
+    },
+    {
+      "lvl": 13,
+      "name": "Deathmark / Veil of Doubt",
+      "text": "Discipline features: mark for ally advantage, or spend Shadow Points to frighten via Veil of Doubt."
+    },
+    {
+      "lvl": 14,
+      "name": "Shadow Form",
+      "text": "Limited transformation into living shadow for defense and movement."
+    },
+    {
+      "lvl": 17,
+      "name": "Perfect Impostor",
+      "text": "Cast Mislead 1/Long Rest; hide after certain failed enemy saves."
+    },
+    {
+      "lvl": 20,
+      "name": "Living Night",
+      "text": "Capstone control of Shadow Points and umbral strikes."
+    }
+  ]
+};
 window.UMBRARIANS = {
   "name": "Umbrarians",
   "subtitle": "Hosts of the Dark Shards",
@@ -755,6 +1495,38 @@ window.UMBRARIANS = {
   "npcGuidance": "Begin with an existing stat block and add only what the scene needs. Give the Shard a goal and the host a goal—they may overlap without being identical. An Ascendant Umbrarian should be a story problem as much as a combat encounter.",
   "pcGuidance": "Player-character Umbrarians require Game Master approval and experienced players prepared for shared narrative responsibility. Power is never free: every Gift and Bargain should cost something the table can feel. Corruption never falls from a routine rest—only costly resistance, restoration, or story milestones.",
   "umbrariaContext": "Umbraria is the twilight world of Ashbringer (privacy, shelter, chosen revelation). Its dominant people are Umbralites. Ghostblade and living-shadow traditions are cultural contributions of Umbraria—not the same as bearing a Dark Shard.",
+    "awakenedGiftsGeneric": [
+    {
+      "name": "Veil of the Mark",
+      "text": "Bonus Action: until the start of your next turn, you have advantage on Stealth checks and the mark is harder for untrained observers to notice (Corruption 3+ still imposes Stain penalties vs informed observers)."
+    },
+    {
+      "name": "Shard-Hardened Flesh",
+      "text": "Reaction when hit: reduce the damage by 1d8 + PB. 1/Long Rest (or overchannel via Dark Bargain)."
+    },
+    {
+      "name": "Whisper Lash",
+      "text": "Action: one creature within 30 ft. makes a Wisdom save vs Shard DC or takes 2d8 psychic damage and has disadvantage on its next attack before your next turn."
+    },
+    {
+      "name": "Borrow Resolve",
+      "text": "When you fail a save, spend this gift to add your Shard ability modifier to the result (after the roll). 1/Long Rest."
+    }
+  ],
+  "ascendantGiftsGeneric": [
+    {
+      "name": "Regional Shadow",
+      "text": "Your presence warps a wide area in a way that matches your Sword (false lights, ash-edged shelters, failing roads, etc.). Narrative + mechanical hazard defined with the GM."
+    },
+    {
+      "name": "Sword’s Demand",
+      "text": "Once per Long Rest, issue a supernatural Demand as an action (Shard DC). Failure means the target is compelled toward a concrete act for 1 minute or until damaged by you."
+    },
+    {
+      "name": "Apotheosis Spark",
+      "text": "For 1 minute, once per Long Rest, your Awakened Gifts do not expend their daily use (Dark Bargains still raise Corruption)."
+    }
+  ],
   "sources": "PHB Ch. 5 (Umbralites / Umbraria) · DMG Ch. 3 (Shards, Umbrarians & Corruption)"
 };
 

@@ -1054,20 +1054,35 @@
       </div>`;
   }
 
+  function getClassAbilities(className) {
+    const all = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
+    return all[className] || [];
+  }
+
   function progressionTableHtml(className) {
     const cls = findPhbClass(className);
-    if (!cls || !cls.progression) return '<p class="muted small">Select a class to view its progression table.</p>';
-    const rows = cls.progression.map(([lvl, feat]) =>
+    if (!cls) return '<p class="muted small">Select a class to view its progression and abilities.</p>';
+    const rows = (cls.progression || []).map(([lvl, feat]) =>
       `<tr><td>${lvl}</td><td>${escapeHtml(feat)}</td></tr>`).join('');
+    const abilities = getClassAbilities(className);
+    const abilityHtml = abilities.length ? `
+      <div class="class-abilities">
+        <div class="detail-label">Class Abilities</div>
+        <ul class="trait-list">
+          ${abilities.map(a => `<li><strong>L${a.lvl} — ${escapeHtml(a.name)}.</strong> ${escapeHtml(a.text)}</li>`).join('')}
+        </ul>
+      </div>` : '';
     return `
       <div class="class-summary">
-        <p><strong>${escapeHtml(cls.name)}</strong> — ${escapeHtml(cls.summary)}</p>
-        <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)} · Armor: ${escapeHtml(cls.armor)}</p>
+        <p><strong>${escapeHtml(cls.name)}</strong> — ${escapeHtml(cls.summary || '')}</p>
+        <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)} · Armor: ${escapeHtml(cls.armor || '')}${cls.weapons ? ' · Weapons: ' + escapeHtml(cls.weapons) : ''}</p>
+        ${cls.skills ? `<p class="muted small">Skills: choose ${cls.skillsChoose || '?'} from ${cls.skills === 'Any' ? 'any' : (Array.isArray(cls.skills) ? cls.skills.join(', ') : cls.skills)}</p>` : ''}
       </div>
       <table class="prog-table">
         <thead><tr><th>Level</th><th>Features</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>`;
+      </table>
+      ${abilityHtml}`;
   }
 
   function wireCharacterFormHelpers() {
@@ -1285,20 +1300,28 @@
             features.value = features.value.split(marker)[0].trim();
           }
           const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
+          const u = window.UMBRARIANS || {};
           const lines = [
             marker,
             `Stage: ${stageLabel}`,
             `Shard: ${shard}`,
-            `Shard Ability: ${ab} (DC = 8 + PB + ${ab} mod)`,
+            `Shard Ability: ${ab} (DC = 8 + PB + ${ab} mod; attack = PB + ${ab} mod)`,
             'Shard Mark: Identifying mark; visible through mundane disguises while using Awakened/Ascendant Gifts.',
-            'Resonant Sense (1/Long Rest): Action, 30 ft. — GM reveals Shard / echo / Sword influence / Guardian ward (not which).',
-            'Dark Bargain: After failing a d20 test (1/Long Rest), may reroll (must use new result); Corruption +1. At Corruption 3+ reroll has advantage.',
+            'Resonant Sense (1/Long Rest): Action, 30 ft. — GM reveals true Shard / echo / Sword influence / Guardian ward (not which). Blocked by Guardian/Ascendant wards.',
+            'Dark Bargain (1/Long Rest): After failing a d20 test, reroll (must use); Corruption +1. At Corruption 3+ reroll has advantage. At 5, GM may offer auto-success with severe complication.',
+            'Dominion (Corruption 4+): Shard may attach a Demand. Refuse: psychic damage = 2× level; no bargains until Long Rest. Never forces PC actions.',
           ];
           if (stage === 'awakened' || stage === 'ascendant') {
-            lines.push('Gifts: Choose Awakened Gift(s) from the Shard profile (DMG). Uses 1/Long Rest unless noted; overchannel via Dark Bargain.');
+            lines.push('Awakened Gifts: pick from Shard profile or generic list (1 on awakening; optional 2nd at major milestone). 1/Long Rest unless noted; overchannel via Dark Bargain.');
+            (u.awakenedGiftsGeneric || []).forEach(g => lines.push(`• ${g.name}: ${g.text}`));
           }
           if (stage === 'ascendant') {
-            lines.push('Ascendant: Choose one Ascendant Gift; expect regional story consequences.');
+            lines.push('Ascendant Gifts: choose one (2nd only in mythic games). Expect regional consequences.');
+            (u.ascendantGiftsGeneric || []).forEach(g => lines.push(`• ${g.name}: ${g.text}`));
+          }
+          const shardInfo = (u.shards || []).find(s => s.name === shard);
+          if (shardInfo) {
+            lines.push(`Shard theme (${shardInfo.name}): ${shardInfo.theme}. Common awakening: ${shardInfo.awakens}`);
           }
           features.value = (features.value ? features.value + '\n\n' : '') + lines.join('\n');
         }
@@ -2835,6 +2858,18 @@
             <tbody>${track}</tbody>
           </table>
           <p class="muted small">Corruption rises through bargains, rituals, surrender, catastrophic exposure, and certain gifts. It falls only through costly resistance, restoration, or story milestones—not routine rests.</p>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Example Awakened Gifts (generic)</div>
+          <ul class="trait-list">
+            ${(u.awakenedGiftsGeneric||[]).map(g => `<li><strong>${escapeHtml(g.name)}.</strong> ${escapeHtml(g.text)}</li>`).join('') || '<li class="muted">See Shard profiles in the DMG for full lists.</li>'}
+          </ul>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Example Ascendant Gifts (generic)</div>
+          <ul class="trait-list">
+            ${(u.ascendantGiftsGeneric||[]).map(g => `<li><strong>${escapeHtml(g.name)}.</strong> ${escapeHtml(g.text)}</li>`).join('') || ''}
+          </ul>
         </div>
         <div class="detail-block"><div class="detail-label">Dark Bargains</div><p class="detail-text">${escapeHtml(u.darkBargains)}</p></div>
         <div class="detail-block"><div class="detail-label">Shard Demands (Dominion+)</div><p class="detail-text">${escapeHtml(u.shardDemands)}</p></div>

@@ -1680,3 +1680,11 @@ label.small {
   color: #e8a0a0;
   border: 1px solid rgba(196, 92, 74, 0.4);
 }
+
+.class-abilities {
+  margin-top: 0.85rem;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 0.35rem;
+}
+.class-abilities .trait-list { font-size: 0.84rem; }
