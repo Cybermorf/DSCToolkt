@@ -1461,6 +1461,66 @@ label.small {
   .combat-actions { justify-content: flex-end; }
 }
 
+/* ─── Combat detail layout ──────────────────────────────────────────────── */
+.combat-layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(260px, 340px);
+  gap: 1rem;
+  align-items: start;
+}
+.combat-main { min-width: 0; }
+.combat-detail {
+  position: sticky;
+  top: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  max-height: calc(100dvh - 8rem);
+  overflow-y: auto;
+}
+.combat-detail-empty {
+  font-size: 0.88rem;
+  padding: 1.5rem 0.25rem;
+  text-align: center;
+}
+.combat-detail h3 {
+  font-size: 1.1rem;
+  margin-bottom: 0.35rem;
+  color: var(--accent);
+}
+.combat-detail .detail-sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.combat-detail .detail-block {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.combat-detail .detail-block:last-child { border-bottom: none; margin-bottom: 0; }
+.combat-detail .detail-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+.combat-detail .detail-text {
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.combatant-row.selected {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 1px rgba(232, 168, 56, 0.35);
+}
+@media (max-width: 900px) {
+  .combat-layout { grid-template-columns: 1fr; }
+  .combat-detail { position: static; max-height: none; }
+}
+
 /* ─── Bestiary ──────────────────────────────────────────────────────────── */
 .bestiary-filters {
   display: flex;
@@ -1526,4 +1586,14 @@ label.small {
   gap: 0.35rem;
   margin-top: 0.35rem;
   flex-wrap: wrap;
+}
+.bestiary-card .bestiary-desc {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-top: 0.15rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }

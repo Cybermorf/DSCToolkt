@@ -11,123 +11,124 @@
   const STORAGE_KEY = 'darkSunChronicles_v1';
   const WORLDS = ['Luminaris', 'Umbraria', 'Eternum', 'Solara', 'Aetheria', 'Harmonia', 'Celestia'];
 
-  const BESTIARY = [
-    {n:'Breakerwing Manta',w:'Aetheria',o:'Wardenborn',cr:10,ac:19,hp:230},
-    {n:'Bridgeweaver',w:'Aetheria',o:'Natural',cr:2,ac:15,hp:52},
-    {n:'Cloudreef Grazer',w:'Aetheria',o:'Natural',cr:2,ac:14,hp:60},
-    {n:'Command Wasp Choir',w:'Aetheria',o:'Swordborn',cr:5,ac:16,hp:110},
-    {n:'Compass Eater',w:'Aetheria',o:'Sword-Touched',cr:6,ac:16,hp:120},
-    {n:'Crown Tempest',w:'Aetheria',o:'Swordborn',cr:17,ac:21,hp:340},
-    {n:'Driftwhale',w:'Aetheria',o:'Natural',cr:6,ac:16,hp:210},
-    {n:'Echo-Gale Hound',w:'Aetheria',o:'Sword-Touched',cr:4,ac:15,hp:85},
-    {n:'Forkbolt Mantis',w:'Aetheria',o:'Sword-Touched',cr:5,ac:17,hp:105},
-    {n:'Freewind Shrike',w:'Aetheria',o:'Wardenborn',cr:5,ac:17,hp:105},
-    {n:'Horizon Skipper',w:'Aetheria',o:'Sword-Touched',cr:7,ac:17,hp:136},
-    {n:'Seven-Sail Leviathan',w:'Aetheria',o:'Wardenborn',cr:17,ac:21,hp:345},
-    {n:'Stormchain Serpent',w:'Aetheria',o:'Swordborn',cr:10,ac:19,hp:225},
-    {n:'Stormglass Swift Flock',w:'Aetheria',o:'Natural',cr:3,ac:15,hp:55},
-    {n:'Thunderroot Colony',w:'Aetheria',o:'Sword-Touched',cr:9,ac:18,hp:168},
-    {n:'Updraft Ray',w:'Aetheria',o:'Natural',cr:4,ac:15,hp:138},
-    {n:'Zephyrfin Glider',w:'Aetheria',o:'Natural',cr:1,ac:14,hp:27},
-    {n:'Aurora Grazer',w:'Celestia',o:'Natural',cr:5,ac:16,hp:110},
-    {n:'Borrowed Saint',w:'Celestia',o:'Swordborn',cr:8,ac:17,hp:157},
-    {n:'Causeway Strider',w:'Celestia',o:'Natural',cr:4,ac:15,hp:85},
-    {n:'Chain-Oath Hound',w:'Celestia',o:'Swordborn',cr:6,ac:16,hp:136},
-    {n:'Constellation Weaverbird Colony',w:'Celestia',o:'Natural',cr:3,ac:15,hp:68},
-    {n:'Covenant Ram',w:'Celestia',o:'Wardenborn',cr:6,ac:16,hp:136},
-    {n:'Free-Soul Phoenix',w:'Celestia',o:'Wardenborn',cr:17,ac:20,hp:310},
-    {n:'Gate-Mouth Seraph',w:'Celestia',o:'Swordborn',cr:11,ac:18,hp:210},
-    {n:'Luminous Garden Ray',w:'Celestia',o:'Natural',cr:2,ac:14,hp:51},
-    {n:'Memory Lantern Stag',w:'Celestia',o:'Wardenborn',cr:8,ac:17,hp:157},
-    {n:'Name-Eater Wisp',w:'Celestia',o:'Swordborn',cr:4,ac:15,hp:85},
-    {n:'Prismwing Nectar Moth Chorus',w:'Celestia',o:'Natural',cr:1,ac:13,hp:30},
-    {n:'Soul-Tithe Colossus',w:'Celestia',o:'Swordborn',cr:17,ac:20,hp:310},
-    {n:'Star-Iron Shellback',w:'Celestia',o:'Natural',cr:3,ac:15,hp:68},
-    {n:'Stardust Hare',w:'Celestia',o:'Natural',cr:1,ac:13,hp:30},
-    {n:'Threshold Gryphon',w:'Celestia',o:'Wardenborn',cr:11,ac:18,hp:210},
-    {n:'Truecall Nightjar',w:'Celestia',o:'Wardenborn',cr:4,ac:15,hp:85},
-    {n:'Voidwake Leviathan',w:'Celestia',o:'Natural',cr:9,ac:18,hp:178},
-    {n:'Bastion Shellback',w:'Eternum',o:'Wardenborn',cr:15,ac:21,hp:310},
-    {n:'Blightcoil',w:'Eternum',o:'Swordborn',cr:7,ac:16,hp:126},
-    {n:'Cairnwing Murder',w:'Eternum',o:'Natural',cr:1,ac:13,hp:36},
-    {n:'Feverbloom Hart',w:'Eternum',o:'Sword-Touched',cr:6,ac:15,hp:114},
-    {n:'Ironhide Burrow-Ox',w:'Eternum',o:'Natural',cr:3,ac:16,hp:76},
-    {n:'Pale Chirurgeon',w:'Eternum',o:'Swordborn',cr:8,ac:17,hp:136},
-    {n:'Ravine Strider',w:'Eternum',o:'Natural',cr:2,ac:13,hp:45},
-    {n:'Rot-Siege Behemoth',w:'Eternum',o:'Swordborn',cr:15,ac:19,hp:276},
-    {n:'Scarjackal Pack',w:'Eternum',o:'Sword-Touched',cr:4,ac:14,hp:93},
-    {n:'Stone-Eye Harrier',w:'Eternum',o:'Wardenborn',cr:7,ac:16,hp:123},
-    {n:'Verdict Mantis',w:'Eternum',o:'Wardenborn',cr:8,ac:18,hp:133},
-    {n:'Bellcrest Hawk',w:'Harmonia',o:'Wardenborn',cr:5,ac:16,hp:102},
-    {n:'Celestial Hornstag',w:'Harmonia',o:'Natural',cr:6,ac:16,hp:145},
-    {n:'Clearwater Lampshell Bed',w:'Harmonia',o:'Natural',cr:2,ac:15,hp:59},
-    {n:'Concord Titan',w:'Harmonia',o:'Swordborn',cr:17,ac:20,hp:310},
-    {n:'Consensus Leech Colony',w:'Harmonia',o:'Sword-Touched',cr:4,ac:15,hp:88},
-    {n:'Counterpattern Mantis',w:'Harmonia',o:'Wardenborn',cr:10,ac:18,hp:178},
-    {n:'Discord Bloom',w:'Harmonia',o:'Sword-Touched',cr:3,ac:14,hp:76},
-    {n:'False-Refrain Cicada Swarm',w:'Harmonia',o:'Sword-Touched',cr:5,ac:15,hp:104},
-    {n:'Hushcoil Serpent',w:'Harmonia',o:'Swordborn',cr:5,ac:16,hp:110},
-    {n:'Meadow Chimebee Chorus',w:'Harmonia',o:'Natural',cr:1,ac:13,hp:31},
-    {n:'Mirrorweb Weaver',w:'Harmonia',o:'Swordborn',cr:10,ac:18,hp:178},
-    {n:'Paradox Orchard',w:'Harmonia',o:'Sword-Touched',cr:9,ac:18,hp:207},
-    {n:'Ribbonback Grazer',w:'Harmonia',o:'Natural',cr:2,ac:14,hp:68},
-    {n:'Riverbraid Otter',w:'Harmonia',o:'Natural',cr:3,ac:14,hp:58},
-    {n:'Rootsong Badger',w:'Harmonia',o:'Natural',cr:3,ac:15,hp:67},
-    {n:'Splitpath Fox',w:'Harmonia',o:'Sword-Touched',cr:7,ac:17,hp:127},
-    {n:'Symmetry Crane Pair',w:'Harmonia',o:'Natural',cr:4,ac:15,hp:102},
-    {n:'Thousand-Voice Grove',w:'Harmonia',o:'Wardenborn',cr:17,ac:19,hp:297},
-    {n:'Bridgewing Crane',w:'Luminaris',o:'Wardenborn',cr:8,ac:18,hp:170},
-    {n:'Chimecrest Woodpecker',w:'Luminaris',o:'Natural',cr:0.5,ac:14,hp:18},
-    {n:'Crystal Griffon',w:'Luminaris',o:'Natural',cr:7,ac:16,hp:136},
-    {n:'Facetback Ibex',w:'Luminaris',o:'Natural',cr:2,ac:14,hp:59},
-    {n:'Lumenleaf Grazer Herd',w:'Luminaris',o:'Natural',cr:3,ac:14,hp:95},
-    {n:'Memorial Husk',w:'Luminaris',o:'Swordborn',cr:11,ac:19,hp:238},
-    {n:'Memory Garden Tortoise',w:'Luminaris',o:'Natural',cr:5,ac:18,hp:152},
-    {n:'Moonmirror Ray',w:'Luminaris',o:'Natural',cr:4,ac:15,hp:102},
-    {n:'Parallax Hawk',w:'Luminaris',o:'Wardenborn',cr:6,ac:17,hp:150},
-    {n:'Prismdew Firefly Chorus',w:'Luminaris',o:'Natural',cr:1,ac:13,hp:32},
-    {n:'Redaction Mite Swarm',w:'Luminaris',o:'Swordborn',cr:3,ac:15,hp:72},
-    {n:'Renewal Hart',w:'Luminaris',o:'Wardenborn',cr:11,ac:19,hp:232},
-    {n:'Serenyan Glassfin Whale',w:'Luminaris',o:'Natural',cr:9,ac:17,hp:230},
-    {n:'Sevenfold Beacon Leviathan',w:'Luminaris',o:'Wardenborn',cr:18,ac:21,hp:350},
-    {n:'Shadowglass Serpent',w:'Luminaris',o:'Swordborn',cr:6,ac:17,hp:152},
-    {n:'Solitude Weaver',w:'Luminaris',o:'Swordborn',cr:8,ac:17,hp:178},
-    {n:'Vanishing Archive Colossus',w:'Luminaris',o:'Swordborn',cr:18,ac:21,hp:360},
-    {n:'Witness Beetle Colony',w:'Luminaris',o:'Wardenborn',cr:3,ac:15,hp:76},
-    {n:'Afterglow Hart',w:'Solara',o:'Sword-Touched',cr:6,ac:15,hp:114},
-    {n:'Ancestor Moth',w:'Solara',o:'Swordborn',cr:9,ac:17,hp:153},
-    {n:'Aurelian Sunhorn',w:'Solara',o:'Natural',cr:2,ac:14,hp:52},
-    {n:'Dawnroot Tortoise',w:'Solara',o:'Natural',cr:3,ac:18,hp:95},
-    {n:'Dawnscythe Ibis',w:'Solara',o:'Wardenborn',cr:5,ac:16,hp:105},
-    {n:'Gilded Carrion Kite',w:'Solara',o:'Sword-Touched',cr:4,ac:14,hp:82},
-    {n:'Glassriver Seraphin',w:'Solara',o:'Natural',cr:5,ac:16,hp:110},
-    {n:'Gravegold Locust Host',w:'Solara',o:'Swordborn',cr:5,ac:15,hp:110},
-    {n:'Mourning Orchard',w:'Solara',o:'Sword-Touched',cr:9,ac:17,hp:168},
-    {n:'Prismwing Kite',w:'Solara',o:'Natural',cr:2,ac:15,hp:36},
-    {n:'Saffron-Mane Prowler',w:'Solara',o:'Natural',cr:4,ac:15,hp:102},
-    {n:'Solstice Crownwing',w:'Solara',o:'Wardenborn',cr:16,ac:20,hp:295},
-    {n:'Sun-Tomb Colossus',w:'Solara',o:'Swordborn',cr:16,ac:20,hp:310},
-    {n:'Sunblanched Jackal',w:'Solara',o:'Sword-Touched',cr:7,ac:15,hp:97},
-    {n:'Truthsong Shrike',w:'Solara',o:'Wardenborn',cr:9,ac:17,hp:145},
-    {n:'Black Hearth Leviathan',w:'Umbraria',o:'Wardenborn',cr:18,ac:22,hp:355},
-    {n:'Blackwater Veilwhale',w:'Umbraria',o:'Natural',cr:9,ac:17,hp:232},
-    {n:'Cinderborer Mole',w:'Umbraria',o:'Swordborn',cr:8,ac:18,hp:190},
-    {n:'Confession Ember Swarm',w:'Umbraria',o:'Swordborn',cr:3,ac:15,hp:78},
-    {n:'Duskfin Lake Skimmer',w:'Umbraria',o:'Natural',cr:2,ac:14,hp:58},
-    {n:'Echofur Cave Hare',w:'Umbraria',o:'Natural',cr:0.5,ac:14,hp:18},
-    {n:'Gloamcap Burrower',w:'Umbraria',o:'Natural',cr:2,ac:15,hp:68},
-    {n:'Gloamstone Badger',w:'Umbraria',o:'Wardenborn',cr:8,ac:19,hp:195},
-    {n:'Lanternjaw Eel',w:'Umbraria',o:'Natural',cr:4,ac:15,hp:110},
-    {n:'Merciless Dawn Colossus',w:'Umbraria',o:'Swordborn',cr:18,ac:21,hp:365},
-    {n:'Mistback Elk',w:'Umbraria',o:'Natural',cr:3,ac:15,hp:102},
-    {n:'Mourning-Cowl Heron',w:'Umbraria',o:'Wardenborn',cr:11,ac:19,hp:235},
-    {n:'Nocturne Lynx',w:'Umbraria',o:'Natural',cr:6,ac:16,hp:145},
-    {n:'Pyre-Truth Serpent',w:'Umbraria',o:'Swordborn',cr:11,ac:19,hp:240},
-    {n:'Quietcoal Beetle Colony',w:'Umbraria',o:'Wardenborn',cr:3,ac:16,hp:80},
-    {n:'Searchfire Hound',w:'Umbraria',o:'Swordborn',cr:6,ac:17,hp:150},
-    {n:'Veilwing Owl',w:'Umbraria',o:'Wardenborn',cr:6,ac:17,hp:148},
-    {n:'Whispercap Moth Chorus',w:'Umbraria',o:'Natural',cr:1,ac:13,hp:33},
+    const BESTIARY = [
+    {n:'Breakerwing Manta',w:'Aetheria',o:'Wardenborn',cr:10,ac:19,hp:230,d:'Wardenborn manta that breaks forced routes and frees the sky.'},
+    {n:'Bridgeweaver',w:'Aetheria',o:'Natural',cr:2,ac:15,hp:52,d:'Spider-climb weaver that spins routes between drifting islands.'},
+    {n:'Cloudreef Grazer',w:'Aetheria',o:'Natural',cr:2,ac:14,hp:60,d:'Gliding grazer of cloud-reef pastures above the archipelagos.'},
+    {n:'Command Wasp Choir',w:'Aetheria',o:'Swordborn',cr:5,ac:16,hp:110,d:'Swordborn choir that issues imperative commands to nearby minds.'},
+    {n:'Compass Eater',w:'Aetheria',o:'Sword-Touched',cr:6,ac:16,hp:120,d:'Aberration whose aura breaks teleportation and true direction.'},
+    {n:'Crown Tempest',w:'Aetheria',o:'Swordborn',cr:17,ac:21,hp:340,d:'Legendary elemental tempest of total command weather.'},
+    {n:'Driftwhale',w:'Aetheria',o:'Natural',cr:6,ac:16,hp:210,d:'Living habitat whale of the open sky-routes.'},
+    {n:'Echo-Gale Hound',w:'Aetheria',o:'Sword-Touched',cr:4,ac:15,hp:85,d:'Hound that senses commands and intercepts accidents before they strike.'},
+    {n:'Forkbolt Mantis',w:'Aetheria',o:'Sword-Touched',cr:5,ac:17,hp:105,d:'Mantis that adapts to lightning and forks its path mid-strike.'},
+    {n:'Freewind Shrike',w:'Aetheria',o:'Wardenborn',cr:5,ac:17,hp:105,d:'Wardenborn shrike that severs command chains without severing flight.'},
+    {n:'Horizon Skipper',w:'Aetheria',o:'Sword-Touched',cr:7,ac:17,hp:136,d:'Flyby skipper that arrives beside those who have never seen it.'},
+    {n:'Seven-Sail Leviathan',w:'Aetheria',o:'Wardenborn',cr:17,ac:21,hp:345,d:'Legendary leviathan that releases seven winds of freedom.'},
+    {n:'Stormchain Serpent',w:'Aetheria',o:'Swordborn',cr:10,ac:19,hp:225,d:'Swordborn serpent that chains storms into obedient cascades.'},
+    {n:'Stormglass Swift Flock',w:'Aetheria',o:'Natural',cr:3,ac:15,hp:55,d:'Swarm that diagrams lightning through its own body.'},
+    {n:'Thunderroot Colony',w:'Aetheria',o:'Sword-Touched',cr:9,ac:18,hp:168,d:'Island-network plant that stores storms as hit points.'},
+    {n:'Updraft Ray',w:'Aetheria',o:'Natural',cr:4,ac:15,hp:138,d:'Huge ray that supports flyers beneath its updraft.'},
+    {n:'Zephyrfin Glider',w:'Aetheria',o:'Natural',cr:1,ac:14,hp:27,d:'Air-swimmer glider that never falls when it stops beating its wings.'},
+    {n:'Aurora Grazer',w:'Celestia',o:'Natural',cr:5,ac:16,hp:110,d:'Atmospheric colossus that feeds on signals from beyond Eldoria.'},
+    {n:'Borrowed Saint',w:'Celestia',o:'Swordborn',cr:8,ac:17,hp:157,d:'Aberration that wears compassion until it can possess a willing host.'},
+    {n:'Causeway Strider',w:'Celestia',o:'Natural',cr:4,ac:15,hp:85,d:'Strider that detects portals and planar boundaries underfoot.'},
+    {n:'Chain-Oath Hound',w:'Celestia',o:'Swordborn',cr:6,ac:16,hp:136,d:'Fiend hound that enforces oaths that should have been free to end.'},
+    {n:'Constellation Weaverbird Colony',w:'Celestia',o:'Natural',cr:3,ac:15,hp:68,d:'Colony that writes forbidden names in nest-geometry.'},
+    {n:'Covenant Ram',w:'Celestia',o:'Wardenborn',cr:6,ac:16,hp:136,d:'Ram that guards covenants freely entered and freely left.'},
+    {n:'Free-Soul Phoenix',w:'Celestia',o:'Wardenborn',cr:17,ac:20,hp:310,d:'Legendary phoenix of unowned souls; cannot be possessed and rekindles once.'},
+    {n:'Gate-Mouth Seraph',w:'Celestia',o:'Swordborn',cr:11,ac:18,hp:210,d:'Seraph that opens gates by annexing identity on both sides.'},
+    {n:'Luminous Garden Ray',w:'Celestia',o:'Natural',cr:2,ac:14,hp:51,d:'Air-swimmer ray that gardens light on station hulls.'},
+    {n:'Memory Lantern Stag',w:'Celestia',o:'Wardenborn',cr:8,ac:17,hp:157,d:'Stag that decides which memories a community may restore.'},
+    {n:'Name-Eater Wisp',w:'Celestia',o:'Swordborn',cr:4,ac:15,hp:85,d:'Incorporeal wisp that trades one stolen relationship for another.'},
+    {n:'Prismwing Nectar Moth Chorus',w:'Celestia',o:'Natural',cr:1,ac:13,hp:30,d:'Nectar chorus that leaves prayer-trails after it passes.'},
+    {n:'Soul-Tithe Colossus',w:'Celestia',o:'Swordborn',cr:17,ac:20,hp:310,d:'Legendary colossus that tithes souls until speech becomes Primordial.'},
+    {n:'Star-Iron Shellback',w:'Celestia',o:'Natural',cr:3,ac:15,hp:68,d:'Layered carapace beast that turns critical hits into ordinary wounds.'},
+    {n:'Stardust Hare',w:'Celestia',o:'Natural',cr:1,ac:13,hp:30,d:'Hare that knows whether a surface is a true causeway.'},
+    {n:'Threshold Gryphon',w:'Celestia',o:'Wardenborn',cr:11,ac:18,hp:210,d:'Gryphon that holds sacred thresholds without sterile isolation.'},
+    {n:'Truecall Nightjar',w:'Celestia',o:'Wardenborn',cr:4,ac:15,hp:85,d:'Nightjar that restores true names before they are fully eaten.'},
+    {n:'Voidwake Leviathan',w:'Celestia',o:'Natural',cr:9,ac:18,hp:178,d:'Leviathan whose local envelope lets others breathe the void-edge.'},
+    {n:'Bastion Shellback',w:'Eternum',o:'Wardenborn',cr:15,ac:21,hp:310,d:'Legendary living fortress that raises walls and petrifying anchors.'},
+    {n:'Blightcoil',w:'Eternum',o:'Swordborn',cr:7,ac:16,hp:126,d:'Swordborn burrower that turns soil into adaptive corruption.'},
+    {n:'Cairnwing Murder',w:'Eternum',o:'Natural',cr:1,ac:13,hp:36,d:'Swarm of cairn birds that cache evidence of old wars.'},
+    {n:'Feverbloom Hart',w:'Eternum',o:'Sword-Touched',cr:6,ac:15,hp:114,d:'Hart whose medicinal wake sprouts healing doses — and may spread fever.'},
+    {n:'Ironhide Burrow-Ox',w:'Eternum',o:'Natural',cr:3,ac:16,hp:76,d:'Siege beast ox that doubles damage to structures while repairing ground.'},
+    {n:'Pale Chirurgeon',w:'Eternum',o:'Swordborn',cr:8,ac:17,hp:136,d:'Swordborn surgeon that grafts memories and targets the weakest first.'},
+    {n:'Ravine Strider',w:'Eternum',o:'Natural',cr:2,ac:13,hp:45,d:'Sure-footed strider of collapsed roads and post-ruin paths.'},
+    {n:'Rot-Siege Behemoth',w:'Eternum',o:'Swordborn',cr:15,ac:19,hp:276,d:'Legendary siege behemoth that spawns rotwork thralls from debris.'},
+    {n:'Scarjackal Pack',w:'Eternum',o:'Sword-Touched',cr:4,ac:14,hp:93,d:'Adaptive-scar pack that learns damage types mid-fight.'},
+    {n:'Stone-Eye Harrier',w:'Eternum',o:'Wardenborn',cr:7,ac:16,hp:123,d:'Wardenborn harrier that sees through stone and petrifies excess rot.'},
+    {n:'Verdict Mantis',w:'Eternum',o:'Wardenborn',cr:8,ac:18,hp:133,d:'Wardenborn mantis of network sense and resin interdiction.'},
+    {n:'Bellcrest Hawk',w:'Harmonia',o:'Wardenborn',cr:5,ac:16,hp:102,d:'Hawk that restores silenced voices to the harmonic record.'},
+    {n:'Celestial Hornstag',w:'Harmonia',o:'Natural',cr:6,ac:16,hp:145,d:'Mountain-stride stag of living horn and harmonic difference.'},
+    {n:'Clearwater Lampshell Bed',w:'Harmonia',o:'Natural',cr:2,ac:15,hp:59,d:'Colony bed that purifies water — and clamps shut when wounded.'},
+    {n:'Concord Titan',w:'Harmonia',o:'Swordborn',cr:17,ac:20,hp:310,d:'Legendary titan of enforced sameness across Harmonia.'},
+    {n:'Consensus Leech Colony',w:'Harmonia',o:'Sword-Touched',cr:4,ac:15,hp:88,d:'Swarm that drains dissent until only forced agreement remains.'},
+    {n:'Counterpattern Mantis',w:'Harmonia',o:'Wardenborn',cr:10,ac:18,hp:178,d:'Mantis that breaks forced conformity patterns mid-combat.'},
+    {n:'Discord Bloom',w:'Harmonia',o:'Sword-Touched',cr:3,ac:14,hp:76,d:'Plant of contradictory form; the first attack against it always errs.'},
+    {n:'False-Refrain Cicada Swarm',w:'Harmonia',o:'Sword-Touched',cr:5,ac:15,hp:104,d:'Swarm that repeats a community song until the original meaning is lost.'},
+    {n:'Hushcoil Serpent',w:'Harmonia',o:'Swordborn',cr:5,ac:16,hp:110,d:'Serpent that hunts those whose warnings are always dismissed.'},
+    {n:'Meadow Chimebee Chorus',w:'Harmonia',o:'Natural',cr:1,ac:13,hp:31,d:'Pollinator chorus whose dissonant veil disorders hostile senses.'},
+    {n:'Mirrorweb Weaver',w:'Harmonia',o:'Swordborn',cr:10,ac:18,hp:178,d:'Weaver that copies final movements of missing guardians into false webs.'},
+    {n:'Paradox Orchard',w:'Harmonia',o:'Sword-Touched',cr:9,ac:18,hp:207,d:'Distributed orchard that forces healing or harm each round.'},
+    {n:'Ribbonback Grazer',w:'Harmonia',o:'Natural',cr:2,ac:14,hp:68,d:'Herd-curve grazer of braided meadow routes.'},
+    {n:'Riverbraid Otter',w:'Harmonia',o:'Natural',cr:3,ac:14,hp:58,d:'Amphibious otter that braids four-hand cooperation on shared rivers.'},
+    {n:'Rootsong Badger',w:'Harmonia',o:'Natural',cr:3,ac:15,hp:67,d:'Earth-listener badger of nursery tunnels between communities.'},
+    {n:'Splitpath Fox',w:'Harmonia',o:'Sword-Touched',cr:7,ac:17,hp:127,d:'Fox of two true trails; cannot be tracked by a single story.'},
+    {n:'Symmetry Crane Pair',w:'Harmonia',o:'Natural',cr:4,ac:15,hp:102,d:'Paired body of two cranes that act as one mirrored creature.'},
+    {n:'Thousand-Voice Grove',w:'Harmonia',o:'Wardenborn',cr:17,ac:19,hp:297,d:'Legendary grove that hosts many true voices without collapsing them.'},
+    {n:'Bridgewing Crane',w:'Luminaris',o:'Wardenborn',cr:8,ac:18,hp:170,d:'Crane that reconnects exile routes and forced isolation.'},
+    {n:'Chimecrest Woodpecker',w:'Luminaris',o:'Natural',cr:0.5,ac:14,hp:18,d:'Resonant woodpecker that diagnoses crystal veins and answers them in a human voice.'},
+    {n:'Crystal Griffon',w:'Luminaris',o:'Natural',cr:7,ac:16,hp:136,d:'Keen-sighted griffon of crystal and resonance; apex predator of luminous peaks.'},
+    {n:'Facetback Ibex',w:'Luminaris',o:'Natural',cr:2,ac:14,hp:59,d:'Mountain ibex with crystal-facet hide; sure-footed on stone and ice.'},
+    {n:'Lumenleaf Grazer Herd',w:'Luminaris',o:'Natural',cr:3,ac:14,hp:95,d:'Huge herd body of grazers that cool radiant plants and move as one living archive of the meadows.'},
+    {n:'Memorial Husk',w:'Luminaris',o:'Swordborn',cr:11,ac:19,hp:238,d:'Construct husk that freezes preservation fields so none may heal or die nearby.'},
+    {n:'Memory Garden Tortoise',w:'Luminaris',o:'Natural',cr:5,ac:18,hp:152,d:'Living archive tortoise; its shell preserves seasons and grants allies temporary resilience.'},
+    {n:'Moonmirror Ray',w:'Luminaris',o:'Natural',cr:4,ac:15,hp:102,d:'Skyback ray that camouflages against reflective water and carries storm-memory between worlds.'},
+    {n:'Parallax Hawk',w:'Luminaris',o:'Wardenborn',cr:6,ac:17,hp:150,d:'Wardenborn hawk that refuses single-angle truth; flyby strikes from many perspectives.'},
+    {n:'Prismdew Firefly Chorus',w:'Luminaris',o:'Natural',cr:1,ac:13,hp:32,d:'Thumb-long beetles whose seven-color pulses only complete when neighbors answer. A living model of corroboration; confuses under uniform magical light.'},
+    {n:'Redaction Mite Swarm',w:'Luminaris',o:'Swordborn',cr:3,ac:15,hp:72,d:'Swordborn swarm that erases names, records, and reciprocal obligation.'},
+    {n:'Renewal Hart',w:'Luminaris',o:'Wardenborn',cr:11,ac:19,hp:232,d:'Hart of living succession; restores hit points and breaks petrification near it.'},
+    {n:'Serenyan Glassfin Whale',w:'Luminaris',o:'Natural',cr:9,ac:17,hp:230,d:'Gargantuan glassfin whale whose song heals allies and thunders through water and stone.'},
+    {n:'Sevenfold Beacon Leviathan',w:'Luminaris',o:'Wardenborn',cr:18,ac:21,hp:350,d:'Legendary leviathan of accountable illumination across sea and sky.'},
+    {n:'Shadowglass Serpent',w:'Luminaris',o:'Swordborn',cr:6,ac:17,hp:152,d:'Aberration with many plausible angles; attack rolls against it suffer uncertainty.'},
+    {n:'Solitude Weaver',w:'Luminaris',o:'Swordborn',cr:8,ac:17,hp:178,d:'Lawful evil weaver that isolates witnesses and feeds on unchallenged certainty.'},
+    {n:'Vanishing Archive Colossus',w:'Luminaris',o:'Swordborn',cr:18,ac:21,hp:360,d:'Legendary colossus that catalogs and contradicts evidence until truth cannot be shared.'},
+    {n:'Witness Beetle Colony',w:'Luminaris',o:'Wardenborn',cr:3,ac:15,hp:76,d:'Wardenborn swarm that restores corroboration and public testimony.'},
+    {n:'Afterglow Hart',w:'Solara',o:'Sword-Touched',cr:6,ac:15,hp:114,d:'Sunset vessel that sheds dim light of unfinished mourning.'},
+    {n:'Ancestor Moth',w:'Solara',o:'Swordborn',cr:9,ac:17,hp:153,d:'Swordborn moth of borrowed intimacy and living cocoons.'},
+    {n:'Aurelian Sunhorn',w:'Solara',o:'Natural',cr:2,ac:14,hp:52,d:'Daylight-reservoir sunhorn of Solarian herds.'},
+    {n:'Dawnroot Tortoise',w:'Solara',o:'Natural',cr:3,ac:18,hp:95,d:'Garden-shell tortoise that shelters allies behind living bark.'},
+    {n:'Dawnscythe Ibis',w:'Solara',o:'Wardenborn',cr:5,ac:16,hp:105,d:'Wardenborn ibis empowered in the first hour after sunrise.'},
+    {n:'Gilded Carrion Kite',w:'Solara',o:'Sword-Touched',cr:4,ac:14,hp:82,d:'Kite that borrows voices of the consumed dead.'},
+    {n:'Glassriver Seraphin',w:'Solara',o:'Natural',cr:5,ac:16,hp:110,d:'Glass-scaled amphibious seraphin of sacred rivers.'},
+    {n:'Gravegold Locust Host',w:'Solara',o:'Swordborn',cr:5,ac:15,hp:110,d:'Swordborn host that hollows food and memorial grain.'},
+    {n:'Mourning Orchard',w:'Solara',o:'Sword-Touched',cr:9,ac:17,hp:168,d:'Colony orchard rooted on graves; regrows from corpses within its reach.'},
+    {n:'Prismwing Kite',w:'Solara',o:'Natural',cr:2,ac:15,hp:36,d:'Flyby kite that refracts buried images in mountain light.'},
+    {n:'Saffron-Mane Prowler',w:'Solara',o:'Natural',cr:4,ac:15,hp:102,d:'Crop stalker that hides in light grain until sunrise forces the pounce.'},
+    {n:'Solstice Crownwing',w:'Solara',o:'Wardenborn',cr:16,ac:20,hp:295,d:'Legendary crownwing of living renewal across Solara.'},
+    {n:'Sun-Tomb Colossus',w:'Solara',o:'Swordborn',cr:16,ac:20,hp:310,d:'Legendary memorial colossus that spawns guardian echoes of the entombed.'},
+    {n:'Sunblanched Jackal',w:'Solara',o:'Sword-Touched',cr:7,ac:15,hp:97,d:'Jackal that regenerates in bright light unless struck by necrotic force.'},
+    {n:'Truthsong Shrike',w:'Solara',o:'Wardenborn',cr:9,ac:17,hp:145,d:'Wardenborn shrike that forces true testimony from ancestral magic.'},
+    {n:'Black Hearth Leviathan',w:'Umbraria',o:'Wardenborn',cr:18,ac:22,hp:355,d:'Legendary leviathan of the black hearth — privacy with accountability.'},
+    {n:'Blackwater Veilwhale',w:'Umbraria',o:'Natural',cr:9,ac:17,hp:232,d:'Gargantuan veilwhale whose bounded song hides allies and harms hostiles.'},
+    {n:'Cinderborer Mole',w:'Umbraria',o:'Swordborn',cr:8,ac:18,hp:190,d:'Siege burrower of interior heat that seals rescue and escape alike.'},
+    {n:'Confession Ember Swarm',w:'Umbraria',o:'Swordborn',cr:3,ac:15,hp:78,d:'Swordborn embers fed by unwilling secrets; burn testimony into the open.'},
+    {n:'Duskfin Lake Skimmer',w:'Umbraria',o:'Natural',cr:2,ac:14,hp:58,d:'Amphibious skimmer of dark lakes that leave heat without light.'},
+    {n:'Echofur Cave Hare',w:'Umbraria',o:'Natural',cr:0.5,ac:14,hp:18,d:'Hare of two silences; advantage when hiding truths or detecting them.'},
+    {n:'Gloamcap Burrower',w:'Umbraria',o:'Natural',cr:2,ac:15,hp:68,d:'Earth-gliding burrower of private tunnels under Umbraria.'},
+    {n:'Gloamstone Badger',w:'Umbraria',o:'Wardenborn',cr:8,ac:19,hp:195,d:'Badger that seals tunnels with weak-point walls only tools can open fairly.'},
+    {n:'Lanternjaw Eel',w:'Umbraria',o:'Natural',cr:4,ac:15,hp:110,d:'Deep eel whose lantern jaw reveals what should have burned.'},
+    {n:'Merciless Dawn Colossus',w:'Umbraria',o:'Swordborn',cr:18,ac:21,hp:365,d:'Legendary colossus of pitiless exposure across all Umbraria.'},
+    {n:'Mistback Elk',w:'Umbraria',o:'Natural',cr:3,ac:15,hp:102,d:'Elk cloaked in mist; lightly obscured in dim light along secret migration passes.'},
+    {n:'Mourning-Cowl Heron',w:'Umbraria',o:'Wardenborn',cr:11,ac:19,hp:235,d:'Heron that mourns without erasing the dead from communal memory.'},
+    {n:'Nocturne Lynx',w:'Umbraria',o:'Natural',cr:6,ac:16,hp:145,d:'Keen displacement predator of Umbrarian night routes.'},
+    {n:'Pyre-Truth Serpent',w:'Umbraria',o:'Swordborn',cr:11,ac:19,hp:240,d:'Serpent whose poison denies recovery and forces revelation by fire.'},
+    {n:'Quietcoal Beetle Colony',w:'Umbraria',o:'Wardenborn',cr:3,ac:16,hp:80,d:'Wardenborn colony that cools confession fire into accountable privacy.'},
+    {n:'Searchfire Hound',w:'Umbraria',o:'Swordborn',cr:6,ac:17,hp:150,d:'Hound that tracks refusal and hidden evidence without mercy.'},
+    {n:'Veilwing Owl',w:'Umbraria',o:'Wardenborn',cr:6,ac:17,hp:148,d:'Owl of flyby mercy that shelters legitimate secrets.'},
+    {n:'Whispercap Moth Chorus',w:'Umbraria',o:'Natural',cr:1,ac:13,hp:33,d:'Nocturnal moth chorus of chosen silence and secret signals.'},
   ];
+  // 115 creatures with descriptions
   // 115 principal creatures from Bestiary of the Seven Worlds
 
   // ─── Generators (setting-flavored) ───────────────────────────────────────
@@ -2115,6 +2116,59 @@
     };
   }
 
+  function lookupBestiary(name) {
+    if (!name) return null;
+    return BESTIARY.find(b => b.n.toLowerCase() === String(name).toLowerCase()) || null;
+  }
+
+  function showCombatDetail(cb) {
+    const panel = $('#combat-detail');
+    if (!panel) return;
+    if (!cb) {
+      panel.innerHTML = '<div class="combat-detail-empty muted">Select a combatant to view details, traits, and description.</div>';
+      return;
+    }
+    const best = lookupBestiary(cb.bestiaryName || cb.name);
+    const hpPct = cb.hpMax > 0 ? cb.hp / cb.hpMax : 1;
+    let status = 'Healthy';
+    if (cb.hp <= 0) status = 'Defeated';
+    else if (hpPct <= 0.25) status = 'Critical';
+    else if (hpPct <= 0.5) status = 'Bloodied';
+
+    let html = `
+      <h3>${escapeHtml(cb.name)}</h3>
+      <div class="detail-sub">${escapeHtml(cb.side || 'neutral')} · Init ${cb.init} · ${status}</div>
+      <div class="detail-block">
+        <div class="detail-label">Combat Stats</div>
+        <div class="bestiary-stats">
+          <span class="stat-chip">AC ${cb.ac}</span>
+          <span class="stat-chip">HP ${cb.hp}/${cb.hpMax}</span>
+          <span class="stat-chip">Init ${cb.init}</span>
+        </div>
+      </div>`;
+    if (cb.conditions) {
+      html += `<div class="detail-block"><div class="detail-label">Conditions</div><div class="detail-text">${escapeHtml(cb.conditions)}</div></div>`;
+    }
+    if (cb.notes) {
+      html += `<div class="detail-block"><div class="detail-label">Notes / Attacks</div><div class="detail-text">${escapeHtml(cb.notes)}</div></div>`;
+    }
+    if (best) {
+      html += `
+        <div class="detail-block">
+          <div class="detail-label">Bestiary</div>
+          <div class="detail-text">
+            <span class="origin-tag ${originClass(best.o)}">${escapeHtml(best.o)}</span>
+            · ${escapeHtml(best.w)} · CR ${best.cr}
+          </div>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Description</div>
+          <div class="detail-text">${escapeHtml(best.d || '')}</div>
+        </div>`;
+    }
+    panel.innerHTML = html;
+  }
+
   function renderCombat() {
     const c = getActive();
     if (!c) return setView('campaigns');
@@ -2125,9 +2179,12 @@
 
     $('#combat-round').textContent = combat.round;
 
+    if (combat.selectedIndex == null) combat.selectedIndex = combat.turnIndex || 0;
+
     if (combat.combatants.length === 0) {
       empty.classList.remove('hidden');
       $('#combat-turn-label').textContent = '—';
+      showCombatDetail(null);
       return;
     }
     empty.classList.add('hidden');
@@ -2135,6 +2192,7 @@
     // Clamp turn index
     if (combat.turnIndex >= combat.combatants.length) combat.turnIndex = 0;
     if (combat.turnIndex < 0) combat.turnIndex = 0;
+    if (combat.selectedIndex >= combat.combatants.length) combat.selectedIndex = combat.turnIndex;
 
     const active = combat.combatants[combat.turnIndex];
     $('#combat-turn-label').textContent = active ? `Turn: ${active.name}` : '—';
@@ -2142,7 +2200,9 @@
     combat.combatants.forEach((cb, idx) => {
       const row = document.createElement('div');
       const dead = cb.hp <= 0;
-      row.className = `combatant-row side-${cb.side || 'neutral'}${idx === combat.turnIndex ? ' active-turn' : ''}${dead ? ' dead' : ''}`;
+      const selected = idx === combat.selectedIndex;
+      row.className = `combatant-row side-${cb.side || 'neutral'}${idx === combat.turnIndex ? ' active-turn' : ''}${dead ? ' dead' : ''}${selected ? ' selected' : ''}`;
+      row.dataset.idx = String(idx);
       const hpPct = cb.hpMax > 0 ? cb.hp / cb.hpMax : 1;
       let hpClass = '';
       if (dead) hpClass = 'dead-hp';
@@ -2169,8 +2229,16 @@
           <input type="text" class="cond-input" data-idx="${idx}" value="${escapeAttr(cb.conditions || '')}" placeholder="Conditions (poisoned, prone…)" />
         </div>
       `;
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button, input, .combat-init, .combat-hp-val')) return;
+        combat.selectedIndex = idx;
+        save();
+        renderCombat();
+      });
       list.appendChild(row);
     });
+
+    showCombatDetail(combat.combatants[combat.selectedIndex]);
 
     // Wire HP buttons
     list.querySelectorAll('.hp-minus').forEach(btn => {
@@ -2401,17 +2469,17 @@
   }
 
   function combatantFromBestiary(b, side) {
-    const originSide = side || (b.o === 'Wardenborn' || b.o === 'Natural' ? 'enemy' : 'enemy');
     return {
       id: uid(),
       sourceId: null,
+      bestiaryName: b.n,
       name: b.n,
       init: 10,
       hp: b.hp,
       hpMax: b.hp,
       ac: b.ac,
       conditions: '',
-      side: originSide,
+      side: side || 'enemy',
       notes: `CR ${b.cr} · ${b.o} · ${b.w}`
     };
   }
@@ -2619,13 +2687,38 @@
           <span class="stat-chip">AC ${b.ac}</span>
           <span class="stat-chip">HP ${b.hp}</span>
         </div>
+        ${b.d ? `<p class="bestiary-desc">${escapeHtml(b.d)}</p>` : ''}
         <div class="actions">
           <button class="btn primary btn-combat">+ Combat</button>
           <button class="btn secondary btn-villain">+ Villain</button>
+          <button class="btn ghost btn-more">Details</button>
         </div>
       `;
       card.querySelector('.btn-combat').addEventListener('click', () => addBestiaryToCombat(b));
       card.querySelector('.btn-villain').addEventListener('click', () => addBestiaryAsVillain(b));
+      card.querySelector('.btn-more').addEventListener('click', () => {
+        openModal({
+          title: b.n,
+          confirmText: 'Close',
+          bodyHtml: `
+            <div class="bestiary-meta" style="margin-bottom:0.75rem">
+              <span class="origin-tag ${originClass(b.o)}">${escapeHtml(b.o)}</span>
+              <span>${escapeHtml(b.w)}</span>
+            </div>
+            <div class="bestiary-stats" style="margin-bottom:1rem">
+              <span class="stat-chip">CR ${b.cr}</span>
+              <span class="stat-chip">AC ${b.ac}</span>
+              <span class="stat-chip">HP ${b.hp}</span>
+            </div>
+            <div class="detail-block">
+              <div class="detail-label">Description</div>
+              <p class="detail-text">${escapeHtml(b.d || 'No description available.')}</p>
+            </div>
+            <p class="muted small" style="margin-top:1rem">Full ecology, encounter use, and complete actions are in <em>Bestiary of the Seven Worlds</em>. Use + Combat for tracker stats.</p>
+          `,
+          onConfirm: () => true
+        });
+      });
       list.appendChild(card);
     });
   }

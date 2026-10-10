@@ -210,9 +210,16 @@
             <button id="combat-sort-btn" class="btn secondary">Sort by Init</button>
           </div>
         </div>
-        <div id="combat-list" class="combat-list"></div>
-        <div id="empty-combat" class="empty-state">
-          <p>No combatants. Add from Party, Villains, Bestiary, or roll a Random Encounter.</p>
+        <div class="combat-layout">
+          <div class="combat-main">
+            <div id="combat-list" class="combat-list"></div>
+            <div id="empty-combat" class="empty-state">
+              <p>No combatants. Add from Party, Villains, Bestiary, or roll a Random Encounter.</p>
+            </div>
+          </div>
+          <aside id="combat-detail" class="combat-detail">
+            <div class="combat-detail-empty muted">Select a combatant to view details, traits, and description.</div>
+          </aside>
         </div>
       </section>
 
