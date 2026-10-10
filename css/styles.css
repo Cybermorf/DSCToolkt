@@ -1494,20 +1494,21 @@ label.small {
   color: var(--text-muted);
   margin-bottom: 0.75rem;
 }
-.combat-detail .detail-block {
+.detail-block {
   margin-bottom: 0.75rem;
   padding-bottom: 0.65rem;
   border-bottom: 1px solid var(--border-subtle);
 }
-.combat-detail .detail-block:last-child { border-bottom: none; margin-bottom: 0; }
-.combat-detail .detail-label {
+.detail-block:last-child { border-bottom: none; margin-bottom: 0; }
+.detail-label {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
   margin-bottom: 0.25rem;
+  font-weight: 600;
 }
-.combat-detail .detail-text {
+.detail-text {
   font-size: 0.88rem;
   color: var(--text-dim);
   line-height: 1.45;
