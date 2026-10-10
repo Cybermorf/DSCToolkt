@@ -20,38 +20,14 @@
         </div>
       </div>
       <nav class="nav">
-        <button class="nav-item active" data-view="campaigns">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          Campaigns
-        </button>
-        <button class="nav-item" data-view="overview" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          Overview
-        </button>
-        <button class="nav-item" data-view="sessions" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Sessions
-        </button>
-        <button class="nav-item" data-view="party" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Party
-        </button>
-        <button class="nav-item" data-view="factions" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          Factions & Reputation
-        </button>
-        <button class="nav-item" data-view="forces" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Active Forces
-        </button>
-        <button class="nav-item" data-view="notes" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Notes
-        </button>
-        <button class="nav-item" data-view="tools">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Tools
-        </button>
+        <button class="nav-item active" data-view="campaigns">Campaigns</button>
+        <button class="nav-item" data-view="overview" disabled>Overview</button>
+        <button class="nav-item" data-view="sessions" disabled>Sessions</button>
+        <button class="nav-item" data-view="party" disabled>Party</button>
+        <button class="nav-item" data-view="factions" disabled>Factions & Reputation</button>
+        <button class="nav-item" data-view="forces" disabled>Active Forces</button>
+        <button class="nav-item" data-view="notes" disabled>Notes</button>
+        <button class="nav-item" data-view="tools">Tools</button>
       </nav>
       <div class="sidebar-footer">
         <span id="active-campaign-badge" class="badge hidden"></span>
@@ -69,23 +45,16 @@
         </div>
       </header>
 
-      <!-- Campaigns View -->
       <section id="view-campaigns" class="view active">
         <div class="view-header">
           <h1>Campaigns</h1>
-          <button id="new-campaign-btn" class="btn primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            New Campaign
-          </button>
+          <button id="new-campaign-btn" class="btn primary">New Campaign</button>
         </div>
-        <p class="view-desc">Track multiple living campaigns across the Seven Worlds of Eldoria. Each campaign maintains its own sessions, party, reputations, and active forces.</p>
+        <p class="view-desc">Track multiple living campaigns across the Seven Worlds of Eldoria.</p>
         <div id="campaigns-grid" class="campaigns-grid"></div>
-        <div id="empty-campaigns" class="empty-state">
-          <p>No campaigns yet. Create one to begin tracking your living campaign.</p>
-        </div>
+        <div id="empty-campaigns" class="empty-state"><p>No campaigns yet. Create one to begin.</p></div>
       </section>
 
-      <!-- Overview -->
       <section id="view-overview" class="view">
         <div class="view-header">
           <h1 id="overview-title">Overview</h1>
@@ -93,95 +62,64 @@
         </div>
         <div id="quick-stats" class="quick-stats"></div>
         <div class="overview-grid">
-          <div class="card">
-            <label>Current World</label>
+          <div class="card"><label>Current World</label>
             <select id="current-world">
-              <option value="Luminaris">Luminaris</option>
-              <option value="Umbraria">Umbraria</option>
-              <option value="Eternum">Eternum</option>
-              <option value="Solara">Solara</option>
-              <option value="Aetheria">Aetheria</option>
-              <option value="Harmonia">Harmonia</option>
+              <option value="Luminaris">Luminaris</option><option value="Umbraria">Umbraria</option>
+              <option value="Eternum">Eternum</option><option value="Solara">Solara</option>
+              <option value="Aetheria">Aetheria</option><option value="Harmonia">Harmonia</option>
               <option value="Celestia">Celestia</option>
             </select>
           </div>
-          <div class="card">
-            <label>Tier</label>
+          <div class="card"><label>Tier</label>
             <select id="campaign-tier">
-              <option value="1-4">Local (1–4)</option>
-              <option value="5-10">Regional (5–10)</option>
-              <option value="11-16">Planetary (11–16)</option>
-              <option value="17-20">Cosmic (17–20)</option>
+              <option value="1-4">Local (1–4)</option><option value="5-10">Regional (5–10)</option>
+              <option value="11-16">Planetary (11–16)</option><option value="17-20">Cosmic (17–20)</option>
             </select>
           </div>
-          <div class="card span-2">
-            <label>Current Status</label>
-            <textarea id="campaign-status" rows="2" placeholder="Where things stand right now..."></textarea>
-          </div>
-          <div class="card span-2">
-            <label>Campaign Goals</label>
-            <textarea id="campaign-goals" rows="2" placeholder="What the party is pursuing..."></textarea>
-          </div>
+          <div class="card span-2"><label>Current Status</label><textarea id="campaign-status" rows="2"></textarea></div>
+          <div class="card span-2"><label>Campaign Goals</label><textarea id="campaign-goals" rows="2"></textarea></div>
         </div>
       </section>
 
-      <!-- Sessions -->
       <section id="view-sessions" class="view">
         <div class="view-header">
           <h1>Sessions</h1>
-          <button id="new-session-btn" class="btn primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            Log Session
-          </button>
+          <button id="new-session-btn" class="btn primary">Log Session</button>
         </div>
         <div id="sessions-list" class="sessions-list"></div>
         <div id="empty-sessions" class="empty-state hidden"><p>No sessions logged yet.</p></div>
       </section>
 
-      <!-- Party -->
       <section id="view-party" class="view">
         <div class="view-header">
           <h1>Party</h1>
-          <button id="new-character-btn" class="btn primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            Add Character
-          </button>
+          <button id="new-character-btn" class="btn primary">Add Character</button>
         </div>
+        <p class="view-desc">Full 5e-compatible character sheets: ability scores, HP, AC, attacks, features, equipment, and Eldoria <strong>Corruption</strong> track.</p>
         <div id="party-list" class="party-list"></div>
-        <div id="empty-party" class="empty-state hidden"><p>No characters yet.</p></div>
+        <div id="empty-party" class="empty-state hidden"><p>No characters yet. Add full player character sheets or import NPCs from Tools.</p></div>
       </section>
 
-      <!-- Factions -->
       <section id="view-factions" class="view">
         <div class="view-header">
           <h1>Factions & Reputation</h1>
-          <button id="new-faction-btn" class="btn primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            Add Faction
-          </button>
+          <button id="new-faction-btn" class="btn primary">Add Faction</button>
         </div>
-        <p class="view-desc">Track reputation (−3 to +3) with important factions. Reputation determines access, trust, and political cost.</p>
+        <p class="view-desc">Reputation ranges from −3 (hostile) to +3 (allied).</p>
         <div id="factions-list" class="factions-list"></div>
         <div id="empty-factions" class="empty-state hidden"><p>No factions tracked yet.</p></div>
       </section>
 
-      <!-- Forces View -->
       <section id="view-forces" class="view">
         <div class="view-header">
           <h1>Active Forces</h1>
-          <button id="new-force-btn" class="btn primary">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-            Add Force
-          </button>
+          <button id="new-force-btn" class="btn primary">Add Force</button>
         </div>
-        <p class="view-desc">The <strong>Dynamic Influence Engine</strong> treats major antagonists, factions, cults, or disasters as active forces. Each force has a Public Face, Primary Goal, Political / Corruptive / Disruptive Influence (0–6), a six-segment Agenda Clock, Awareness of the party (0–4), and Pressure (0–4). Use <strong>Force Turn</strong> after major operations, downtime, or journeys.</p>
+        <p class="view-desc">The <strong>Dynamic Influence Engine</strong> tracks Public Face, Goal, Political / Corruptive / Disruptive Influence (0–6), Agenda Clock, Awareness, and Pressure. Use <strong>Force Turn</strong> between sessions.</p>
         <div id="forces-list" class="forces-list"></div>
-        <div id="empty-forces" class="empty-state hidden">
-          <p>No active forces. When a power has goals that will progress even without the heroes, record it here.</p>
-        </div>
+        <div id="empty-forces" class="empty-state hidden"><p>No active forces yet.</p></div>
       </section>
 
-      <!-- Notes View -->
       <section id="view-notes" class="view">
         <div class="view-header">
           <h1>Campaign Notes</h1>
@@ -190,32 +128,29 @@
         <textarea id="campaign-notes" rows="16" placeholder="Free-form notes, secrets, NPCs, plot threads..."></textarea>
       </section>
 
-      <!-- Tools View -->
       <section id="view-tools" class="view">
-        <div class="view-header">
-          <h1>Tools</h1>
-        </div>
+        <div class="view-header"><h1>Tools</h1></div>
         <div class="tools-grid">
           <div class="card">
             <h3>Generators</h3>
-            <p class="view-desc" style="margin-bottom:0.75rem">Quick random content aligned with Eldoria’s tone. Use the 🎲 button when adding Factions or Forces for the same generators inside the form.</p>
+            <p class="view-desc" style="margin-bottom:0.75rem">Setting-flavored random content. NPC generator produces full ability scores, AC, HP, attacks, traits, and a secret.</p>
             <div class="tool-btns">
               <button id="tool-gen-faction" class="btn primary">🎲 Random Faction</button>
               <button id="tool-gen-force" class="btn primary">🎲 Random Active Force</button>
-              <button id="tool-gen-complication" class="btn secondary">World Complication</button>
+              <button id="tool-gen-complication" class="btn secondary">🎲 World Complication</button>
+              <button id="tool-gen-npc" class="btn primary">🎲 Random NPC (Full Stats)</button>
             </div>
             <div id="tool-generator-output" class="tool-output"></div>
           </div>
           <div class="card">
             <h3>Living Campaign Tips</h3>
-            <p>Track only forces that can change situations the characters care about. Between sessions use <strong>Force Turn</strong> on the Forces tab to run the Dynamic Influence Engine — Agenda Clocks advance, forces take Political/Corruptive/Disruptive actions, and Awareness & Pressure shift.</p>
+            <p>Use <strong>Force Turn</strong> on the Forces tab between sessions. Add PCs via Party → full sheets. Generate NPCs here and optionally add them to the party list as contacts.</p>
           </div>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- Modal -->
   <div id="modal" class="modal hidden">
     <div class="modal-backdrop"></div>
     <div class="modal-panel">
@@ -231,12 +166,8 @@
     </div>
   </div>
 
-  <!-- Dice Panel -->
   <div id="dice-panel" class="dice-panel hidden">
-    <div class="dice-header">
-      <h3>Dice Roller</h3>
-      <button id="dice-close" class="icon-btn">✕</button>
-    </div>
+    <div class="dice-header"><h3>Dice Roller</h3><button id="dice-close" class="icon-btn">✕</button></div>
     <div class="dice-body">
       <div class="die-select">
         <button class="die-btn" data-sides="4">d4</button>
@@ -259,13 +190,9 @@
         <button id="roll-custom" class="btn secondary">Roll Formula</button>
       </div>
       <div id="dice-result" class="dice-result">
-        <span class="result-total">—</span>
-        <span class="result-detail"></span>
+        <span class="result-total">—</span><span class="result-detail"></span>
       </div>
-      <div class="history-header">
-        <span>History</span>
-        <button id="clear-history" class="btn ghost">Clear</button>
-      </div>
+      <div class="history-header"><span>History</span><button id="clear-history" class="btn ghost">Clear</button></div>
       <ul id="roll-history" class="roll-history"></ul>
     </div>
   </div>
