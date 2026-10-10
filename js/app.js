@@ -546,6 +546,7 @@
     else if (viewName === 'party') renderParty();
     else if (viewName === 'combat') renderCombat();
     else if (viewName === 'bestiary') renderBestiary();
+    else if (viewName === 'umbralites') renderUmbralites();
     else if (viewName === 'factions') renderFactions();
     else if (viewName === 'forces') renderForces();
     else if (viewName === 'notes') renderNotes();
@@ -978,11 +979,139 @@
     }).join('');
   }
 
+  function getPhbClasses() {
+    return (typeof window !== 'undefined' && window.PHB_CLASSES) ? window.PHB_CLASSES : [];
+  }
+  function getPhbSkills() {
+    return (typeof window !== 'undefined' && window.PHB_SKILLS) ? window.PHB_SKILLS : [];
+  }
+  function getPhbRaces() {
+    return (typeof window !== 'undefined' && window.PHB_RACES) ? window.PHB_RACES : [];
+  }
+  function findPhbClass(name) {
+    if (!name) return null;
+    const n = String(name).toLowerCase();
+    return getPhbClasses().find(c => c.name.toLowerCase() === n) || null;
+  }
+
+  function classOptionsHtml(selected) {
+    const classes = getPhbClasses();
+    const core = classes.filter(c => !c.setting);
+    const dsc = classes.filter(c => c.setting);
+    let html = `<option value="">— Select class —</option>`;
+    html += `<optgroup label="Core Classes">`;
+    core.forEach(c => {
+      html += `<option value="${escapeAttr(c.name)}" ${selected === c.name ? 'selected' : ''}>${escapeHtml(c.name)}</option>`;
+    });
+    html += `</optgroup><optgroup label="Dark Sun Chronicles">`;
+    dsc.forEach(c => {
+      html += `<option value="${escapeAttr(c.name)}" ${selected === c.name ? 'selected' : ''}>${escapeHtml(c.name)}</option>`;
+    });
+    html += `</optgroup>`;
+    if (selected && !classes.some(c => c.name === selected)) {
+      html += `<option value="${escapeAttr(selected)}" selected>${escapeHtml(selected)} (custom)</option>`;
+    }
+    return html;
+  }
+
+  function raceOptionsHtml(selected) {
+    const races = getPhbRaces();
+    let html = `<option value="">— Select ancestry —</option>`;
+    races.forEach(r => {
+      html += `<option value="${escapeAttr(r.name)}" ${selected === r.name ? 'selected' : ''}>${escapeHtml(r.name)}${r.world ? ' (' + r.world + ')' : ''}</option>`;
+    });
+    if (selected && !races.some(r => r.name === selected)) {
+      html += `<option value="${escapeAttr(selected)}" selected>${escapeHtml(selected)}</option>`;
+    }
+    return html;
+  }
+
+  function skillPickerHtml(className, selectedSkills) {
+    const cls = findPhbClass(className);
+    const all = getPhbSkills();
+    const selected = new Set((selectedSkills || []).map(s => s.toLowerCase()));
+    let allowed = all;
+    if (cls && cls.skills !== 'Any') {
+      const set = new Set(cls.skills.map(s => s.toLowerCase()));
+      allowed = all.filter(s => set.has(s.name.toLowerCase()));
+    }
+    const choose = cls ? cls.skillsChoose : 2;
+    return `
+      <div class="skill-picker" data-choose="${choose}">
+        <p class="muted small">Choose ${choose} skill${choose > 1 ? 's' : ''}${cls && cls.skills !== 'Any' ? ' from the class list' : ''}. Hover a skill for its description.</p>
+        <div class="skill-grid">
+          ${allowed.map(s => `
+            <label class="skill-chip" title="${escapeAttr(s.desc)} (${s.ability})">
+              <input type="checkbox" class="m-skill-cb" value="${escapeAttr(s.name)}" ${selected.has(s.name.toLowerCase()) ? 'checked' : ''} />
+              <span>${escapeHtml(s.name)} <span class="muted">(${s.ability})</span></span>
+            </label>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  function progressionTableHtml(className) {
+    const cls = findPhbClass(className);
+    if (!cls || !cls.progression) return '<p class="muted small">Select a class to view its progression table.</p>';
+    const rows = cls.progression.map(([lvl, feat]) =>
+      `<tr><td>${lvl}</td><td>${escapeHtml(feat)}</td></tr>`).join('');
+    return `
+      <div class="class-summary">
+        <p><strong>${escapeHtml(cls.name)}</strong> — ${escapeHtml(cls.summary)}</p>
+        <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)} · Armor: ${escapeHtml(cls.armor)}</p>
+      </div>
+      <table class="prog-table">
+        <thead><tr><th>Level</th><th>Features</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  function wireCharacterFormHelpers() {
+    const classSel = $('#m-class');
+    const levelInp = $('#m-level');
+    const profInp = $('#m-prof');
+    const raceSel = $('#m-race');
+    const worldSel = $('#m-world');
+    const skillBox = $('#m-skill-picker');
+    const progBox = $('#m-class-prog');
+    const features = $('#m-features');
+
+    function refreshClassUI() {
+      const cname = classSel ? classSel.value : '';
+      if (skillBox) skillBox.innerHTML = skillPickerHtml(cname, []);
+      if (progBox) progBox.innerHTML = progressionTableHtml(cname);
+      const cls = findPhbClass(cname);
+      if (cls && $('#m-saves') && !$('#m-saves').value) $('#m-saves').value = cls.saves;
+    }
+    function refreshProf() {
+      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
+      if (profInp && window.PHB_PROF_BY_LEVEL) {
+        profInp.value = window.PHB_PROF_BY_LEVEL[lvl] || 2;
+      }
+    }
+    function refreshRaceTraits() {
+      const rname = raceSel ? raceSel.value : '';
+      if (rname === 'Umbralites' && window.UMBRALITES && features) {
+        const traits = window.UMBRALITES.traits.map(t => `${t.name}: ${t.text}`).join('\n');
+        if (!features.value.includes('Shadow Step')) {
+          features.value = (features.value ? features.value + '\n\n' : '') + '— Umbralite Traits —\n' + traits;
+        }
+        if (worldSel && !worldSel.value) worldSel.value = 'Umbraria';
+      }
+    }
+    classSel?.addEventListener('change', refreshClassUI);
+    levelInp?.addEventListener('change', refreshProf);
+    levelInp?.addEventListener('input', refreshProf);
+    raceSel?.addEventListener('change', refreshRaceTraits);
+    refreshClassUI();
+  }
+
   async function promptCharacter(existing = null) {
     const c = getActive();
     if (!c) return;
 
     const ch = existing ? normalizeCharacter(existing) : normalizeCharacter({ level: 1, str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10, ac: 10, speed: '30 ft.', profBonus: 2 });
+    const selectedSkills = (ch.skills || '').split(/[,;]+/).map(s => s.trim().split(/\s+\+/)[0].trim()).filter(Boolean);
 
     const body = `
       <div class="sheet-section">
@@ -991,12 +1120,16 @@
           <div class="field"><label>Player</label><input type="text" id="m-player" value="${escapeAttr(ch.player)}" placeholder="Player name" /></div>
         </div>
         <div class="form-row triple">
-          <div class="field"><label>Class</label><input type="text" id="m-class" value="${escapeAttr(ch.class)}" placeholder="e.g. Ranger" /></div>
+          <div class="field"><label>Class</label>
+            <select id="m-class">${classOptionsHtml(ch.class)}</select>
+          </div>
           <div class="field"><label>Subclass</label><input type="text" id="m-subclass" value="${escapeAttr(ch.subclass)}" placeholder="Optional" /></div>
           <div class="field"><label>Level</label><input type="number" id="m-level" min="1" max="20" value="${ch.level}" /></div>
         </div>
         <div class="form-row triple">
-          <div class="field"><label>Ancestry / Race</label><input type="text" id="m-race" value="${escapeAttr(ch.race)}" placeholder="e.g. Human, Umbrarian" /></div>
+          <div class="field"><label>Ancestry / Race</label>
+            <select id="m-race">${raceOptionsHtml(ch.race)}</select>
+          </div>
           <div class="field"><label>Background</label><input type="text" id="m-background" value="${escapeAttr(ch.background)}" /></div>
           <div class="field"><label>Alignment</label><input type="text" id="m-alignment" value="${escapeAttr(ch.alignment)}" placeholder="e.g. NG" /></div>
         </div>
@@ -1004,6 +1137,10 @@
           <div class="field"><label>Home World</label><select id="m-world"><option value="">—</option>${WORLDS.map(w => `<option value="${w}" ${ch.world === w ? 'selected' : ''}>${w}</option>`).join('')}</select></div>
           <div class="field"><label>Corruption (0–10)</label><input type="number" id="m-corruption" min="0" max="10" value="${ch.corruption}" title="Shard / dark influence track" /></div>
         </div>
+      </div>
+      <div class="sheet-section">
+        <label class="section-label">Class Progression</label>
+        <div id="m-class-prog">${progressionTableHtml(ch.class)}</div>
       </div>
       <div class="sheet-section">
         <label class="section-label">Ability Scores</label>
@@ -1022,7 +1159,9 @@
       </div>
       <div class="sheet-section">
         <div class="field"><label>Saving Throws</label><input type="text" id="m-saves" value="${escapeAttr(ch.saves)}" placeholder="e.g. DEX, WIS" /></div>
-        <div class="field"><label>Skills</label><textarea id="m-skills" rows="2" placeholder="Perception +5, Stealth +7, …">${escapeHtml(ch.skills)}</textarea></div>
+        <label class="section-label">Skill Proficiencies</label>
+        <div id="m-skill-picker">${skillPickerHtml(ch.class, selectedSkills)}</div>
+        <div class="field" style="margin-top:0.5rem"><label>Skills (text summary)</label><textarea id="m-skills" rows="2" placeholder="Auto-filled from checkboxes, or type freely">${escapeHtml(ch.skills)}</textarea></div>
         <div class="field"><label>Attacks &amp; Spell Attack</label><textarea id="m-attacks" rows="2" placeholder="Longbow +7 (1d8+3), Fire Bolt +5 (1d10)">${escapeHtml(ch.attacks)}</textarea></div>
         <div class="field"><label>Features &amp; Traits</label><textarea id="m-features" rows="3" placeholder="Class features, racial traits, feats…">${escapeHtml(ch.features)}</textarea></div>
         <div class="field"><label>Equipment</label><textarea id="m-equipment" rows="2" placeholder="Armor, weapons, tools, magic items…">${escapeHtml(ch.equipment)}</textarea></div>
@@ -1039,6 +1178,11 @@
         if (!name) { toast('Name required'); return false; }
         const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 20);
         const playerVal = $('#m-player').value.trim();
+        const checked = [...document.querySelectorAll('.m-skill-cb:checked')].map(cb => cb.value);
+        let skillsText = $('#m-skills').value.trim();
+        if (checked.length) {
+          skillsText = checked.join(', ');
+        }
         const data = {
           name,
           player: playerVal,
@@ -1063,7 +1207,7 @@
           speed: $('#m-speed').value.trim() || '30 ft.',
           profBonus: parseInt($('#m-prof').value, 10) || profBonusForLevel(level),
           saves: $('#m-saves').value.trim(),
-          skills: $('#m-skills').value.trim(),
+          skills: skillsText,
           attacks: $('#m-attacks').value.trim(),
           features: $('#m-features').value.trim(),
           equipment: $('#m-equipment').value.trim(),
@@ -1076,6 +1220,7 @@
         return true;
       },
       afterOpen: () => {
+        wireCharacterFormHelpers();
         const grid = $('#ability-grid');
         if (!grid) return;
         grid.querySelectorAll('.ability-score').forEach(inp => {
@@ -1084,11 +1229,6 @@
             const modEl = $(`#m-mod-${ab}`);
             if (modEl) modEl.textContent = modStr(inp.value);
           });
-        });
-        $('#m-level')?.addEventListener('change', () => {
-          const lv = parseInt($('#m-level').value, 10) || 1;
-          const prof = $('#m-prof');
-          if (prof) prof.value = profBonusForLevel(lv);
         });
       }
     });
@@ -2557,6 +2697,43 @@
 
   function originClass(o) {
     return String(o || '').toLowerCase().replace(/\s+/g, '-');
+  }
+
+  function renderUmbralites() {
+    const root = $('#umbralites-content');
+    if (!root) return;
+    const u = (typeof window !== 'undefined' && window.UMBRALITES) ? window.UMBRALITES : null;
+    if (!u) {
+      root.innerHTML = '<p class="muted">Umbralites data not loaded.</p>';
+      return;
+    }
+    root.innerHTML = `
+      <article class="race-card">
+        <header class="race-header">
+          <h2>${escapeHtml(u.name)}</h2>
+          <p class="race-tagline">${escapeHtml(u.tagline)}</p>
+        </header>
+        <div class="detail-block"><div class="detail-label">Overview</div><p class="detail-text">${escapeHtml(u.intro)}</p></div>
+        <div class="detail-block"><div class="detail-label">Appearance</div><p class="detail-text">${escapeHtml(u.appearance)}</p></div>
+        <div class="detail-block"><div class="detail-label">Life Span</div><p class="detail-text">${escapeHtml(u.lifeSpan)}</p></div>
+        <div class="detail-block"><div class="detail-label">Culture &amp; Society</div><p class="detail-text">${escapeHtml(u.culture)}</p></div>
+        <div class="detail-block"><div class="detail-label">Beliefs &amp; Worldview</div><p class="detail-text">${escapeHtml(u.beliefs)}</p></div>
+        <div class="detail-block"><div class="detail-label">Names</div><p class="detail-text">${escapeHtml(u.names)}</p></div>
+        <div class="detail-block"><div class="detail-label">Adventurers</div><p class="detail-text">${escapeHtml(u.adventurers)}</p></div>
+        <div class="detail-block">
+          <div class="detail-label">Traits</div>
+          <ul class="trait-list">
+            ${u.traits.map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}
+          </ul>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Creating an Umbralite Character</div>
+          <ul class="trait-list">
+            ${u.questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}
+          </ul>
+        </div>
+        <p class="muted small">Source: Dark Sun Chronicles Player’s Handbook, Chapter 5 — Unique Races.</p>
+      </article>`;
   }
 
   function renderBestiary() {
