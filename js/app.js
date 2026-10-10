@@ -11,6 +11,125 @@
   const STORAGE_KEY = 'darkSunChronicles_v1';
   const WORLDS = ['Luminaris', 'Umbraria', 'Eternum', 'Solara', 'Aetheria', 'Harmonia', 'Celestia'];
 
+  const BESTIARY = [
+    {n:'Breakerwing Manta',w:'Aetheria',o:'Wardenborn',cr:10,ac:19,hp:230},
+    {n:'Bridgeweaver',w:'Aetheria',o:'Natural',cr:2,ac:15,hp:52},
+    {n:'Cloudreef Grazer',w:'Aetheria',o:'Natural',cr:2,ac:14,hp:60},
+    {n:'Command Wasp Choir',w:'Aetheria',o:'Swordborn',cr:5,ac:16,hp:110},
+    {n:'Compass Eater',w:'Aetheria',o:'Sword-Touched',cr:6,ac:16,hp:120},
+    {n:'Crown Tempest',w:'Aetheria',o:'Swordborn',cr:17,ac:21,hp:340},
+    {n:'Driftwhale',w:'Aetheria',o:'Natural',cr:6,ac:16,hp:210},
+    {n:'Echo-Gale Hound',w:'Aetheria',o:'Sword-Touched',cr:4,ac:15,hp:85},
+    {n:'Forkbolt Mantis',w:'Aetheria',o:'Sword-Touched',cr:5,ac:17,hp:105},
+    {n:'Freewind Shrike',w:'Aetheria',o:'Wardenborn',cr:5,ac:17,hp:105},
+    {n:'Horizon Skipper',w:'Aetheria',o:'Sword-Touched',cr:7,ac:17,hp:136},
+    {n:'Seven-Sail Leviathan',w:'Aetheria',o:'Wardenborn',cr:17,ac:21,hp:345},
+    {n:'Stormchain Serpent',w:'Aetheria',o:'Swordborn',cr:10,ac:19,hp:225},
+    {n:'Stormglass Swift Flock',w:'Aetheria',o:'Natural',cr:3,ac:15,hp:55},
+    {n:'Thunderroot Colony',w:'Aetheria',o:'Sword-Touched',cr:9,ac:18,hp:168},
+    {n:'Updraft Ray',w:'Aetheria',o:'Natural',cr:4,ac:15,hp:138},
+    {n:'Zephyrfin Glider',w:'Aetheria',o:'Natural',cr:1,ac:14,hp:27},
+    {n:'Aurora Grazer',w:'Celestia',o:'Natural',cr:5,ac:16,hp:110},
+    {n:'Borrowed Saint',w:'Celestia',o:'Swordborn',cr:8,ac:17,hp:157},
+    {n:'Causeway Strider',w:'Celestia',o:'Natural',cr:4,ac:15,hp:85},
+    {n:'Chain-Oath Hound',w:'Celestia',o:'Swordborn',cr:6,ac:16,hp:136},
+    {n:'Constellation Weaverbird Colony',w:'Celestia',o:'Natural',cr:3,ac:15,hp:68},
+    {n:'Covenant Ram',w:'Celestia',o:'Wardenborn',cr:6,ac:16,hp:136},
+    {n:'Free-Soul Phoenix',w:'Celestia',o:'Wardenborn',cr:17,ac:20,hp:310},
+    {n:'Gate-Mouth Seraph',w:'Celestia',o:'Swordborn',cr:11,ac:18,hp:210},
+    {n:'Luminous Garden Ray',w:'Celestia',o:'Natural',cr:2,ac:14,hp:51},
+    {n:'Memory Lantern Stag',w:'Celestia',o:'Wardenborn',cr:8,ac:17,hp:157},
+    {n:'Name-Eater Wisp',w:'Celestia',o:'Swordborn',cr:4,ac:15,hp:85},
+    {n:'Prismwing Nectar Moth Chorus',w:'Celestia',o:'Natural',cr:1,ac:13,hp:30},
+    {n:'Soul-Tithe Colossus',w:'Celestia',o:'Swordborn',cr:17,ac:20,hp:310},
+    {n:'Star-Iron Shellback',w:'Celestia',o:'Natural',cr:3,ac:15,hp:68},
+    {n:'Stardust Hare',w:'Celestia',o:'Natural',cr:1,ac:13,hp:30},
+    {n:'Threshold Gryphon',w:'Celestia',o:'Wardenborn',cr:11,ac:18,hp:210},
+    {n:'Truecall Nightjar',w:'Celestia',o:'Wardenborn',cr:4,ac:15,hp:85},
+    {n:'Voidwake Leviathan',w:'Celestia',o:'Natural',cr:9,ac:18,hp:178},
+    {n:'Bastion Shellback',w:'Eternum',o:'Wardenborn',cr:15,ac:21,hp:310},
+    {n:'Blightcoil',w:'Eternum',o:'Swordborn',cr:7,ac:16,hp:126},
+    {n:'Cairnwing Murder',w:'Eternum',o:'Natural',cr:1,ac:13,hp:36},
+    {n:'Feverbloom Hart',w:'Eternum',o:'Sword-Touched',cr:6,ac:15,hp:114},
+    {n:'Ironhide Burrow-Ox',w:'Eternum',o:'Natural',cr:3,ac:16,hp:76},
+    {n:'Pale Chirurgeon',w:'Eternum',o:'Swordborn',cr:8,ac:17,hp:136},
+    {n:'Ravine Strider',w:'Eternum',o:'Natural',cr:2,ac:13,hp:45},
+    {n:'Rot-Siege Behemoth',w:'Eternum',o:'Swordborn',cr:15,ac:19,hp:276},
+    {n:'Scarjackal Pack',w:'Eternum',o:'Sword-Touched',cr:4,ac:14,hp:93},
+    {n:'Stone-Eye Harrier',w:'Eternum',o:'Wardenborn',cr:7,ac:16,hp:123},
+    {n:'Verdict Mantis',w:'Eternum',o:'Wardenborn',cr:8,ac:18,hp:133},
+    {n:'Bellcrest Hawk',w:'Harmonia',o:'Wardenborn',cr:5,ac:16,hp:102},
+    {n:'Celestial Hornstag',w:'Harmonia',o:'Natural',cr:6,ac:16,hp:145},
+    {n:'Clearwater Lampshell Bed',w:'Harmonia',o:'Natural',cr:2,ac:15,hp:59},
+    {n:'Concord Titan',w:'Harmonia',o:'Swordborn',cr:17,ac:20,hp:310},
+    {n:'Consensus Leech Colony',w:'Harmonia',o:'Sword-Touched',cr:4,ac:15,hp:88},
+    {n:'Counterpattern Mantis',w:'Harmonia',o:'Wardenborn',cr:10,ac:18,hp:178},
+    {n:'Discord Bloom',w:'Harmonia',o:'Sword-Touched',cr:3,ac:14,hp:76},
+    {n:'False-Refrain Cicada Swarm',w:'Harmonia',o:'Sword-Touched',cr:5,ac:15,hp:104},
+    {n:'Hushcoil Serpent',w:'Harmonia',o:'Swordborn',cr:5,ac:16,hp:110},
+    {n:'Meadow Chimebee Chorus',w:'Harmonia',o:'Natural',cr:1,ac:13,hp:31},
+    {n:'Mirrorweb Weaver',w:'Harmonia',o:'Swordborn',cr:10,ac:18,hp:178},
+    {n:'Paradox Orchard',w:'Harmonia',o:'Sword-Touched',cr:9,ac:18,hp:207},
+    {n:'Ribbonback Grazer',w:'Harmonia',o:'Natural',cr:2,ac:14,hp:68},
+    {n:'Riverbraid Otter',w:'Harmonia',o:'Natural',cr:3,ac:14,hp:58},
+    {n:'Rootsong Badger',w:'Harmonia',o:'Natural',cr:3,ac:15,hp:67},
+    {n:'Splitpath Fox',w:'Harmonia',o:'Sword-Touched',cr:7,ac:17,hp:127},
+    {n:'Symmetry Crane Pair',w:'Harmonia',o:'Natural',cr:4,ac:15,hp:102},
+    {n:'Thousand-Voice Grove',w:'Harmonia',o:'Wardenborn',cr:17,ac:19,hp:297},
+    {n:'Bridgewing Crane',w:'Luminaris',o:'Wardenborn',cr:8,ac:18,hp:170},
+    {n:'Chimecrest Woodpecker',w:'Luminaris',o:'Natural',cr:0.5,ac:14,hp:18},
+    {n:'Crystal Griffon',w:'Luminaris',o:'Natural',cr:7,ac:16,hp:136},
+    {n:'Facetback Ibex',w:'Luminaris',o:'Natural',cr:2,ac:14,hp:59},
+    {n:'Lumenleaf Grazer Herd',w:'Luminaris',o:'Natural',cr:3,ac:14,hp:95},
+    {n:'Memorial Husk',w:'Luminaris',o:'Swordborn',cr:11,ac:19,hp:238},
+    {n:'Memory Garden Tortoise',w:'Luminaris',o:'Natural',cr:5,ac:18,hp:152},
+    {n:'Moonmirror Ray',w:'Luminaris',o:'Natural',cr:4,ac:15,hp:102},
+    {n:'Parallax Hawk',w:'Luminaris',o:'Wardenborn',cr:6,ac:17,hp:150},
+    {n:'Prismdew Firefly Chorus',w:'Luminaris',o:'Natural',cr:1,ac:13,hp:32},
+    {n:'Redaction Mite Swarm',w:'Luminaris',o:'Swordborn',cr:3,ac:15,hp:72},
+    {n:'Renewal Hart',w:'Luminaris',o:'Wardenborn',cr:11,ac:19,hp:232},
+    {n:'Serenyan Glassfin Whale',w:'Luminaris',o:'Natural',cr:9,ac:17,hp:230},
+    {n:'Sevenfold Beacon Leviathan',w:'Luminaris',o:'Wardenborn',cr:18,ac:21,hp:350},
+    {n:'Shadowglass Serpent',w:'Luminaris',o:'Swordborn',cr:6,ac:17,hp:152},
+    {n:'Solitude Weaver',w:'Luminaris',o:'Swordborn',cr:8,ac:17,hp:178},
+    {n:'Vanishing Archive Colossus',w:'Luminaris',o:'Swordborn',cr:18,ac:21,hp:360},
+    {n:'Witness Beetle Colony',w:'Luminaris',o:'Wardenborn',cr:3,ac:15,hp:76},
+    {n:'Afterglow Hart',w:'Solara',o:'Sword-Touched',cr:6,ac:15,hp:114},
+    {n:'Ancestor Moth',w:'Solara',o:'Swordborn',cr:9,ac:17,hp:153},
+    {n:'Aurelian Sunhorn',w:'Solara',o:'Natural',cr:2,ac:14,hp:52},
+    {n:'Dawnroot Tortoise',w:'Solara',o:'Natural',cr:3,ac:18,hp:95},
+    {n:'Dawnscythe Ibis',w:'Solara',o:'Wardenborn',cr:5,ac:16,hp:105},
+    {n:'Gilded Carrion Kite',w:'Solara',o:'Sword-Touched',cr:4,ac:14,hp:82},
+    {n:'Glassriver Seraphin',w:'Solara',o:'Natural',cr:5,ac:16,hp:110},
+    {n:'Gravegold Locust Host',w:'Solara',o:'Swordborn',cr:5,ac:15,hp:110},
+    {n:'Mourning Orchard',w:'Solara',o:'Sword-Touched',cr:9,ac:17,hp:168},
+    {n:'Prismwing Kite',w:'Solara',o:'Natural',cr:2,ac:15,hp:36},
+    {n:'Saffron-Mane Prowler',w:'Solara',o:'Natural',cr:4,ac:15,hp:102},
+    {n:'Solstice Crownwing',w:'Solara',o:'Wardenborn',cr:16,ac:20,hp:295},
+    {n:'Sun-Tomb Colossus',w:'Solara',o:'Swordborn',cr:16,ac:20,hp:310},
+    {n:'Sunblanched Jackal',w:'Solara',o:'Sword-Touched',cr:7,ac:15,hp:97},
+    {n:'Truthsong Shrike',w:'Solara',o:'Wardenborn',cr:9,ac:17,hp:145},
+    {n:'Black Hearth Leviathan',w:'Umbraria',o:'Wardenborn',cr:18,ac:22,hp:355},
+    {n:'Blackwater Veilwhale',w:'Umbraria',o:'Natural',cr:9,ac:17,hp:232},
+    {n:'Cinderborer Mole',w:'Umbraria',o:'Swordborn',cr:8,ac:18,hp:190},
+    {n:'Confession Ember Swarm',w:'Umbraria',o:'Swordborn',cr:3,ac:15,hp:78},
+    {n:'Duskfin Lake Skimmer',w:'Umbraria',o:'Natural',cr:2,ac:14,hp:58},
+    {n:'Echofur Cave Hare',w:'Umbraria',o:'Natural',cr:0.5,ac:14,hp:18},
+    {n:'Gloamcap Burrower',w:'Umbraria',o:'Natural',cr:2,ac:15,hp:68},
+    {n:'Gloamstone Badger',w:'Umbraria',o:'Wardenborn',cr:8,ac:19,hp:195},
+    {n:'Lanternjaw Eel',w:'Umbraria',o:'Natural',cr:4,ac:15,hp:110},
+    {n:'Merciless Dawn Colossus',w:'Umbraria',o:'Swordborn',cr:18,ac:21,hp:365},
+    {n:'Mistback Elk',w:'Umbraria',o:'Natural',cr:3,ac:15,hp:102},
+    {n:'Mourning-Cowl Heron',w:'Umbraria',o:'Wardenborn',cr:11,ac:19,hp:235},
+    {n:'Nocturne Lynx',w:'Umbraria',o:'Natural',cr:6,ac:16,hp:145},
+    {n:'Pyre-Truth Serpent',w:'Umbraria',o:'Swordborn',cr:11,ac:19,hp:240},
+    {n:'Quietcoal Beetle Colony',w:'Umbraria',o:'Wardenborn',cr:3,ac:16,hp:80},
+    {n:'Searchfire Hound',w:'Umbraria',o:'Swordborn',cr:6,ac:17,hp:150},
+    {n:'Veilwing Owl',w:'Umbraria',o:'Wardenborn',cr:6,ac:17,hp:148},
+    {n:'Whispercap Moth Chorus',w:'Umbraria',o:'Natural',cr:1,ac:13,hp:33},
+  ];
+  // 115 principal creatures from Bestiary of the Seven Worlds
+
   // ─── Generators (setting-flavored) ───────────────────────────────────────
   const GENERATORS = {
     factionTypes: [
@@ -538,6 +657,7 @@
     else if (viewName === 'sessions') renderSessions();
     else if (viewName === 'party') renderParty();
     else if (viewName === 'combat') renderCombat();
+    else if (viewName === 'bestiary') renderBestiary();
     else if (viewName === 'factions') renderFactions();
     else if (viewName === 'forces') renderForces();
     else if (viewName === 'notes') renderNotes();
@@ -548,7 +668,7 @@
     const hasActive = !!getActive();
     $$('.nav-item').forEach(btn => {
       const v = btn.dataset.view;
-      if (v === 'campaigns' || v === 'tools') {
+      if (v === 'campaigns' || v === 'tools' || v === 'bestiary') {
         btn.disabled = false;
       } else {
         btn.disabled = !hasActive;
@@ -2280,6 +2400,147 @@
     }
   }
 
+  function combatantFromBestiary(b, side) {
+    const originSide = side || (b.o === 'Wardenborn' || b.o === 'Natural' ? 'enemy' : 'enemy');
+    return {
+      id: uid(),
+      sourceId: null,
+      name: b.n,
+      init: 10,
+      hp: b.hp,
+      hpMax: b.hp,
+      ac: b.ac,
+      conditions: '',
+      side: originSide,
+      notes: `CR ${b.cr} · ${b.o} · ${b.w}`
+    };
+  }
+
+  function addBestiaryToCombat(b) {
+    const c = getActive();
+    if (!c) { toast('Open a campaign first'); return; }
+    const combat = getCombat(c);
+    combat.combatants.push(combatantFromBestiary(b));
+    save();
+    toast(`${b.n} added to combat`);
+  }
+
+  function addBestiaryAsVillain(b) {
+    const c = getActive();
+    if (!c) { toast('Open a campaign first'); return; }
+    ensureCampaignShape(c);
+    c.villains.push({
+      id: uid(),
+      name: b.n,
+      player: 'NPC',
+      type: 'villain',
+      class: b.o,
+      level: Math.max(1, Math.round(Number(b.cr) || 1)),
+      world: b.w,
+      hp: b.hp,
+      hpMax: b.hp,
+      ac: b.ac,
+      speed: '30 ft.',
+      str: 10, dex: 12, con: 12, int: 8, wis: 10, cha: 8,
+      profBonus: 2,
+      attacks: '',
+      features: `${b.o} creature of ${b.w}`,
+      notes: `CR ${b.cr}. From Bestiary of the Seven Worlds.`,
+      corruption: b.o === 'Swordborn' || b.o === 'Sword-Touched' ? 2 : 0,
+      subclass: '', race: '', background: '', alignment: '', saves: '', skills: '', equipment: ''
+    });
+    c.updatedAt = new Date().toISOString();
+    save();
+    toast(`${b.n} saved as Villain`);
+  }
+
+  async function combatPickBestiary() {
+    const c = getActive();
+    if (!c) return;
+    const world = c.currentWorld || '';
+    const filtered = world ? BESTIARY.filter(b => b.w === world) : BESTIARY;
+    const pool = filtered.length ? filtered : BESTIARY;
+    // Show searchable multi-pick of up to ~30 entries from pool sorted by CR
+    const sorted = [...pool].sort((a, b) => a.cr - b.cr || a.n.localeCompare(b.n));
+    const options = sorted.map((b, i) =>
+      `<label class="pick-row" style="display:flex;align-items:center;gap:0.5rem;margin:0.3rem 0;cursor:pointer">
+        <input type="checkbox" class="pick-cb" value="${i}" />
+        <span><strong>${escapeHtml(b.n)}</strong> <span class="muted small">CR ${b.cr} · ${escapeHtml(b.o)} · AC ${b.ac} HP ${b.hp}</span></span>
+      </label>`
+    ).join('');
+    const ok = await openModal({
+      title: world ? `Bestiary — ${world}` : 'Add from Bestiary',
+      bodyHtml: `<p class="muted small" style="margin-bottom:0.6rem">${sorted.length} creatures${world ? ' on ' + world : ''}. Select one or more.</p>
+        <div style="max-height:50vh;overflow-y:auto">${options}</div>`,
+      confirmText: 'Add to Combat',
+      wide: true,
+      onConfirm: () => {
+        const checked = $$('.pick-cb:checked');
+        if (!checked.length) { toast('Select at least one'); return false; }
+        const combat = getCombat(c);
+        checked.forEach(cb => {
+          const b = sorted[parseInt(cb.value, 10)];
+          if (b) combat.combatants.push(combatantFromBestiary(b));
+        });
+        save();
+        return true;
+      }
+    });
+    if (ok) { toast('Added to combat'); renderCombat(); }
+  }
+
+  async function combatRandomEncounter() {
+    const c = getActive();
+    if (!c) { toast('Open a campaign first'); return; }
+    const world = c.currentWorld || '';
+    // Estimate party tier from average level
+    const levels = (c.party || []).map(p => Number(p.level) || 1);
+    const avgLevel = levels.length ? levels.reduce((a, b) => a + b, 0) / levels.length : 3;
+    // Target CR band roughly party level / 2 to party level
+    const minCr = Math.max(0, avgLevel * 0.4 - 1);
+    const maxCr = avgLevel + 2;
+    let pool = BESTIARY.filter(b => b.cr >= minCr && b.cr <= maxCr);
+    if (world) {
+      const worldPool = pool.filter(b => b.w === world);
+      if (worldPool.length) pool = worldPool;
+    }
+    if (!pool.length) pool = world ? BESTIARY.filter(b => b.w === world) : BESTIARY;
+    if (!pool.length) { toast('No creatures match'); return; }
+
+    // Prefer 1–3 creatures totaling ~party CR budget
+    const budget = Math.max(1, avgLevel * 1.2);
+    const picks = [];
+    let spent = 0;
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    for (const b of shuffled) {
+      if (picks.length >= 3) break;
+      if (spent > 0 && spent + b.cr > budget * 1.5) continue;
+      picks.push(b);
+      spent += b.cr;
+      if (spent >= budget * 0.7 && picks.length >= 1 && Math.random() < 0.5) break;
+    }
+    if (!picks.length) picks.push(shuffled[0]);
+
+    const lines = picks.map(b => `• <strong>${escapeHtml(b.n)}</strong> — CR ${b.cr}, AC ${b.ac}, HP ${b.hp} (${escapeHtml(b.o)}, ${escapeHtml(b.w)})`).join('<br>');
+    const ok = await openModal({
+      title: 'Random Encounter',
+      bodyHtml: `<p class="muted small">World: <strong>${escapeHtml(world || 'Any')}</strong> · Party avg level ~${avgLevel.toFixed(1)} · Target CR ${minCr.toFixed(1)}–${maxCr.toFixed(1)}</p>
+        <p style="margin:0.75rem 0">${lines}</p>
+        <p class="muted small">Add these to the combat tracker?</p>`,
+      confirmText: 'Add to Combat',
+      onConfirm: () => {
+        const combat = getCombat(c);
+        picks.forEach(b => combat.combatants.push(combatantFromBestiary(b)));
+        save();
+        return true;
+      }
+    });
+    if (ok) {
+      toast(`Encounter: ${picks.map(p => p.n).join(', ')}`);
+      renderCombat();
+    }
+  }
+
   function bindCombatListeners() {
     $('#combat-next-btn')?.addEventListener('click', combatNextTurn);
     $('#combat-clear-btn')?.addEventListener('click', async () => {
@@ -2302,9 +2563,81 @@
       ensureCampaignShape(c);
       combatPickFromList(c.villains, 'enemy', 'Add from Villains');
     });
+    $('#combat-add-bestiary-btn')?.addEventListener('click', combatPickBestiary);
+    $('#combat-random-enc-btn')?.addEventListener('click', combatRandomEncounter);
     $('#combat-quick-add-btn')?.addEventListener('click', combatQuickAdd);
     $('#combat-roll-init-btn')?.addEventListener('click', combatRollInit);
     $('#combat-sort-btn')?.addEventListener('click', combatSortInit);
+  }
+
+  // ─── Bestiary ────────────────────────────────────────────────────────────
+  function bestiaryMatches(b, q, world, origin, crBand) {
+    if (world && b.w !== world) return false;
+    if (origin && b.o !== origin) return false;
+    if (q) {
+      const hay = (b.n + ' ' + b.w + ' ' + b.o).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (crBand) {
+      const cr = Number(b.cr);
+      if (crBand === '0-2' && !(cr <= 2)) return false;
+      if (crBand === '3-5' && !(cr >= 3 && cr <= 5)) return false;
+      if (crBand === '6-9' && !(cr >= 6 && cr <= 9)) return false;
+      if (crBand === '10-14' && !(cr >= 10 && cr <= 14)) return false;
+      if (crBand === '15+' && !(cr >= 15)) return false;
+    }
+    return true;
+  }
+
+  function originClass(o) {
+    return String(o || '').toLowerCase().replace(/\s+/g, '-');
+  }
+
+  function renderBestiary() {
+    const list = $('#bestiary-list');
+    const countEl = $('#bestiary-count');
+    if (!list) return;
+    const q = ($('#bestiary-search')?.value || '').trim().toLowerCase();
+    const world = $('#bestiary-world')?.value || '';
+    const origin = $('#bestiary-origin')?.value || '';
+    const crBand = $('#bestiary-cr')?.value || '';
+    const filtered = BESTIARY.filter(b => bestiaryMatches(b, q, world, origin, crBand))
+      .sort((a, b) => a.n.localeCompare(b.n));
+    countEl.textContent = `${filtered.length} of ${BESTIARY.length} creatures`;
+    list.innerHTML = '';
+    filtered.forEach(b => {
+      const card = document.createElement('div');
+      card.className = 'bestiary-card';
+      card.innerHTML = `
+        <h3>${escapeHtml(b.n)}</h3>
+        <div class="bestiary-meta">
+          <span class="origin-tag ${originClass(b.o)}">${escapeHtml(b.o)}</span>
+          <span>${escapeHtml(b.w)}</span>
+        </div>
+        <div class="bestiary-stats">
+          <span class="stat-chip">CR ${b.cr}</span>
+          <span class="stat-chip">AC ${b.ac}</span>
+          <span class="stat-chip">HP ${b.hp}</span>
+        </div>
+        <div class="actions">
+          <button class="btn primary btn-combat">+ Combat</button>
+          <button class="btn secondary btn-villain">+ Villain</button>
+        </div>
+      `;
+      card.querySelector('.btn-combat').addEventListener('click', () => addBestiaryToCombat(b));
+      card.querySelector('.btn-villain').addEventListener('click', () => addBestiaryAsVillain(b));
+      list.appendChild(card);
+    });
+  }
+
+  function bindBestiaryListeners() {
+    ['bestiary-search', 'bestiary-world', 'bestiary-origin', 'bestiary-cr'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || el.dataset.wired) return;
+      el.dataset.wired = '1';
+      el.addEventListener('input', renderBestiary);
+      el.addEventListener('change', renderBestiary);
+    });
   }
 
   // ─── Dice Roller ─────────────────────────────────────────────────────────
@@ -2527,6 +2860,7 @@
     bindOverviewListeners();
     bindNotes();
     bindCombatListeners();
+    bindBestiaryListeners();
     setupDice();
 
     $('#export-btn').addEventListener('click', exportData);

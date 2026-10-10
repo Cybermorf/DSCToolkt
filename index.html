@@ -59,6 +59,10 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5L18 3h3v3l-3.5 3.5"/></svg>
           Combat
         </button>
+        <button class="nav-item" data-view="bestiary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></svg>
+          Bestiary
+        </button>
         <button class="nav-item" data-view="factions" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Factions &amp; Rep
@@ -190,7 +194,7 @@
             <button id="combat-next-btn" class="btn primary">Next Turn</button>
           </div>
         </div>
-        <p class="view-desc">Track initiative, HP, and conditions. Add combatants from Party, Villains, or create temporary ones. State is saved with the campaign.</p>
+        <p class="view-desc">Track initiative, HP, and conditions. Add from Party, Villains, Bestiary, or Quick Add. Use <strong>Random Encounter</strong> for a CR-scaled pull from the current world.</p>
         <div class="combat-toolbar">
           <div class="combat-meta">
             <span class="stat-pill">Round <strong id="combat-round">1</strong></span>
@@ -199,15 +203,55 @@
           <div class="tool-btns">
             <button id="combat-add-party-btn" class="btn secondary">+ From Party</button>
             <button id="combat-add-villain-btn" class="btn secondary">+ From Villains</button>
+            <button id="combat-add-bestiary-btn" class="btn secondary">+ From Bestiary</button>
             <button id="combat-quick-add-btn" class="btn secondary">Quick Add</button>
+            <button id="combat-random-enc-btn" class="btn primary">🎲 Random Encounter</button>
             <button id="combat-roll-init-btn" class="btn secondary">Roll Init</button>
             <button id="combat-sort-btn" class="btn secondary">Sort by Init</button>
           </div>
         </div>
         <div id="combat-list" class="combat-list"></div>
         <div id="empty-combat" class="empty-state">
-          <p>No combatants. Add from Party, Villains, or Quick Add to start tracking.</p>
+          <p>No combatants. Add from Party, Villains, Bestiary, or roll a Random Encounter.</p>
         </div>
+      </section>
+
+      <!-- Bestiary View -->
+      <section id="view-bestiary" class="view">
+        <div class="view-header">
+          <h1>Bestiary of the Seven Worlds</h1>
+        </div>
+        <p class="view-desc">115 principal creatures from the Dark Sun Chronicles bestiary. Filter by world, origin, or CR. Add any creature to the Combat Tracker or save it as a Villain on the roster.</p>
+        <div class="bestiary-filters">
+          <input type="search" id="bestiary-search" placeholder="Search name…" />
+          <select id="bestiary-world">
+            <option value="">All Worlds</option>
+            <option value="Luminaris">Luminaris</option>
+            <option value="Umbraria">Umbraria</option>
+            <option value="Eternum">Eternum</option>
+            <option value="Solara">Solara</option>
+            <option value="Aetheria">Aetheria</option>
+            <option value="Harmonia">Harmonia</option>
+            <option value="Celestia">Celestia</option>
+          </select>
+          <select id="bestiary-origin">
+            <option value="">All Origins</option>
+            <option value="Natural">Natural</option>
+            <option value="Swordborn">Swordborn</option>
+            <option value="Wardenborn">Wardenborn</option>
+            <option value="Sword-Touched">Sword-Touched</option>
+          </select>
+          <select id="bestiary-cr">
+            <option value="">Any CR</option>
+            <option value="0-2">CR 0–2</option>
+            <option value="3-5">CR 3–5</option>
+            <option value="6-9">CR 6–9</option>
+            <option value="10-14">CR 10–14</option>
+            <option value="15+">CR 15+</option>
+          </select>
+        </div>
+        <p class="muted small" id="bestiary-count"></p>
+        <div id="bestiary-list" class="bestiary-grid"></div>
       </section>
 
       <!-- Factions View -->

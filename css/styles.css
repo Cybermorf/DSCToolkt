@@ -1460,3 +1460,70 @@ label.small {
   }
   .combat-actions { justify-content: flex-end; }
 }
+
+/* ─── Bestiary ──────────────────────────────────────────────────────────── */
+.bestiary-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  align-items: center;
+}
+.bestiary-filters input[type="search"],
+.bestiary-filters select {
+  width: auto;
+  min-width: 140px;
+  flex: 1 1 140px;
+  max-width: 220px;
+}
+.bestiary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+.bestiary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.bestiary-card h3 {
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.25;
+}
+.bestiary-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+}
+.origin-tag {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.origin-tag.natural { background: rgba(106, 158, 106, 0.2); color: var(--success); }
+.origin-tag.swordborn { background: rgba(196, 92, 74, 0.2); color: var(--danger); }
+.origin-tag.wardenborn { background: rgba(90, 138, 184, 0.25); color: var(--info); }
+.origin-tag.sword-touched { background: rgba(196, 122, 212, 0.2); color: #c47ad4; }
+.bestiary-stats {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.bestiary-card .actions {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+  flex-wrap: wrap;
+}
