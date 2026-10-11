@@ -597,7 +597,7 @@
     else if (viewName === 'factions') renderFactions();
     else if (viewName === 'forces') renderForces();
     else if (viewName === 'notes') renderNotes();
-    else if (viewName === 'tools') renderTools();
+    else if (viewName === 'tools') { renderCompendiumTools(); renderTools(); }
   }
 
   function updateNavEnabled() {
@@ -1256,7 +1256,213 @@
   
   
   
-  function getSpellLibrary() {
+  
+  function getUserCompendium() {
+    try {
+      return JSON.parse(localStorage.getItem('dsc_compendium_extra') || '{"spells":[],"equipment":[]}');
+    } catch (e) {
+      return { spells: [], equipment: [] };
+    }
+  }
+
+  function saveUserCompendium(data) {
+    localStorage.setItem('dsc_compendium_extra', JSON.stringify(data));
+  }
+
+  function mergeSpellRecord(raw) {
+    if (!raw || !raw.name) return null;
+    const name = String(raw.name).trim();
+    const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const level = raw.level != null ? Number(raw.level) : (String(raw.levelText || '').toLowerCase().includes('cantrip') ? 0 : parseInt(raw.levelText, 10) || 0);
+    return {
+      id,
+      name,
+      level: isNaN(level) ? 0 : level,
+      school: raw.school || 'Unknown',
+      time: raw.time || raw.castingTime || raw.casting_time || '—',
+      range: raw.range || '—',
+      components: raw.components || '—',
+      duration: raw.duration || '—',
+      classes: Array.isArray(raw.classes) ? raw.classes : String(raw.classes || '').split(/[,;]/).map(s => s.trim()).filter(Boolean),
+      summary: raw.summary || (raw.description || '').slice(0, 200),
+      description: raw.description || raw.text || raw.summary || '',
+      ritual: !!(raw.ritual),
+      concentration: !!(raw.concentration) || /concentration/i.test(String(raw.duration || '')),
+      source: raw.source || raw.edition || 'Imported'
+    };
+  }
+
+  function mergeEquipmentRecord(raw) {
+    if (!raw || !raw.name) return null;
+    const name = String(raw.name).trim();
+    const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const cat = (raw.category || raw.type || 'gear').toLowerCase();
+    const item = {
+      id,
+      name,
+      category: ['armor','weapon','shield','gear','tool'].includes(cat) ? cat : 'gear',
+      cost: raw.cost || '',
+      weight: raw.weight != null ? Number(raw.weight) || 0 : 0,
+      notes: raw.notes || raw.description || '',
+      source: raw.source || raw.edition || 'Imported'
+    };
+    if (item.category === 'armor') {
+      item.armorType = raw.armorType || raw.armor_type || 'light';
+      item.acBase = raw.acBase != null ? Number(raw.acBase) : (raw.ac != null ? Number(raw.ac) : 11);
+      item.acDexMax = raw.acDexMax != null ? raw.acDexMax : null;
+    }
+    if (item.category === 'shield') {
+      item.armorType = 'shield';
+      item.acBonus = raw.acBonus != null ? Number(raw.acBonus) : 2;
+    }
+    if (item.category === 'weapon') {
+      item.weaponType = raw.weaponType || raw.weapon_type || '';
+      item.damage = raw.damage || '';
+      item.damageType = raw.damageType || raw.damage_type || '';
+      item.props = raw.props || raw.properties || '';
+    }
+    return item;
+  }
+
+  function applyCompendiumToRuntime() {
+    const baseSpells = (window.SPELLS_BASE || window.SPELLS || []).slice();
+    const baseEquip = (window.EQUIPMENT_BASE || window.EQUIPMENT || []).slice();
+    if (!window.SPELLS_BASE) window.SPELLS_BASE = baseSpells.map(s => ({ ...s }));
+    if (!window.EQUIPMENT_BASE) window.EQUIPMENT_BASE = baseEquip.map(e => ({ ...e }));
+    const extra = getUserCompendium();
+    const spellMap = new Map(window.SPELLS_BASE.map(s => [s.id, s]));
+    (extra.spells || []).forEach(s => {
+      const m = mergeSpellRecord(s);
+      if (m) spellMap.set(m.id, m);
+    });
+    const eqMap = new Map(window.EQUIPMENT_BASE.map(e => [e.id, e]));
+    (extra.equipment || []).forEach(e => {
+      const m = mergeEquipmentRecord(e);
+      if (m) eqMap.set(m.id, m);
+    });
+    window.SPELLS = [...spellMap.values()].sort((a,b) => (a.level-b.level) || a.name.localeCompare(b.name));
+    window.EQUIPMENT = [...eqMap.values()];
+  }
+
+  function importCompendiumPack(obj) {
+    // Flexible: accepts DSCToolkt-compendium-v1, or raw {spells:[], equipment:[]},
+    // or Open5e-ish / homebrew arrays
+    let spellsIn = [];
+    let equipIn = [];
+    let meta = { edition: '', source: '', attribution: '' };
+    if (Array.isArray(obj)) {
+      // Heuristic: spells have level/school, equipment have category/cost
+      obj.forEach(row => {
+        if (row.level != null || row.school || row.castingTime || row.casting_time) spellsIn.push(row);
+        else equipIn.push(row);
+      });
+    } else if (obj && typeof obj === 'object') {
+      meta.edition = obj.edition || obj.system || '';
+      meta.source = obj.source || obj.name || '';
+      meta.attribution = obj.attribution || '';
+      spellsIn = obj.spells || obj.spell || obj.Spells || [];
+      equipIn = obj.equipment || obj.items || obj.gear || obj.Equipment || [];
+      // 5e.tools / other
+      if (!spellsIn.length && obj.compendium?.spells) spellsIn = obj.compendium.spells;
+      if (!equipIn.length && obj.compendium?.items) equipIn = obj.compendium.items;
+    }
+    const extra = getUserCompendium();
+    const spellMap = new Map((extra.spells || []).map(s => [s.id || s.name, s]));
+    let sCount = 0, eCount = 0;
+    spellsIn.forEach(raw => {
+      const m = mergeSpellRecord(raw);
+      if (m) { spellMap.set(m.id, m); sCount++; }
+    });
+    const eqMap = new Map((extra.equipment || []).map(e => [e.id || e.name, e]));
+    equipIn.forEach(raw => {
+      const m = mergeEquipmentRecord(raw);
+      if (m) { eqMap.set(m.id, m); eCount++; }
+    });
+    const next = {
+      spells: [...spellMap.values()],
+      equipment: [...eqMap.values()],
+      meta: { ...(extra.meta || {}), ...meta, updatedAt: new Date().toISOString() }
+    };
+    saveUserCompendium(next);
+    applyCompendiumToRuntime();
+    return { spells: sCount, equipment: eCount, totalSpells: window.SPELLS.length, totalEquipment: window.EQUIPMENT.length };
+  }
+
+  function renderCompendiumTools() {
+    const root = $('#compendium-tools');
+    if (!root) return;
+    const extra = getUserCompendium();
+    const sN = (extra.spells || []).length;
+    const eN = (extra.equipment || []).length;
+    root.innerHTML = `
+      <div class="compendium-panel">
+        <h3>Compendium Import</h3>
+        <p class="muted small">Import JSON packs of spells and equipment from any edition-style source. Built-in data includes <strong>SRD 5.2.1</strong> (CC-BY-4.0). Imported entries merge by id/name and override duplicates.</p>
+        <p class="muted small">Supported shapes: <code>DSCToolkt-compendium-v1</code> (<code>{ spells:[], equipment:[] }</code>), raw arrays, or objects with <code>items</code>/<code>spell</code> keys.</p>
+        <div class="form-row">
+          <button type="button" class="btn primary" id="comp-import-btn">Import JSON Pack</button>
+          <button type="button" class="btn secondary" id="comp-export-btn">Export User Pack</button>
+          <button type="button" class="btn danger" id="comp-clear-btn">Clear User Imports</button>
+          <input type="file" id="comp-import-file" accept=".json,application/json" hidden />
+        </div>
+        <p class="muted small">User imports: <strong>${sN}</strong> spells · <strong>${eN}</strong> equipment · Runtime totals: <strong>${(window.SPELLS||[]).length}</strong> spells · <strong>${(window.EQUIPMENT||[]).length}</strong> equipment</p>
+        <details class="compendium-sample">
+          <summary>Sample pack format</summary>
+          <pre class="sample-pre">{
+  "format": "DSCToolkt-compendium-v1",
+  "edition": "5e-srd-5.2.1",
+  "source": "My Homebrew",
+  "spells": [{ "name": "Example Bolt", "level": 0, "school": "Evocation", "time": "Action", "range": "60 feet", "components": "V, S", "duration": "Instantaneous", "classes": ["Wizard"], "description": "Ranged spell attack, 1d10 force." }],
+  "equipment": [{ "name": "Moonsteel Blade", "category": "weapon", "damage": "1d8", "damageType": "slashing", "props": "Finesse", "cost": "50 GP" }]
+}</pre>
+        </details>
+      </div>`;
+    $('#comp-import-btn')?.addEventListener('click', () => $('#comp-import-file')?.click());
+    $('#comp-import-file')?.addEventListener('change', () => {
+      const f = $('#comp-import-file').files?.[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const obj = JSON.parse(reader.result);
+          const res = importCompendiumPack(obj);
+          toast(`Imported ${res.spells} spells, ${res.equipment} equipment`);
+          renderCompendiumTools();
+        } catch (err) {
+          console.warn(err);
+          toast('Import failed — invalid JSON');
+        }
+        $('#comp-import-file').value = '';
+      };
+      reader.readAsText(f);
+    });
+    $('#comp-export-btn')?.addEventListener('click', () => {
+      const extra = getUserCompendium();
+      const pack = {
+        format: 'DSCToolkt-compendium-v1',
+        edition: extra.meta?.edition || 'user',
+        source: extra.meta?.source || 'User Import',
+        attribution: extra.meta?.attribution || '',
+        spells: extra.spells || [],
+        equipment: extra.equipment || []
+      };
+      const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'dsc-compendium-user.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    $('#comp-clear-btn')?.addEventListener('click', () => {
+      if (!confirm('Remove all user-imported spells and equipment?')) return;
+      saveUserCompendium({ spells: [], equipment: [] });
+      applyCompendiumToRuntime();
+      toast('User compendium cleared');
+      renderCompendiumTools();
+    });
+  }
+
+function getSpellLibrary() {
     return (typeof window !== 'undefined' && window.SPELLS) ? window.SPELLS : [];
   }
 
@@ -1290,24 +1496,39 @@
 
   function spellCardHtml(sp, opts = {}) {
     if (!sp) return '';
-    const lvl = sp.level === 0 ? 'Cantrip' : `${sp.level}${sp.level===1?'st':sp.level===2?'nd':sp.level===3?'rd':'th'}-level`;
+    const lvl = sp.level === 0
+      ? `${escapeHtml(sp.school)} Cantrip`
+      : `${sp.level}${sp.level===1?'st':sp.level===2?'nd':sp.level===3?'rd':'th'}-level ${escapeHtml(sp.school)}`;
     const tags = [
       sp.ritual ? 'Ritual' : '',
       sp.concentration ? 'Concentration' : ''
-    ].filter(Boolean).join(' · ');
+    ].filter(Boolean);
+    const desc = sp.description || sp.summary || '';
     return `<article class="spell-card" data-spell-id="${escapeAttr(sp.id)}">
-      <header class="spell-card-head">
-        <div class="spell-card-title">${escapeHtml(sp.name)}</div>
-        <div class="spell-card-sub">${escapeHtml(lvl)} ${escapeHtml(sp.school)}${tags ? ' · ' + escapeHtml(tags) : ''}</div>
-      </header>
-      <div class="spell-card-meta">
-        <div><span>Casting Time</span><strong>${escapeHtml(sp.time)}</strong></div>
-        <div><span>Range</span><strong>${escapeHtml(sp.range)}</strong></div>
-        <div><span>Components</span><strong>${escapeHtml(sp.components)}</strong></div>
-        <div><span>Duration</span><strong>${escapeHtml(sp.duration)}</strong></div>
+      <div class="spell-card-banner">
+        <div class="spell-card-name">${escapeHtml(sp.name)}</div>
+        <div class="spell-card-level">${lvl}${tags.length ? ' · ' + tags.map(t => escapeHtml(t)).join(' · ') : ''}</div>
       </div>
-      <p class="spell-card-body">${escapeHtml(sp.summary)}</p>
-      ${opts.removable ? `<button type="button" class="btn danger btn-tiny spell-remove" data-spell-id="${escapeAttr(sp.id)}">Remove</button>` : ''}
+      <div class="spell-card-stats">
+        <div class="spell-stat">
+          <div class="spell-stat-label">Casting Time</div>
+          <div class="spell-stat-value">${escapeHtml(sp.time || '—')}</div>
+        </div>
+        <div class="spell-stat">
+          <div class="spell-stat-label">Range</div>
+          <div class="spell-stat-value">${escapeHtml(sp.range || '—')}</div>
+        </div>
+        <div class="spell-stat">
+          <div class="spell-stat-label">Duration</div>
+          <div class="spell-stat-value">${escapeHtml(sp.duration || '—')}</div>
+        </div>
+        <div class="spell-stat">
+          <div class="spell-stat-label">Components</div>
+          <div class="spell-stat-value">${escapeHtml(sp.components || '—')}</div>
+        </div>
+      </div>
+      <div class="spell-card-desc">${escapeHtml(desc).split(String.fromCharCode(10)).join('<br>')}</div>
+      ${opts.removable ? `<div class="spell-card-actions"><button type="button" class="btn danger btn-tiny spell-remove" data-spell-id="${escapeAttr(sp.id)}">Remove</button></div>` : ''}
     </article>`;
   }
 
@@ -1788,7 +2009,7 @@ const FEATURE_SECTION = {
       const lf = levelF?.value || 'all';
       let list = spellsForClass(cname);
       if (lf !== 'all') list = list.filter(s => String(s.level) === lf);
-      if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || (s.school || '').toLowerCase().includes(q) || (s.summary || '').toLowerCase().includes(q));
+      if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || (s.school || '').toLowerCase().includes(q) || (s.summary || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
       list = list.slice(0, 30);
       const have = new Set(getIds());
       if (!list.length) {
@@ -1800,7 +2021,7 @@ const FEATURE_SECTION = {
         const added = have.has(s.id);
         return `<li class="spell-search-item">
           <div><strong>${escapeHtml(s.name)}</strong> <span class="muted small">${lvl} · ${escapeHtml(s.school)}</span>
-          <div class="muted small">${escapeHtml(s.summary.slice(0, 100))}${s.summary.length > 100 ? '…' : ''}</div></div>
+          <div class="muted small">${escapeHtml((s.description || s.summary || '').slice(0, 140))}${(s.description || s.summary || '').length > 140 ? '…' : ''}</div></div>
           <button type="button" class="btn secondary btn-tiny spell-add" data-spell-id="${escapeAttr(s.id)}" ${added ? 'disabled' : ''}>${added ? 'Added' : 'Add'}</button>
         </li>`;
       }).join('')}</ul>`;
@@ -3269,6 +3490,27 @@ function parseAttackLines(ch) {
       .p-spell-wrap .cs-stat-val { font-size: 1.1rem; font-weight: 700; color: #c4a35a; }
       .p-spell-wrap .cs-stat-label { font-size: 0.6rem; color: #a89880; text-transform: uppercase; }
       .p-spell-wrap .cs-pre { white-space: pre-wrap; font-family: inherit; font-size: 0.78rem; margin: 2px 0 0; }
+      .spell-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .spell-card {
+        border: 1px solid rgba(196,163,90,0.45); border-radius: 4px; overflow: hidden;
+        background: rgba(28,22,18,0.95); break-inside: avoid; page-break-inside: avoid;
+        font-size: 9pt;
+      }
+      .spell-card-banner { background: rgba(196,163,90,0.12); border-bottom: 1px solid rgba(196,163,90,0.3); padding: 6px 8px; }
+      .spell-card-name { font-weight: 700; font-size: 11pt; color: #f0e6d0; }
+      .spell-card-level { font-size: 8pt; color: #a89880; font-style: italic; }
+      .spell-card-stats {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+        border-bottom: 1px solid rgba(196,163,90,0.25);
+      }
+      .spell-stat { padding: 4px 6px; border-right: 1px solid rgba(196,163,90,0.2); border-bottom: 1px solid rgba(196,163,90,0.15); }
+      .spell-stat:nth-child(2n) { border-right: none; }
+      .spell-stat-label {
+        font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; color: #a89880; font-weight: 700;
+      }
+      .spell-stat-value { font-size: 9pt; color: #e8dcc8; font-weight: 600; }
+      .spell-card-desc { padding: 6px 8px; font-size: 8.5pt; line-height: 1.3; color: #e8dcc8; }
+      .spell-card-actions { display: none; }
       @media print {
         body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #14110e; }
         .p-panel, .p-box, .p-atk, .p-ab { break-inside: avoid; page-break-inside: avoid; }
@@ -5132,6 +5374,7 @@ function renderUmbrarians() {
 
   // ─── Init ────────────────────────────────────────────────────────────────
   function init() {
+    try { applyCompendiumToRuntime(); } catch (e) { console.warn(e); }
     load();
     updateNavEnabled();
 
