@@ -9,12 +9,12 @@
   --bg-hover: #2c2622;
   --border: #3d342e;
   --border-subtle: #2a241f;
-  --text: #e8e0d5;
-  --text-muted: #a89888;
-  --text-dim: #6b5d52;
-  --accent: #e8a838;
-  --accent-dim: #c48a2a;
-  --accent-glow: rgba(232, 168, 56, 0.25);
+  --text: #e8dcc8;
+  --text-muted: #a89880;
+  --text-dim: #7a6c5c;
+  --accent: #c4a35a;
+  --accent-dim: #a88b45;
+  --accent-glow: rgba(196, 163, 90, 0.28);
   --danger: #c45c4a;
   --success: #6a9e6a;
   --info: #5a8ab8;
@@ -38,6 +38,7 @@ body {
   font-family: var(--font);
   background: var(--bg-deep);
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
   min-height: 100dvh;
   line-height: 1.5;
   overflow-x: hidden;
@@ -2424,4 +2425,26 @@ label.small {
 }
 @media (max-width: 700px) {
   .force-disrupt-row { grid-template-columns: 1fr; }
+}
+
+
+/* Print-matched sheet text (parchment cream) */
+.cs-sheet, .cs-sheet .cs-body, .cs-sheet .cs-pre, .cs-sheet .trait-list,
+.cs-sheet .detail-text, .modal-body, .view, .card, .creature-card {
+  color: var(--text);
+}
+.cs-sheet .muted, .muted, .cs-char-meta, .cs-stat-label, .cs-panel-title {
+  color: var(--text-muted);
+}
+.cs-char-name, .cs-stat-val, .cs-mini-val, .spell-card-name, .cs-page-title {
+  color: #f0e6d0;
+}
+.cs-panel-title, .section-label, h1, h2, h3 {
+  color: var(--accent);
+}
+input, select, textarea {
+  color: var(--text);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-dim);
 }

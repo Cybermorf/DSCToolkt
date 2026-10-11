@@ -1,111 +1,162 @@
-# Dark Sun Chronicles — DM Companion
+# DSC Toolkt — Dark Sun Chronicles DM Companion
 
-A lightweight, offline-first companion web app for **The Dark Sun Chronicles: Dungeon Master’s Guide**.
+Offline-first companion app for **The Dark Sun Chronicles** (Eldoria / Seven Worlds). Tracks campaigns, party sheets, DIE forces, bestiary, combat, and more. Pure static HTML/CSS/JS — no backend.
 
-Track multiple living campaigns across the Seven Worlds of Eldoria (Luminaris • Umbraria • Eternum • Solara • Aetheria • Harmonia • Celestia), log sessions, manage party members, track faction reputation (−3 to +3), maintain active forces for the Dynamic Influence Engine, keep free-form notes, and roll dice — all from a single static page that works in any modern browser.
-
-![Theme](https://img.shields.io/badge/theme-dark%20fantasy-e8a838) ![Storage](https://img.shields.io/badge/storage-localStorage-6a9e6a) ![Deploy](https://img.shields.io/badge/deploy-GitHub%20Pages-2088FF)
-
-## Features
-
-| Feature | Description |
-|--------|-------------|
-| **Multiple Campaigns** | Create, switch, edit, and delete independent campaigns. Each keeps its own data. |
-| **Overview** | Current world, campaign tier (Local → Cosmic), status, goals & hooks. |
-| **Session Log** | Date, title, summary, worlds visited. Chronological living record. |
-| **Party Tracker** | Characters with class, level, player name, and notes (corruption, bonds, status). |
-| **Factions & Reputation** | Track factions with the −3 to +3 reputation scale from the DMG. Quick +/− buttons. |
-| **Active Forces** | Record antagonists, cults, disasters, and other forces with goals, resources, and status — the heart of the Dynamic Influence Engine. |
-| **Campaign Notes** | Free-form notes area (auto-saves). |
-| **Dice Roller** | d4–d100, count + modifier, advantage/disadvantage, custom formulas (`2d6+3`), roll history. Always available via the header button. |
-| **Export / Import** | Full JSON backup and restore. Recommended before clearing browser data. |
-| **Offline / PWA-ready** | Works after first load with no internet. Add to home screen on mobile. |
-| **Zero backend** | Pure static HTML/CSS/JS. No accounts, no servers, no tracking. |
-
-## Quick Start (local)
-
-1. Clone or download this repository.
-2. Open `index.html` in any modern browser  
-   **or** serve the folder with any static server:
-
-   ```bash
-   # Python
-   python -m http.server 8080
-
-   # Node
-   npx serve .
-   ```
-
-3. Create a campaign and start tracking.
-
-Data is stored in the browser’s `localStorage` under the key `darkSunChronicles_v1`.
-
-## Deploy with GitHub Pages
-
-This repo is ready for GitHub Pages.
-
-### Option A — Automatic (recommended)
-
-1. Push this repository to GitHub.
-2. Go to **Settings → Pages**.
-3. Under **Source**, choose **GitHub Actions**.
-4. The included workflow (`.github/workflows/deploy.yml`) will publish the site on every push to `main`.
-5. After the first successful run, your app will be live at  
-   `https://<your-username>.github.io/<repo-name>/`
-
-### Option B — Manual / Docs branch
-
-1. Settings → Pages → Source: **Deploy from a branch**.
-2. Branch: `main` / folder: `/ (root)`.
-3. Save. The site will be available at the same URL pattern.
-
-### Custom domain (optional)
-
-Add a `CNAME` file in the root with your domain and configure DNS as usual.
-
-## GitHub Actions workflow
-
-The workflow file is already present:
-
-```yaml
-# .github/workflows/deploy.yml
-```
-
-It checks out the repo and deploys the static files to GitHub Pages. No build step is required because the app is pure static assets.
-
-## Project structure
-
-```
-dark-sun-companion/
-├── index.html          # App shell & markup
-├── css/
-│   └── styles.css      # Dark fantasy theme (void + amber sun)
-├── js/
-│   └── app.js          # All application logic & localStorage
-├── manifest.json       # PWA manifest
-├── README.md
-└── .github/
-    └── workflows/
-        └── deploy.yml  # GitHub Pages deployment
-```
-
-## Design notes
-
-- **Local-first**: Everything lives in the browser. Export regularly if the campaign matters.
-- **Setting-aligned**: Worlds, reputation scale, campaign tiers, and “Active Forces” vocabulary match the DMG’s living-campaign procedures.
-- **No frameworks**: Vanilla JS for maximum longevity and zero dependency risk.
-- **Accessible enough**: Keyboard-friendly modals (Escape closes), semantic structure, high-contrast dark theme.
-- **Mobile-friendly**: Responsive layout; sidebar collapses behind a menu button on small screens. Dice panel slides in from the right.
-
-## Privacy
-
-No analytics, no external requests after the initial page load (except whatever your browser or hosting platform may add). All campaign data never leaves your device unless you explicitly export it.
-
-## License
-
-This companion app is provided as a free tool for use with *The Dark Sun Chronicles* materials. Adapt and redistribute as needed for your table.
+Deploy: GitHub Pages ready. Local: open `index.html` or serve the folder.
 
 ---
 
-*A road does not wait because no hero walks it.*  
-— Aetherian proverb
+## Quick start
+
+1. Open `index.html` in a modern browser, **or**
+   ```bash
+   python -m http.server 8080
+   # then http://localhost:8080
+   ```
+2. **Campaigns → New Campaign**
+3. Use the sidebar to open sections (most need an active campaign)
+
+**Data:** campaign state in `localStorage` (`darkSunChronicles_v1`).  
+**Compendium imports** (Open5e / JSON packs) use **IndexedDB** so large bestiaries do not hit storage quotas.
+
+**Hard refresh** after updates: `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac).
+
+---
+
+## Section guide
+
+### Campaigns
+Create, switch, and delete campaigns. Each holds its own party, villains, forces, factions, sessions, notes, and combat state.
+
+### Overview
+Active campaign summary: world, tier, status, goals. Quick glance before a session.
+
+### Session Log
+Record sessions (date, title, summary, worlds visited). Living chronicle of the table.
+
+### Party
+Full **5e-style character sheets** for PCs (and allied NPCs):
+
+- Races (DSC + official basics), classes (PHB + DSC / Moon Guardian paths)
+- Ability scores: manual, **point buy**, or **standard array** (click-to-assign, high→low, reset)
+- HP, AC (armor/shield from inventory), proficiency, skills, features
+- **Equipment** catalog with search; equip armor/weapons to affect AC & attacks
+- **Spellcasting**: slots by class/level, known/prepared spells with full cards
+- **Umbrarian** template: stage, shard, auto Shard DC (highest of INT/WIS/CHA), corruption, gifts
+- Avatar upload (falls back to monogram)
+- **View Sheet** (multi-page), **Edit**, **Export/Import JSON**, **Print** (A4, parchment style)
+
+### Villains / NPCs
+NPC generator with stat blocks; can mark as villains. Supports Umbrarian option. Add to combat as enemies.
+
+### Combat Tracker
+Initiative order, HP editing, turn advance. Click a combatant for the detail panel.  
+Add from party, villains, or **Bestiary**. Random encounter helper available.
+
+### Bestiary
+DSC creatures with ecology, behaviour, running notes, adventure seeds.  
+**Source filter:** All / DSC only / **Imported** (Open5e or JSON).  
+Add to combat or villains. Random encounter by world/CR.
+
+### Umbrarians
+Reference section: definition (host ≠ Umbralite race), stages (Dormant / Awakened / Ascendant), common traits, corruption track (0–6), Dark Bargains, Shard Demands, the Seven Shards, NPC/PC guidance.  
+On sheets: Shard DC, attack bonus, corruption state text, stage text, generic gifts, bargains.
+
+### DSC Classes
+Moon Guardian and other DSC class writeups with progression tables and path features (e.g. Path of Luna).
+
+### Factions & Reputation
+Track factions on a **−3 to +3** scale. Notes and quick adjustments.  
+Linked to Force Turn when a force shares the faction’s name (disruption updates rep + notes).
+
+### Active Forces (Dynamic Influence Engine)
+Living antagonists with Public Face, Goal, Political / Corruptive / Disruptive influence (0–6), **Agenda Clock** (0–6), Awareness (0–4), Pressure (0–4).
+
+**Force Turn:**
+
+1. For each force, set **party disruption**: None / Minor / Major / Thwarted  
+2. Agenda clocks **retract** on disruption; influence/pressure/awareness adjust  
+3. Forces then act (disrupted ones retaliate more, advance less)  
+4. Results report + optional link to matching **Factions**
+
+### Campaign Notes
+Free-form notes; auto-save.
+
+### Tools
+- Dice roller (also always in the header)
+- Random generators (faction, force, etc.)
+- **Compendium Import** — JSON packs (`DSCToolkt-compendium-v1`: spells, equipment, creatures)
+- **Open5e API Sync** (v2 — `api.open5e.com/v2`):
+  - SRD 5.2 only (`document__key=srd-2024`) or full library  
+  - Sync **Spells**, **Weapons & Armor**, **Bestiary (creatures)**, or all  
+  - Merges into user compendium (IndexedDB); does not wipe built-in DSC/SRD seeds  
+
+### Export / Import (header)
+Full campaign JSON backup and restore. Export characters individually from the sheet.
+
+---
+
+## Character sheet notes
+
+| Feature | Behaviour |
+|--------|-----------|
+| Standard array | Click ability labels to assign 15→8; dim used values; Reset available |
+| Point buy | Live cost display within 5e budget |
+| Equipment | Search + category; equip toggles AC and attack list |
+| Spells | Only for casters; cards show time/range/duration/components + full text |
+| Print | A4 continuous layout; Attacks, Spellcasting, Equipment as their own sections |
+| Umbrarian | Stage + shard on create/edit; DC auto from best mental score |
+
+---
+
+## Open5e sync
+
+1. Open **Tools**  
+2. Optionally leave **SRD 5.2 only** checked  
+3. **Sync Spells + Equipment + Bestiary** (or a subset)  
+4. Progress appears in the status line  
+5. Bestiary → source filter **Imported** to browse; use in combat as usual  
+
+If storage errors appear after an old version, run once in the console:
+
+```js
+localStorage.removeItem('dsc_compendium_extra');
+```
+
+Then hard-refresh and sync again (data now lives in IndexedDB).
+
+---
+
+## Attribution
+
+- Built-in SRD-derived spell/equipment seeds and Open5e pulls include material from the **System Reference Document** (Wizards of the Coast) under **CC-BY-4.0** where applicable.  
+- Open5e: [github.com/open5e/open5e-api](https://github.com/open5e/open5e-api) — individual documents keep their own licenses.  
+- **The Dark Sun Chronicles** content is for the owning Player/DM’s table materials.
+
+---
+
+## Project layout
+
+```
+dark-sun-companion/
+├── index.html
+├── css/styles.css
+├── js/
+│   ├── app.js              # SPA logic
+│   ├── bestiary-data.js    # DSC creatures
+│   ├── phb-data.js         # Races, classes, Umbrarians, paths
+│   ├── equipment-data.js   # Armor, weapons, gear + spell slot tables
+│   └── spells-data.js      # Spell catalog
+├── data/                   # Optional sample packs
+├── manifest.webmanifest
+└── README.md
+```
+
+## Deploy (GitHub Pages)
+
+Settings → Pages → GitHub Actions (workflow included), or deploy `main` root as static files.  
+Site: `https://<user>.github.io/<repo>/`
+
+---
+
+*The Dark Sun Chronicles · DM Companion*

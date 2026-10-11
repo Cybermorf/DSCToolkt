@@ -3428,34 +3428,45 @@ function wireInventoryUI() {
     const u = window.UMBRARIANS || {};
     const shardInfo = (u.shards || []).find(s => s.name === ch.shard);
     const dc = computeShardDc(ch);
-    const stage = ch.umbrarianStage || 'dormant';
+    const stageId = (ch.umbrarianStage || 'dormant').toLowerCase();
+    const stageInfo = (u.stages || []).find(s => s.id === stageId || (s.name || '').toLowerCase() === stageId);
+    const stageLabel = stageInfo?.name || stageId;
+    const corr = clamp(Number(ch.corruption) || 0, 0, 6);
+    const corrInfo = (u.corruptionTrack || []).find(r => Number(r.score) === corr)
+      || (u.corruptionTrack || [])[corr]
+      || null;
     const gifts = [];
-    if (stage === 'awakened' || stage === 'ascendant') {
+    if (stageId === 'awakened' || stageId === 'ascendant') {
       (u.awakenedGiftsGeneric || []).forEach(g => gifts.push(g));
     }
-    if (stage === 'ascendant') {
+    if (stageId === 'ascendant') {
       (u.ascendantGiftsGeneric || []).forEach(g => gifts.push(g));
     }
-    const traits = (u.commonTraits || []).map(t =>
-      `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`
+    const traits = (u.commonTraits || []).map(tr =>
+      `<li><strong>${escapeHtml(tr.name)}.</strong> ${escapeHtml(tr.text)}</li>`
     ).join('');
     const giftHtml = gifts.length
       ? `<ul class="trait-list compact">${gifts.map(g => `<li><strong>${escapeHtml(g.name)}.</strong> ${escapeHtml(g.text)}</li>`).join('')}</ul>`
-      : '<p class="muted small">No gift list for this stage (Dormant observes only).</p>';
+      : '<p class="muted small">Dormant — the Shard observes; no combat gifts required.</p>';
     return `
       <div class="cs-panel cs-umb">
-        <div class="cs-panel-title">Umbrarian · ${escapeHtml(stage)} · ${escapeHtml(ch.shard || 'Shard')}</div>
+        <div class="cs-panel-title">Umbrarian · ${escapeHtml(stageLabel)} · ${escapeHtml(ch.shard || 'Shard')}</div>
         <div class="cs-umb-stats">
           <div class="cs-stat-box"><div class="cs-stat-val">${dc.dc}</div><div class="cs-stat-label">Shard DC</div><div class="cs-stat-sub muted small">${dc.ability} (${dc.mod >= 0 ? '+' : ''}${dc.mod}) · PB +${dc.pb}</div></div>
           <div class="cs-stat-box"><div class="cs-stat-val">${dc.attack >= 0 ? '+' + dc.attack : dc.attack}</div><div class="cs-stat-label">Shard Attack</div></div>
-          <div class="cs-stat-box"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>
+          <div class="cs-stat-box"><div class="cs-stat-val">${corr}/6</div><div class="cs-stat-label">Corruption</div>
+            <div class="cs-stat-sub muted small">${corrInfo ? escapeHtml(corrInfo.state) : ''}</div></div>
         </div>
-        ${shardInfo ? `<p class="cs-body"><strong>${escapeHtml(shardInfo.name)}</strong> (${escapeHtml(shardInfo.world)}) — ${escapeHtml(shardInfo.theme)}. Common awakening: ${escapeHtml(shardInfo.awakens)}</p>` : ''}
+        ${corrInfo ? `<p class="cs-body muted small"><strong>${escapeHtml(corrInfo.state)}.</strong> ${escapeHtml(corrInfo.effect)}</p>` : ''}
+        ${stageInfo ? `<p class="cs-body"><strong>Stage — ${escapeHtml(stageInfo.name)}.</strong> ${escapeHtml(stageInfo.text)}</p>` : ''}
+        ${shardInfo ? `<p class="cs-body"><strong>${escapeHtml(shardInfo.name)}</strong> (${escapeHtml(shardInfo.world)}) — ${escapeHtml(shardInfo.theme)}. <em>Awakens:</em> ${escapeHtml(shardInfo.awakens)}</p>` : ''}
         <div class="cs-panel-title" style="margin-top:0.5rem">Common Traits</div>
         <ul class="trait-list compact">${traits}</ul>
-        <div class="cs-panel-title" style="margin-top:0.5rem">Gifts (${escapeHtml(stage)})</div>
+        <div class="cs-panel-title" style="margin-top:0.5rem">Gifts (${escapeHtml(stageLabel)})</div>
         ${giftHtml}
-        <p class="muted small" style="margin-top:0.4rem">${escapeHtml(u.darkBargains || '')}</p>
+        ${u.gainingGifts ? `<p class="muted small" style="margin-top:0.35rem">${escapeHtml(u.gainingGifts)}</p>` : ''}
+        ${u.darkBargains ? `<p class="muted small" style="margin-top:0.35rem"><strong>Dark Bargains.</strong> ${escapeHtml(u.darkBargains)}</p>` : ''}
+        ${corr >= 4 && u.shardDemands ? `<p class="muted small" style="margin-top:0.35rem"><strong>Shard Demands.</strong> ${escapeHtml(u.shardDemands)}</p>` : ''}
       </div>`;
   }
 
