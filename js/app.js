@@ -1388,6 +1388,197 @@
     return { spells: sCount, equipment: eCount, totalSpells: window.SPELLS.length, totalEquipment: window.EQUIPMENT.length };
   }
 
+  
+
+  const OPEN5E_V2 = 'https://api.open5e.com/v2';
+
+  async function open5eFetchAll(path, params = {}, { maxPages = 80, onPage } = {}) {
+    const results = [];
+    const qs = new URLSearchParams({ limit: '100', ...params });
+    let url = `${OPEN5E_V2}${path}?${qs.toString()}`;
+    let page = 0;
+    while (url && page < maxPages) {
+      page++;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Open5e ${res.status} ${path}`);
+      const data = await res.json();
+      results.push(...(data.results || []));
+      if (typeof onPage === 'function') onPage(page, results.length, data.count);
+      url = data.next || null;
+    }
+    return results;
+  }
+
+  function open5eComponents(s) {
+    if (s.components) return String(s.components);
+    const parts = [];
+    if (s.verbal) parts.push('V');
+    if (s.somatic) parts.push('S');
+    if (s.material || s.material_specified) {
+      const mat = s.material_specified || s.material;
+      parts.push(mat ? `M (${mat})` : 'M');
+    }
+    return parts.length ? parts.join(', ') : '—';
+  }
+
+  function open5eCastingTime(s) {
+    let t = s.casting_time || 'action';
+    t = String(t).replace(/_/g, ' ');
+    if (/^\d/.test(t)) return t;
+    // v2 often uses "action", "bonus_action", "reaction", "1 minute"
+    if (t === 'action') return '1 action';
+    if (t === 'bonus action' || t === 'bonus_action') return '1 bonus action';
+    if (t === 'reaction') {
+      return s.reaction_condition ? `1 reaction (${s.reaction_condition})` : '1 reaction';
+    }
+    return t;
+  }
+
+  function mapOpen5eSpell(s) {
+    const level = s.level != null ? Number(s.level) : 0;
+    const classes = Array.isArray(s.classes)
+      ? s.classes.map(c => (typeof c === 'string' ? c : (c.name || ''))).filter(Boolean)
+      : [];
+    const school = typeof s.school === 'object' && s.school
+      ? (s.school.name || 'Unknown')
+      : (s.school || 'Unknown');
+    const durationRaw = s.duration || '—';
+    const concentration = s.concentration === true || /concentration/i.test(String(durationRaw));
+    const duration = concentration && !/concentration/i.test(String(durationRaw))
+      ? `Concentration, ${durationRaw}`
+      : String(durationRaw);
+    const desc = [s.desc || '', s.higher_level ? `\n\nAt Higher Levels. ${s.higher_level}` : ''].join('').trim();
+    const doc = s.document || {};
+    return mergeSpellRecord({
+      id: (s.key || s.name || '').toLowerCase().replace(/^[^_]*_/, '') || s.name,
+      name: s.name,
+      level,
+      school: String(school).replace(/^\w/, c => c.toUpperCase()),
+      time: open5eCastingTime(s),
+      range: s.range_text || (s.range != null ? `${s.range} ${s.range_unit || 'feet'}` : '—'),
+      components: open5eComponents(s),
+      duration,
+      classes,
+      description: desc,
+      summary: (s.desc || '').slice(0, 200),
+      ritual: !!s.ritual,
+      concentration,
+      source: doc.display_name || doc.name || doc.key || 'Open5e'
+    });
+  }
+
+  function mapOpen5eWeapon(w) {
+    const isSimple = w.is_simple === true;
+    const ranged = (w.range != null && Number(w.range) > 0) || (w.long_range != null && Number(w.long_range) > 0);
+    let weaponType = isSimple
+      ? (ranged ? 'simple ranged' : 'simple melee')
+      : (ranged ? 'martial ranged' : 'martial melee');
+    const props = Array.isArray(w.properties)
+      ? w.properties.map(p => {
+          const name = p?.property?.name || p?.name || '';
+          const detail = p?.detail;
+          return detail ? `${name} (${detail})` : name;
+        }).filter(Boolean).join(', ')
+      : '';
+    const dtype = typeof w.damage_type === 'object' && w.damage_type
+      ? (w.damage_type.name || '').toLowerCase()
+      : String(w.damage_type || '').toLowerCase();
+    const doc = w.document || {};
+    return mergeEquipmentRecord({
+      id: (w.key || w.name || '').toLowerCase().replace(/^[^_]*_/, '') || w.name,
+      name: w.name,
+      category: 'weapon',
+      weaponType,
+      damage: w.damage_dice || '',
+      damageType: dtype,
+      props,
+      cost: w.cost || '',
+      weight: parseFloat(String(w.weight || '0').replace(/[^\d.]/g, '')) || 0,
+      notes: doc.display_name ? `Source: ${doc.display_name}` : '',
+      source: doc.display_name || doc.name || 'Open5e'
+    });
+  }
+
+  function mapOpen5eArmor(a) {
+    const cat = String(a.category || '').toLowerCase();
+    const isShield = cat.includes('shield') || /shield/i.test(a.name || '');
+    const doc = a.document || {};
+    const source = doc.display_name || doc.name || 'Open5e';
+    if (isShield) {
+      return mergeEquipmentRecord({
+        id: (a.key || a.name || '').toLowerCase().replace(/^[^_]*_/, '') || a.name,
+        name: a.name,
+        category: 'shield',
+        acBonus: 2,
+        cost: a.cost || '',
+        weight: parseFloat(String(a.weight || '0').replace(/[^\d.]/g, '')) || 0,
+        notes: a.ac_display || '',
+        source
+      });
+    }
+    let armorType = 'light';
+    if (cat.includes('heavy')) armorType = 'heavy';
+    else if (cat.includes('medium')) armorType = 'medium';
+    let acDexMax = null;
+    if (a.ac_add_dexmod === false) acDexMax = 0;
+    else if (a.ac_cap_dexmod != null) acDexMax = a.ac_cap_dexmod;
+    return mergeEquipmentRecord({
+      id: (a.key || a.name || '').toLowerCase().replace(/^[^_]*_/, '') || a.name,
+      name: a.name,
+      category: 'armor',
+      armorType,
+      acBase: a.ac_base != null ? a.ac_base : 11,
+      acDexMax,
+      cost: a.cost || '',
+      weight: parseFloat(String(a.weight || '0').replace(/[^\d.]/g, '')) || 0,
+      notes: [
+        a.ac_display || '',
+        a.grants_stealth_disadvantage ? 'Stealth disadvantage.' : '',
+        a.strength_score_required ? `Str ${a.strength_score_required}.` : ''
+      ].filter(Boolean).join(' '),
+      source
+    });
+  }
+
+  async function syncOpen5e({ srdOnly = true, spells = true, equipment = true, statusEl } = {}) {
+    const setStatus = (msg) => {
+      if (statusEl) statusEl.textContent = msg;
+    };
+    // v2 uses document__key (e.g. srd-2024 for SRD 5.2)
+    const params = srdOnly ? { document__key: 'srd-2024' } : {};
+    const pack = {
+      format: 'DSCToolkt-compendium-v1',
+      edition: srdOnly ? '5e-srd-2024-open5e' : '5e-open5e-v2-all',
+      source: 'Open5e API v2',
+      attribution: 'Data retrieved from the Open5e API v2 (https://api.open5e.com / https://github.com/open5e/open5e-api). Individual documents retain their original licenses.',
+      spells: [],
+      equipment: []
+    };
+    if (spells) {
+      setStatus('Fetching spells from Open5e v2…');
+      const rows = await open5eFetchAll('/spells/', params, {
+        onPage: (p, n, total) => setStatus(`Spells: page ${p} (${n}/${total || '?'})…`)
+      });
+      pack.spells = rows.map(mapOpen5eSpell).filter(Boolean);
+      setStatus(`Mapped ${pack.spells.length} spells`);
+    }
+    if (equipment) {
+      setStatus('Fetching weapons from Open5e v2…');
+      const weapons = await open5eFetchAll('/weapons/', params, {
+        onPage: (p, n, total) => setStatus(`Weapons: page ${p} (${n}/${total || '?'})…`)
+      });
+      setStatus('Fetching armor from Open5e v2…');
+      const armor = await open5eFetchAll('/armor/', params, {
+        onPage: (p, n, total) => setStatus(`Armor: page ${p} (${n}/${total || '?'})…`)
+      });
+      pack.equipment = [...weapons.map(mapOpen5eWeapon), ...armor.map(mapOpen5eArmor)].filter(Boolean);
+      setStatus(`Mapped ${pack.equipment.length} equipment items`);
+    }
+    const res = importCompendiumPack(pack);
+    setStatus(`Done — +${res.spells} spells, +${res.equipment} equipment (totals ${res.totalSpells} / ${res.totalEquipment})`);
+    return res;
+  }
+
   function renderCompendiumTools() {
     const root = $('#compendium-tools');
     if (!root) return;
@@ -1397,26 +1588,40 @@
     root.innerHTML = `
       <div class="compendium-panel">
         <h3>Compendium Import</h3>
-        <p class="muted small">Import JSON packs of spells and equipment from any edition-style source. Built-in data includes <strong>SRD 5.2.1</strong> (CC-BY-4.0). Imported entries merge by id/name and override duplicates.</p>
-        <p class="muted small">Supported shapes: <code>DSCToolkt-compendium-v1</code> (<code>{ spells:[], equipment:[] }</code>), raw arrays, or objects with <code>items</code>/<code>spell</code> keys.</p>
+        <p class="muted small">Import JSON packs of spells and equipment. Built-in data includes <strong>SRD 5.2.1</strong>. Entries merge by id/name.</p>
         <div class="form-row">
           <button type="button" class="btn primary" id="comp-import-btn">Import JSON Pack</button>
           <button type="button" class="btn secondary" id="comp-export-btn">Export User Pack</button>
           <button type="button" class="btn danger" id="comp-clear-btn">Clear User Imports</button>
           <input type="file" id="comp-import-file" accept=".json,application/json" hidden />
         </div>
-        <p class="muted small">User imports: <strong>${sN}</strong> spells · <strong>${eN}</strong> equipment · Runtime totals: <strong>${(window.SPELLS||[]).length}</strong> spells · <strong>${(window.EQUIPMENT||[]).length}</strong> equipment</p>
-        <details class="compendium-sample">
-          <summary>Sample pack format</summary>
-          <pre class="sample-pre">{
+        <p class="muted small">User imports: <strong>${sN}</strong> spells · <strong>${eN}</strong> equipment · Runtime: <strong>${(window.SPELLS||[]).length}</strong> spells · <strong>${(window.EQUIPMENT||[]).length}</strong> equipment</p>
+      </div>
+      <div class="compendium-panel">
+        <h3>Open5e API Sync</h3>
+        <p class="muted small">Live updates from the <a href="https://github.com/open5e/open5e-api" target="_blank" rel="noopener">Open5e API v2</a> (<code>api.open5e.com/v2</code>). Merges into your user compendium.</p>
+        <label class="checkbox-row" style="margin:0.4rem 0">
+          <input type="checkbox" id="open5e-srd-only" checked />
+          <span>SRD 5.2 only (<code>document__key=srd-2024</code>)</span>
+        </label>
+        <div class="form-row">
+          <button type="button" class="btn primary" id="open5e-sync-all">Sync Spells + Equipment</button>
+          <button type="button" class="btn secondary" id="open5e-sync-spells">Spells only</button>
+          <button type="button" class="btn secondary" id="open5e-sync-equip">Weapons &amp; Armor only</button>
+        </div>
+        <p class="muted small" id="open5e-status">Ready.</p>
+      </div>
+      <details class="compendium-sample">
+        <summary>Sample JSON pack format</summary>
+        <pre class="sample-pre">{
   "format": "DSCToolkt-compendium-v1",
-  "edition": "5e-srd-5.2.1",
+  "edition": "5e",
   "source": "My Homebrew",
-  "spells": [{ "name": "Example Bolt", "level": 0, "school": "Evocation", "time": "Action", "range": "60 feet", "components": "V, S", "duration": "Instantaneous", "classes": ["Wizard"], "description": "Ranged spell attack, 1d10 force." }],
-  "equipment": [{ "name": "Moonsteel Blade", "category": "weapon", "damage": "1d8", "damageType": "slashing", "props": "Finesse", "cost": "50 GP" }]
+  "spells": [{ "name": "Example Bolt", "level": 0, "school": "Evocation", "time": "Action", "range": "60 feet", "components": "V, S", "duration": "Instantaneous", "classes": ["Wizard"], "description": "…" }],
+  "equipment": [{ "name": "Moonsteel Blade", "category": "weapon", "damage": "1d8", "damageType": "slashing" }]
 }</pre>
-        </details>
-      </div>`;
+      </details>`;
+
     $('#comp-import-btn')?.addEventListener('click', () => $('#comp-import-file')?.click());
     $('#comp-import-file')?.addEventListener('change', () => {
       const f = $('#comp-import-file').files?.[0];
@@ -1460,9 +1665,31 @@
       toast('User compendium cleared');
       renderCompendiumTools();
     });
+
+    const statusEl = $('#open5e-status');
+    const runSync = async (opts) => {
+      const btns = ['open5e-sync-all', 'open5e-sync-spells', 'open5e-sync-equip'].map(id => document.getElementById(id));
+      btns.forEach(b => { if (b) b.disabled = true; });
+      try {
+        const srdOnly = !!document.getElementById('open5e-srd-only')?.checked;
+        await syncOpen5e({ ...opts, srdOnly, statusEl });
+        toast('Open5e sync complete');
+        renderCompendiumTools();
+      } catch (err) {
+        console.warn(err);
+        if (statusEl) statusEl.textContent = 'Error: ' + (err.message || err);
+        toast('Open5e sync failed — check network');
+      } finally {
+        btns.forEach(b => { if (b) b.disabled = false; });
+      }
+    };
+    document.getElementById('open5e-sync-all')?.addEventListener('click', () => runSync({ spells: true, equipment: true }));
+    document.getElementById('open5e-sync-spells')?.addEventListener('click', () => runSync({ spells: true, equipment: false }));
+    document.getElementById('open5e-sync-equip')?.addEventListener('click', () => runSync({ spells: false, equipment: true }));
   }
 
-function getSpellLibrary() {
+
+  function getSpellLibrary() {
     return (typeof window !== 'undefined' && window.SPELLS) ? window.SPELLS : [];
   }
 
