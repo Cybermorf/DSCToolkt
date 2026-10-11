@@ -590,6 +590,7 @@
     else if (viewName === 'combat') renderCombat();
     else if (viewName === 'bestiary') renderBestiary();
     else if (viewName === 'umbrarians') renderUmbrarians();
+    else if (viewName === 'dsc-classes') renderDscClasses();
     else if (viewName === 'factions') renderFactions();
     else if (viewName === 'forces') renderForces();
     else if (viewName === 'notes') renderNotes();
@@ -1008,7 +1009,8 @@
       umbrarianStage: ch.umbrarianStage || '',
       shard: ch.shard || '',
       shardAbility: ch.shardAbility || '',
-      notes: ch.notes || ''
+      notes: ch.notes || '',
+      avatar: ch.avatar || ''
     };
   }
 
@@ -1502,7 +1504,76 @@ const FEATURE_SECTION = {
   }
 
 
-  function wireInventoryUI() {
+  
+  function wireAvatarPicker() {
+    const file = $('#m-avatar-file');
+    const uploadBtn = $('#m-avatar-upload');
+    const clearBtn = $('#m-avatar-clear');
+    const preview = $('#m-avatar-preview');
+    const nameInp = $('#m-name');
+    uploadBtn?.addEventListener('click', () => file?.click());
+    file?.addEventListener('change', () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      if (f.size > 1.5 * 1024 * 1024) {
+        toast('Image too large (max ~1.5 MB)');
+        file.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        // Downscale via canvas for storage
+        const img = new Image();
+        img.onload = () => {
+          const max = 256;
+          let w = img.width, h = img.height;
+          if (w > max || h > max) {
+            const r = Math.min(max / w, max / h);
+            w = Math.round(w * r);
+            h = Math.round(h * r);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const data = canvas.toDataURL('image/jpeg', 0.85);
+          window.__draftAvatar = data;
+          const avData = $('#m-avatar-data');
+          if (avData) avData.value = data;
+          if (preview) {
+            preview.classList.add('has-avatar');
+            preview.innerHTML = `<img src="${data}" alt="" class="cs-avatar-img" />`;
+          }
+          clearBtn?.classList.remove('hidden');
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(f);
+    });
+    clearBtn?.addEventListener('click', () => {
+      window.__draftAvatar = '';
+      const avData = $('#m-avatar-data');
+      if (avData) avData.value = '';
+      if (file) file.value = '';
+      const letter = (nameInp?.value || '?').charAt(0).toUpperCase() || '?';
+      if (preview) {
+        preview.classList.remove('has-avatar');
+        preview.innerHTML = `<span id="m-avatar-letter">${escapeHtml(letter)}</span>`;
+      }
+      clearBtn.classList.add('hidden');
+    });
+    nameInp?.addEventListener('input', () => {
+      if (window.__draftAvatar) return;
+      const letter = (nameInp.value || '?').charAt(0).toUpperCase() || '?';
+      const span = $('#m-avatar-letter');
+      if (span) span.textContent = letter;
+      else if (preview && !preview.classList.contains('has-avatar')) {
+        preview.innerHTML = `<span id="m-avatar-letter">${escapeHtml(letter)}</span>`;
+      }
+    });
+  }
+
+function wireInventoryUI() {
     const display = $('#m-inv-display');
     const results = $('#m-equip-results');
     const search = $('#m-equip-search');
@@ -1673,6 +1744,24 @@ const FEATURE_SECTION = {
       }
       if (spdEl && !spdEl.dataset.manual && raceName) {
         spdEl.value = suggestedSpeed(raceName, cname);
+      }
+      // Auto-select Shard ability from highest mental score when Umbrarian is active
+      if ($('#m-umbrarian')?.checked) {
+        const mental = [
+          { a: 'INT', v: totals.int },
+          { a: 'WIS', v: totals.wis },
+          { a: 'CHA', v: totals.cha }
+        ].sort((x, y) => y.v - x.v);
+        const sel = $('#m-umb-ability');
+        if (sel && !sel.dataset.manual) {
+          sel.value = mental[0].a;
+        }
+        const hint = $('#m-umb-hint');
+        if (hint) {
+          const pb = parseInt($('#m-prof')?.value, 10) || 2;
+          const mod = abilityModNum(mental[0].v);
+          hint.textContent = `Shard DC ${8 + pb + mod} (${mental[0].a}) · auto from highest mental score. Traits & gifts apply to Features.`;
+        }
       }
     }
     function applyScoreMethod(method) {
@@ -1930,7 +2019,22 @@ const FEATURE_SECTION = {
 
     const body = `
       <div class="sheet-section">
-        <div class="form-row">
+        <div class="form-row avatar-row">
+          <div class="field avatar-field">
+            <label>Avatar</label>
+            <div class="avatar-picker">
+              <div id="m-avatar-preview" class="cs-portrait-ring avatar-preview ${ch.avatar ? 'has-avatar' : ''}">
+                ${ch.avatar ? `<img src="${ch.avatar}" alt="" class="cs-avatar-img" />` : `<span id="m-avatar-letter">${escapeHtml((ch.name || '?').charAt(0).toUpperCase())}</span>`}
+              </div>
+              <div class="avatar-controls">
+                <input type="file" id="m-avatar-file" accept="image/*" hidden />
+                <button type="button" class="btn secondary btn-tiny" id="m-avatar-upload">Upload image</button>
+                <button type="button" class="btn danger btn-tiny ${ch.avatar ? '' : 'hidden'}" id="m-avatar-clear">Remove</button>
+                <p class="muted small">Optional. Falls back to the initial monogram if empty.</p>
+              </div>
+              <input type="hidden" id="m-avatar-data" value="" />
+            </div>
+          </div>
           <div class="field"><label>Character Name</label><input type="text" id="m-name" value="${escapeAttr(ch.name)}" placeholder="Character name" /></div>
           <div class="field"><label>Player</label><input type="text" id="m-player" value="${escapeAttr(ch.player)}" placeholder="Player name" /></div>
         </div>
@@ -1985,7 +2089,7 @@ const FEATURE_SECTION = {
                 </select>
               </div>
             </div>
-            <p class="muted small" id="m-umb-hint">Adds Shard Mark, Resonant Sense, Dark Bargain access, and stage notes to Features.</p>
+            <p class="muted small" id="m-umb-hint">Shard DC uses your highest among INT/WIS/CHA (auto). Adds traits & gifts to Features.</p>
           </div>
         </div>
       </div>
@@ -2063,6 +2167,7 @@ const FEATURE_SECTION = {
         const data = {
           name,
           player: playerVal,
+          avatar: ($('#m-avatar-data')?.value || window.__draftAvatar || ''),
           type: existing?.type || (playerVal === 'NPC' ? 'ally' : 'pc'),
           class: $('#m-class').value.trim(),
           subclass: $('#m-subclass').value.trim(),
@@ -2075,7 +2180,11 @@ const FEATURE_SECTION = {
           isUmbrarian: !!$('#m-umbrarian')?.checked,
           umbrarianStage: $('#m-umb-stage')?.value || '',
           shard: $('#m-umb-shard')?.value || '',
-          shardAbility: $('#m-umb-ability')?.value || '',
+          shardAbility: ($('#m-umb-ability')?.value) || bestShardAbility({
+            int: parseInt($('#m-total-int')?.textContent, 10) || 10,
+            wis: parseInt($('#m-total-wis')?.textContent, 10) || 10,
+            cha: parseInt($('#m-total-cha')?.textContent, 10) || 10
+          }),
           str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str').value, 10) || 10,
           dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex').value, 10) || 10,
           con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con').value, 10) || 10,
@@ -2103,8 +2212,12 @@ const FEATURE_SECTION = {
       },
       afterOpen: () => {
         window.__draftInventory = (ch.inventory || []).map(normalizeInventoryItem);
+        window.__draftAvatar = ch.avatar || '';
+        const avData = $('#m-avatar-data');
+        if (avData) avData.value = window.__draftAvatar;
         wireCharacterFormHelpers();
         wireInventoryUI();
+        wireAvatarPicker();
         const grid = $('#ability-grid');
         if (grid) {
           grid.querySelectorAll('.ability-score').forEach(inp => {
@@ -2122,7 +2235,20 @@ const FEATURE_SECTION = {
           if (!umbCb?.checked || !features) return;
           const stage = $('#m-umb-stage')?.value || 'awakened';
           const shard = $('#m-umb-shard')?.value || 'Unknown Shard';
-          const ab = $('#m-umb-ability')?.value || 'WIS';
+          let ab = $('#m-umb-ability')?.value || '';
+          // Auto-select Shard ability from highest of INT / WIS / CHA
+          const mental = [
+            { a: 'INT', v: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int')?.value, 10) || 10 },
+            { a: 'WIS', v: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis')?.value, 10) || 10 },
+            { a: 'CHA', v: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha')?.value, 10) || 10 }
+          ].sort((x, y) => y.v - x.v);
+          if (!ab || ab === 'WIS') {
+            // prefer auto when default or empty
+            ab = mental[0].a;
+            const sel = $('#m-umb-ability');
+            if (sel) sel.value = ab;
+          }
+          const shardDcPreview = 8 + (parseInt($('#m-prof')?.value, 10) || 2) + abilityModNum(mental.find(m => m.a === ab)?.v || 10);
           const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
           const u = window.UMBRARIANS || {};
           const lines = [
@@ -2156,7 +2282,11 @@ const FEATURE_SECTION = {
         umbCb?.addEventListener('change', syncUmbUI);
         $('#m-umb-stage')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });
         $('#m-umb-shard')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });
-        $('#m-umb-ability')?.addEventListener('change', () => { if (umbCb?.checked) applyUmbrarianTemplate(); });
+        $('#m-umb-ability')?.addEventListener('change', () => {
+          const sel = $('#m-umb-ability');
+          if (sel) sel.dataset.manual = '1';
+          if (umbCb?.checked) applyUmbrarianTemplate();
+        });
       }
     });
 
@@ -2170,6 +2300,7 @@ const FEATURE_SECTION = {
     const corrClass = ch.corruption >= 5 ? 'high' : ch.corruption >= 3 ? 'mid' : '';
     return `
       <div class="sheet-card-header">
+        ${portraitHtml(ch, 'sm')}
         <div>
           <h3>${escapeHtml(ch.name || 'Unnamed')}</h3>
           <p class="muted small">${escapeHtml(roleLabel)} · ${escapeHtml(ch.race || '—')} ${ch.class ? '· ' + escapeHtml(ch.class) : ''}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · L${ch.level}</p>
@@ -2191,7 +2322,85 @@ const FEATURE_SECTION = {
       </div>`;
   }
 
-  function parseAttackLines(ch) {
+  
+  function bestShardAbility(ch) {
+    const scores = {
+      INT: Number(ch.int) || 10,
+      WIS: Number(ch.wis) || 10,
+      CHA: Number(ch.cha) || 10
+    };
+    // Prefer explicit choice if set; else highest mental score
+    if (ch.shardAbility && scores[ch.shardAbility] != null) {
+      // still allow auto if user wants - auto picks highest
+    }
+    let best = 'WIS';
+    let bestScore = -99;
+    ['INT', 'WIS', 'CHA'].forEach(a => {
+      if (scores[a] > bestScore) { bestScore = scores[a]; best = a; }
+    });
+    return best;
+  }
+
+  function computeShardDc(ch) {
+    const ab = ch.shardAbility || bestShardAbility(ch);
+    const key = ab.toLowerCase();
+    const mod = abilityModNum(ch[key] != null ? ch[key] : 10);
+    const pb = Number(ch.profBonus) || 2;
+    return {
+      ability: ab,
+      mod,
+      pb,
+      dc: 8 + pb + mod,
+      attack: pb + mod
+    };
+  }
+
+  function umbrarianSheetBlock(ch) {
+    if (!ch.isUmbrarian) return '';
+    const u = window.UMBRARIANS || {};
+    const shardInfo = (u.shards || []).find(s => s.name === ch.shard);
+    const dc = computeShardDc(ch);
+    const stage = ch.umbrarianStage || 'dormant';
+    const gifts = [];
+    if (stage === 'awakened' || stage === 'ascendant') {
+      (u.awakenedGiftsGeneric || []).forEach(g => gifts.push(g));
+    }
+    if (stage === 'ascendant') {
+      (u.ascendantGiftsGeneric || []).forEach(g => gifts.push(g));
+    }
+    const traits = (u.commonTraits || []).map(t =>
+      `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`
+    ).join('');
+    const giftHtml = gifts.length
+      ? `<ul class="trait-list compact">${gifts.map(g => `<li><strong>${escapeHtml(g.name)}.</strong> ${escapeHtml(g.text)}</li>`).join('')}</ul>`
+      : '<p class="muted small">No gift list for this stage (Dormant observes only).</p>';
+    return `
+      <div class="cs-panel cs-umb">
+        <div class="cs-panel-title">Umbrarian · ${escapeHtml(stage)} · ${escapeHtml(ch.shard || 'Shard')}</div>
+        <div class="cs-umb-stats">
+          <div class="cs-stat-box"><div class="cs-stat-val">${dc.dc}</div><div class="cs-stat-label">Shard DC</div><div class="cs-stat-sub muted small">${dc.ability} (${dc.mod >= 0 ? '+' : ''}${dc.mod}) · PB +${dc.pb}</div></div>
+          <div class="cs-stat-box"><div class="cs-stat-val">${dc.attack >= 0 ? '+' + dc.attack : dc.attack}</div><div class="cs-stat-label">Shard Attack</div></div>
+          <div class="cs-stat-box"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>
+        </div>
+        ${shardInfo ? `<p class="cs-body"><strong>${escapeHtml(shardInfo.name)}</strong> (${escapeHtml(shardInfo.world)}) — ${escapeHtml(shardInfo.theme)}. Common awakening: ${escapeHtml(shardInfo.awakens)}</p>` : ''}
+        <div class="cs-panel-title" style="margin-top:0.5rem">Common Traits</div>
+        <ul class="trait-list compact">${traits}</ul>
+        <div class="cs-panel-title" style="margin-top:0.5rem">Gifts (${escapeHtml(stage)})</div>
+        ${giftHtml}
+        <p class="muted small" style="margin-top:0.4rem">${escapeHtml(u.darkBargains || '')}</p>
+      </div>`;
+  }
+
+
+  function portraitHtml(ch, sizeClass = '') {
+    const letter = escapeHtml((ch.name || '?').charAt(0).toUpperCase());
+    if (ch.avatar) {
+      return `<div class="cs-portrait-ring has-avatar ${sizeClass}"><img src="${ch.avatar}" alt="" class="cs-avatar-img" /></div>`;
+    }
+    return `<div class="cs-portrait-ring ${sizeClass}"><span>${letter}</span></div>`;
+  }
+
+function parseAttackLines(ch) {
     const lines = [];
     const inv = ch.inventory || [];
     const weapons = inv.filter(i => i.equipped && i.category === 'weapon');
@@ -2297,7 +2506,7 @@ const FEATURE_SECTION = {
         <div class="cs-page active" data-cs-page="1">
           <div class="cs-top">
             <div class="cs-portrait-block">
-              <div class="cs-portrait-ring"><span>${escapeHtml((ch.name || '?').charAt(0).toUpperCase())}</span></div>
+              ${portraitHtml(ch)}
               <div class="cs-name-block">
                 <div class="cs-char-name">${escapeHtml(ch.name || 'Unnamed')}</div>
                 <div class="cs-char-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
@@ -2322,6 +2531,7 @@ const FEATURE_SECTION = {
               <div class="cs-panel"><div class="cs-panel-title">Ability Scores</div><div class="cs-abilities">${abBlock}</div></div>
               <div class="cs-panel"><div class="cs-panel-title">Saving Throws</div><div class="cs-body">${escapeHtml(ch.saves || '—')}</div></div>
               <div class="cs-panel cs-skills-panel"><div class="cs-panel-title">Skills</div><div class="cs-skills">${skillRows}</div></div>
+              ${ch.isUmbrarian ? umbrarianSheetBlock(ch) : ''}
             </div>
             <div class="cs-col-right">
               <div class="cs-panel">
@@ -2377,9 +2587,7 @@ const FEATURE_SECTION = {
               <p class="muted small">${escapeHtml(path.summary || '')}</p>
               <ul class="trait-list compact">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
             </div>` : ''}
-            ${ch.isUmbrarian ? `<div class="cs-panel cs-umb"><div class="cs-panel-title">Umbrarian</div>
-              <div class="cs-body">Stage: <strong>${escapeHtml(ch.umbrarianStage || '—')}</strong> · Shard: <strong>${escapeHtml(ch.shard || '—')}</strong> · ${escapeHtml(ch.shardAbility || '')} · Corruption ${ch.corruption}/6</div>
-            </div>` : ''}
+            ${ch.isUmbrarian ? umbrarianSheetBlock(ch) : ''}
             ${ch.notes ? `<div class="cs-panel"><div class="cs-panel-title">Notes &amp; Backstory</div><pre class="cs-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
           </div>
         </div>
@@ -2389,9 +2597,14 @@ const FEATURE_SECTION = {
   }
 
   async function viewCharacterSheet(ch) {
+    const toolbar = `
+      <div class="cs-toolbar">
+        <button type="button" class="btn secondary btn-tiny" id="cs-export">Export JSON</button>
+        <button type="button" class="btn secondary btn-tiny" id="cs-print">Print</button>
+      </div>`;
     await openModal({
       title: ch.name || 'Character Sheet',
-      bodyHtml: characterSheetViewHtml(ch),
+      bodyHtml: toolbar + characterSheetViewHtml(ch),
       confirmText: 'Close',
       cancelText: '',
       wide: true,
@@ -2406,9 +2619,194 @@ const FEATURE_SECTION = {
             root.querySelectorAll('.cs-page').forEach(p => p.classList.toggle('active', p.dataset.csPage === page));
           });
         });
+        root.querySelector('#cs-export')?.addEventListener('click', () => exportCharacterJson(ch));
+        root.querySelector('#cs-print')?.addEventListener('click', () => printCharacterSheet(ch));
       }
     });
   }
+
+  function exportCharacterJson(ch) {
+    const data = {
+      format: 'DSCToolkt-character-v1',
+      exportedAt: new Date().toISOString(),
+      character: ch
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(ch.name || 'character').replace(/[^a-z0-9_-]+/gi, '_')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Character exported');
+  }
+
+  function importCharacterJson(file, asVillain) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        let ch = data.character || data;
+        if (!ch || typeof ch !== 'object') throw new Error('Invalid file');
+        ch = normalizeCharacter({ ...ch, id: uid() });
+        const c = getActive();
+        if (!c) { toast('Open a campaign first'); return; }
+        ensureCampaignShape(c);
+        if (asVillain || ch.type === 'villain') {
+          ch.type = 'villain';
+          c.villains.push(ch);
+        } else {
+          ch.type = ch.type === 'ally' ? 'ally' : 'pc';
+          c.party.push(ch);
+        }
+        c.updatedAt = new Date().toISOString();
+        save();
+        renderParty();
+        toast(`Imported ${ch.name || 'character'}`);
+      } catch (e) {
+        console.warn(e);
+        toast('Import failed — invalid JSON');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function printCharacterSheet(ch) {
+    const html = characterSheetViewHtml(ch);
+    const w = window.open('', '_blank');
+    if (!w) { toast('Allow pop-ups to print'); return; }
+    // Mirror digital sheet styling (DSC parchment)
+    const css = `
+      * { box-sizing: border-box; }
+      body {
+        font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+        background: #14110e;
+        color: #e8dcc8;
+        margin: 0;
+        padding: 20px;
+      }
+      .cs-toolbar { display: none !important; }
+      .cs-tabs { display: none !important; }
+      .cs-page { display: block !important; page-break-after: always; margin-bottom: 28px; }
+      .cs-page:last-of-type { page-break-after: auto; }
+      .cs-sheet { max-width: 920px; margin: 0 auto; }
+      .cs-page-title {
+        font-size: 1.05rem; font-weight: 700; color: #c4a35a;
+        margin-bottom: 0.65rem; letter-spacing: 0.04em; text-transform: uppercase;
+      }
+      .cs-portrait-block {
+        display: flex; gap: 0.85rem; align-items: center;
+        margin-bottom: 0.75rem; padding-bottom: 0.65rem;
+        border-bottom: 2px solid rgba(196,163,90,0.35);
+      }
+      .cs-portrait-ring {
+        width: 72px; height: 72px; border-radius: 50%;
+        border: 3px solid #c4a35a;
+        background: radial-gradient(circle at 30% 30%, #3a3028, #1a1510);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.75rem; font-weight: 700; color: #c4a35a; flex-shrink: 0;
+        overflow: hidden;
+      }
+      .cs-portrait-ring.has-avatar { padding: 0; }
+      .cs-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .cs-char-name { font-size: 1.5rem; font-weight: 700; color: #f0e6d0; }
+      .cs-char-meta { font-size: 0.9rem; color: #a89880; }
+      .cs-header-right { margin-left: auto; display: flex; gap: 0.5rem; }
+      .cs-mini-stat {
+        text-align: center; border: 1px solid rgba(196,163,90,0.3);
+        border-radius: 6px; padding: 0.25rem 0.5rem; min-width: 4.5rem;
+      }
+      .cs-mini-lbl { display: block; font-size: 0.65rem; color: #a89880; text-transform: uppercase; }
+      .cs-mini-val { font-size: 1.15rem; font-weight: 700; color: #c4a35a; }
+      .cs-combat-row {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 0.5rem; margin-bottom: 0.75rem;
+      }
+      .cs-stat-box {
+        background: rgba(28,22,18,0.92); border: 1px solid rgba(196,163,90,0.35);
+        border-radius: 6px; text-align: center; padding: 0.5rem 0.35rem;
+      }
+      .cs-stat-val { font-size: 1.55rem; font-weight: 700; color: #c4a35a; line-height: 1.1; }
+      .cs-hp-max { font-size: 0.95rem; color: #a89880; font-weight: 500; }
+      .cs-stat-label {
+        font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
+        color: #a89880; margin-top: 0.15rem;
+      }
+      .cs-stat-sub { font-size: 0.7rem; color: #a89880; }
+      .cs-stat-box.cs-corrupt .cs-stat-val { color: #d08080; }
+      .cs-main { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 0.65rem; }
+      .cs-panel {
+        background: rgba(28,22,18,0.92); border: 1px solid rgba(196,163,90,0.35);
+        border-radius: 6px; padding: 0.5rem 0.65rem; margin-bottom: 0.55rem;
+      }
+      .cs-panel-title {
+        font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+        color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.35);
+        padding-bottom: 0.25rem; margin-bottom: 0.4rem; font-weight: 700;
+      }
+      .cs-abilities { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
+      .cs-ability {
+        text-align: center; border: 1px solid rgba(196,163,90,0.2);
+        border-radius: 4px; padding: 0.3rem; background: rgba(0,0,0,0.2);
+      }
+      .cs-ab-label { font-size: 0.68rem; color: #a89880; letter-spacing: 0.05em; }
+      .cs-ab-mod { font-size: 1.25rem; font-weight: 700; color: #f0e6d0; }
+      .cs-ab-score {
+        display: inline-block; min-width: 1.6rem; font-size: 0.8rem;
+        border: 1px solid rgba(196,163,90,0.35); border-radius: 999px;
+        padding: 0.05rem 0.35rem; margin-top: 0.15rem; color: #c4a35a;
+      }
+      .cs-body { font-size: 0.88rem; line-height: 1.35; }
+      .cs-pre { white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; margin: 0; color: #e8dcc8; }
+      .cs-pre-scroll { max-height: none; }
+      .cs-inv-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+      .cs-inv-table th {
+        text-align: left; color: #a89880; font-weight: 600; font-size: 0.7rem;
+        text-transform: uppercase; border-bottom: 1px solid rgba(196,163,90,0.35); padding: 0.2rem 0.25rem;
+      }
+      .cs-inv-table td { padding: 0.25rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
+      .cs-inv-table tr.equipped-row td { color: #c4a35a; }
+      .cs-skills { font-size: 0.8rem; }
+      .cs-skill {
+        display: grid; grid-template-columns: 1rem 2.2rem 1fr 2rem;
+        gap: 0.25rem; align-items: center; padding: 0.1rem 0;
+      }
+      .cs-skill.prof .cs-skill-name { color: #f0e6d0; font-weight: 600; }
+      .cs-skill-check { color: #c4a35a; text-align: center; }
+      .cs-atk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.65rem; }
+      .cs-atk-card {
+        background: rgba(28,22,18,0.92); border: 1px solid rgba(196,163,90,0.4);
+        border-radius: 8px; padding: 0.65rem 0.75rem;
+      }
+      .cs-atk-name {
+        font-weight: 700; font-size: 1rem; color: #f0e6d0;
+        border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 0.3rem; margin-bottom: 0.45rem;
+      }
+      .cs-atk-stats { display: grid; gap: 0.35rem; }
+      .cs-atk-stats > div { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
+      .cs-atk-lbl { color: #a89880; font-size: 0.72rem; text-transform: uppercase; }
+      .cs-atk-val { font-weight: 700; color: #c4a35a; }
+      .cs-atk-props { margin-top: 0.4rem; font-size: 0.75rem; color: #a89880; }
+      .cs-footer-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.55rem; }
+      .cs-footer-brand {
+        text-align: center; margin-top: 0.75rem; letter-spacing: 0.12em;
+        text-transform: uppercase; font-size: 0.68rem; color: #a89880;
+      }
+      .cs-umb { border-color: rgba(196,92,74,0.45) !important; }
+      .cs-umb-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.45rem; margin: 0.45rem 0; }
+      .trait-list { margin: 0; padding-left: 1.1rem; }
+      .trait-list.compact { font-size: 0.8rem; }
+      .muted { color: #a89880; }
+      .cs-atk-mini-row { font-size: 0.85rem; padding: 0.15rem 0; }
+      @media print {
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .cs-page { page-break-inside: avoid; }
+      }
+    `;
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(ch.name || 'Sheet').replace(/[<>]/g,'')}</title><style>${css}</style></head><body>${html}<script>window.onload=function(){setTimeout(function(){window.print();},200);}</script></body></html>`);
+    w.document.close();
+  }
+
+
 
 
 
@@ -3849,7 +4247,60 @@ const FEATURE_SECTION = {
     return String(o || '').toLowerCase().replace(/\s+/g, '-');
   }
 
-  function renderUmbrarians() {
+  
+  function renderDscClasses() {
+    const root = $('#dsc-classes-content');
+    if (!root) return;
+    const classes = getPhbClasses().filter(c => c.setting);
+    const abilities = window.CLASS_ABILITIES || {};
+    if (!classes.length) {
+      root.innerHTML = '<p class="muted">No DSC signature classes loaded.</p>';
+      return;
+    }
+    root.innerHTML = classes.map(cls => {
+      const abs = abilities[cls.name] || [];
+      const prog = (cls.progression || []).map(([lvl, feat]) =>
+        `<tr><td>${lvl}</td><td>${escapeHtml(feat)}</td></tr>`).join('');
+      const abHtml = abs.length ? `<ul class="trait-list">${abs.map(a =>
+        `<li><strong>L${a.lvl} — ${escapeHtml(a.name)}.</strong> ${escapeHtml(a.text)}</li>`).join('')}</ul>` : '';
+      let pathHtml = '';
+      if (cls.name === 'Moon Guardian') {
+        const paths = getMoonPaths();
+        pathHtml = `<div class="detail-block"><div class="detail-label">Moon Paths</div>
+          ${paths.map(p => `
+            <div class="path-block">
+              <h4>${escapeHtml(p.name)} <span class="muted small">(${escapeHtml(p.world)})</span></h4>
+              <p class="muted small">${escapeHtml(p.summary || '')}</p>
+              <ul class="trait-list compact">${(p.features||[]).map(f =>
+                `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
+            </div>`).join('')}
+        </div>`;
+      }
+      return `<article class="race-card dsc-class-card">
+        <header class="race-header">
+          <h2>${escapeHtml(cls.name)}</h2>
+          <p class="race-tagline">${escapeHtml(cls.summary || '')}</p>
+        </header>
+        <div class="detail-block">
+          <div class="detail-label">At a Glance</div>
+          <p class="detail-text">Hit Die <strong>${escapeHtml(cls.hitDie)}</strong> · Primary <strong>${escapeHtml(cls.primary)}</strong> · Saves <strong>${escapeHtml(cls.saves)}</strong></p>
+          <p class="detail-text muted small">Armor: ${escapeHtml(cls.armor || '—')} · Weapons: ${escapeHtml(cls.weapons || '—')}${cls.tools ? ' · Tools: ' + escapeHtml(cls.tools) : ''}</p>
+          ${cls.skills ? `<p class="detail-text muted small">Skills: choose ${cls.skillsChoose || '?'} from ${Array.isArray(cls.skills) ? cls.skills.join(', ') : cls.skills}</p>` : ''}
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Progression</div>
+          <table class="prog-table"><thead><tr><th>Level</th><th>Features</th></tr></thead><tbody>${prog}</tbody></table>
+        </div>
+        <div class="detail-block">
+          <div class="detail-label">Class Abilities</div>
+          ${abHtml || '<p class="muted">See Player’s Handbook for full text.</p>'}
+        </div>
+        ${pathHtml}
+      </article>`;
+    }).join('');
+  }
+
+function renderUmbrarians() {
     const root = $('#umbrarians-content');
     if (!root) return;
     const u = (typeof window !== 'undefined' && window.UMBRARIANS) ? window.UMBRARIANS : null;
@@ -4223,6 +4674,19 @@ const FEATURE_SECTION = {
 
     $('#new-campaign-btn').addEventListener('click', () => promptNewCampaign());
     $('#new-session-btn').addEventListener('click', () => promptSession());
+    
+    const impCharBtn = $('#import-character-btn');
+    const impCharFile = $('#import-character-file');
+    if (impCharBtn && impCharFile && !impCharBtn.dataset.wired) {
+      impCharBtn.dataset.wired = '1';
+      impCharBtn.addEventListener('click', () => impCharFile.click());
+      impCharFile.addEventListener('change', () => {
+        const f = impCharFile.files && impCharFile.files[0];
+        if (f) importCharacterJson(f, false);
+        impCharFile.value = '';
+      });
+    }
+
     $('#new-character-btn').addEventListener('click', () => promptCharacter());
     $('#new-faction-btn').addEventListener('click', () => promptFaction());
     $('#new-force-btn').addEventListener('click', () => promptForce());

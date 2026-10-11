@@ -67,6 +67,10 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
           Umbrarians
         </button>
+        <button class="nav-item" data-view="dsc-classes">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          DSC Classes
+        </button>
         <button class="nav-item" data-view="factions" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           Factions &amp; Rep
@@ -171,7 +175,9 @@
       <section id="view-party" class="view">
         <div class="view-header">
           <h1>Party &amp; Roster</h1>
-          <button id="new-character-btn" class="btn primary">
+          <button id="import-character-btn" class="btn secondary">Import Character</button>
+        <input type="file" id="import-character-file" accept=".json,application/json" hidden />
+        <button id="new-character-btn" class="btn primary">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
             Add Character
           </button>
@@ -263,6 +269,15 @@
         </div>
         <p class="muted small" id="bestiary-count"></p>
         <div id="bestiary-list" class="bestiary-grid"></div>
+      </section>
+
+      <!-- DSC Classes Reference -->
+      <section id="view-dsc-classes" class="view">
+        <div class="view-header">
+          <h1>DSC Classes</h1>
+        </div>
+        <p class="view-desc">Signature classes of The Dark Sun Chronicles — Moon Guardian, Bloodhunter, Ghostblade, and Shadowblade — with full progression and ability details.</p>
+        <div id="dsc-classes-content" class="race-reference"></div>
       </section>
 
       <!-- Umbrarians Reference (PHB + DMG) -->

@@ -2112,3 +2112,71 @@ label.small {
 .cs-atk-props { margin-top: 0.4rem; font-size: 0.75rem; color: #a89880; }
 .cs-atk-mini-row { font-size: 0.85rem; padding: 0.15rem 0; }
 .cs-main-classic { align-items: start; }
+
+.cs-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+}
+.cs-umb-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.45rem 0;
+}
+.dsc-class-card { margin-bottom: 1.25rem; }
+.path-block {
+  margin: 0.65rem 0;
+  padding: 0.55rem 0.65rem;
+  border-left: 3px solid rgba(196, 163, 90, 0.45);
+  background: rgba(0,0,0,0.12);
+  border-radius: 0 6px 6px 0;
+}
+.path-block h4 { margin: 0 0 0.25rem; color: #e8dcc8; font-size: 0.95rem; }
+#view-party .view-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+#view-party .view-header h1 { flex: 1; }
+
+/* Avatar */
+.avatar-row { align-items: flex-start; }
+.avatar-picker {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.avatar-preview,
+.cs-portrait-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 3px solid rgba(196, 163, 90, 0.75);
+  background: radial-gradient(circle at 30% 30%, #3a3028, #1a1510);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #c4a35a;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.cs-portrait-ring.sm { width: 44px; height: 44px; font-size: 1.1rem; border-width: 2px; }
+.cs-portrait-ring.has-avatar,
+.avatar-preview.has-avatar { padding: 0; }
+.cs-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-controls { display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+.sheet-card-header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
