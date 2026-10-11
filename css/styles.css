@@ -2322,3 +2322,70 @@ label.small {
   white-space: pre-wrap;
 }
 .compendium-sample summary { cursor: pointer; color: #c4a35a; margin-top: 0.5rem; }
+
+
+/* Character sheet modals — fill available viewport width */
+.modal-overlay .modal-panel.wide,
+.modal-panel.wide {
+  width: min(920px, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+}
+.modal-overlay .modal-panel.xwide,
+.modal-panel.xwide {
+  width: min(1400px, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+}
+.modal-panel.xwide #modal-body {
+  max-height: min(82vh, calc(100vh - 8rem));
+  overflow-y: auto;
+}
+@media (max-width: 700px) {
+  .modal-panel.wide,
+  .modal-panel.xwide {
+    width: calc(100vw - 0.75rem);
+    max-width: calc(100vw - 0.75rem);
+  }
+}
+
+
+/* Modal width — must target .modal-content (actual DOM class) */
+.modal-content.wide {
+  width: min(920px, calc(100vw - 2rem)) !important;
+  max-width: calc(100vw - 2rem) !important;
+}
+.modal-content.xwide {
+  width: min(1400px, calc(100vw - 1.25rem)) !important;
+  max-width: calc(100vw - 1.25rem) !important;
+}
+.modal-content.xwide .modal-body,
+.modal-content.xwide #modal-body {
+  max-height: min(82vh, calc(100vh - 8rem));
+}
+@media (max-width: 700px) {
+  .modal-content.wide,
+  .modal-content.xwide {
+    width: calc(100vw - 0.75rem) !important;
+    max-width: calc(100vw - 0.75rem) !important;
+  }
+}
+
+
+/* Umbrarian fills remaining right-column space */
+.cs-umb-inline {
+  margin-top: 0.5rem;
+}
+.cs-umb-inline .cs-panel,
+.cs-umb-inline .cs-umb {
+  height: 100%;
+}
+.cs-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.cs-col-right .cs-umb-inline {
+  flex: 1 1 auto;
+}
+.cs-main-classic {
+  align-items: stretch;
+}

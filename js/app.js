@@ -542,7 +542,7 @@
     $('#modal-title').textContent = title;
     $('#modal-body').innerHTML = bodyHtml;
     $('#modal-confirm').textContent = confirmText;
-    const panel = $('.modal-panel');
+    const panel = $('.modal-content') || $('.modal-panel');
     if (panel) {
       panel.classList.toggle('wide', !!wide || !!xwide);
       panel.classList.toggle('xwide', !!xwide);
@@ -3316,7 +3316,7 @@ function parseAttackLines(ch) {
       <div class="cs-sheet">
         <div class="cs-tabs">
           <button type="button" class="cs-tab active" data-cs-page="1">Page 1 · Combat</button>
-          <button type="button" class="cs-tab" data-cs-page="2">Page 2 · Attacks</button>
+          <button type="button" class="cs-tab" data-cs-page="2">Page 2 · Attacks &amp; Spells</button>
           <button type="button" class="cs-tab" data-cs-page="3">Page 3 · Story</button>
         </div>
 
@@ -3349,7 +3349,6 @@ function parseAttackLines(ch) {
               <div class="cs-panel"><div class="cs-panel-title">Ability Scores</div><div class="cs-abilities">${abBlock}</div></div>
               <div class="cs-panel"><div class="cs-panel-title">Saving Throws</div><div class="cs-body">${escapeHtml(ch.saves || '—')}</div></div>
               <div class="cs-panel cs-skills-panel"><div class="cs-panel-title">Skills</div><div class="cs-skills">${skillRows}</div></div>
-              ${ch.isUmbrarian ? umbrarianSheetBlock(ch) : ''}
             </div>
             <div class="cs-col-right">
               <div class="cs-panel">
@@ -3369,20 +3368,35 @@ function parseAttackLines(ch) {
                 </table>
                 <div class="muted small">Weight ${inventoryWeight(inv).toFixed(1)} lb</div>
               </div>
+              ${ch.isUmbrarian ? `<div class="cs-umb-inline">${umbrarianSheetBlock(ch)}</div>` : ''}
             </div>
           </div>
+          ${ch.isUmbrarian ? '' : ''}
         </div>
 
-        <!-- PAGE 2 ATTACKS -->
+        <!-- PAGE 2 ATTACKS / SPELLS / EQUIPMENT -->
         <div class="cs-page" data-cs-page="2">
-          <div class="cs-page-title">Attacks &amp; Weapons</div>
+          <div class="cs-page-title">Attacks</div>
           <div class="cs-atk-grid">${attackCards}</div>
           <div class="cs-panel" style="margin-top:0.75rem">
-            <div class="cs-panel-title">Attack Notes / Spell Attacks</div>
+            <div class="cs-panel-title">Attack Notes</div>
             <pre class="cs-pre">${escapeHtml(ch.attacks || '—')}</pre>
           </div>
+
+          <div class="cs-page-title" style="margin-top:1.1rem">Spellcasting</div>
+          ${spellSheetBlock(ch) || '<p class="muted small">No spellcasting on this character.</p>'}
+          ${spellSheetCardsHtml(ch) || ''}
+
+          <div class="cs-page-title" style="margin-top:1.1rem">Equipment</div>
           <div class="cs-panel">
-            <div class="cs-panel-title">Equipped Gear</div>
+            <table class="cs-inv-table">
+              <thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead>
+              <tbody>${invRows}</tbody>
+            </table>
+            <div class="muted small">Weight ${inventoryWeight(inv).toFixed(1)} lb · Equipped marked with ●</div>
+          </div>
+          <div class="cs-panel">
+            <div class="cs-panel-title">Equipped Summary</div>
             <ul class="trait-list compact">
               ${equipped.length ? equipped.map(i => `<li><strong>${escapeHtml(i.name)}</strong> (${escapeHtml(i.category)}${i.damage ? ' · ' + escapeHtml(i.damage) + ' ' + escapeHtml(i.damageType||'') : ''}${i.acBase != null ? ' · AC ' + i.acBase : ''})</li>`).join('') : '<li class="muted">Nothing equipped</li>'}
             </ul>
@@ -3566,30 +3580,50 @@ function parseAttackLines(ch) {
               <h3>Skills</h3>
               <div class="p-skills">${escapeHtml(skillLines)}</div>
             </section>
-          </div>
-          <div class="p-col p-col-wide">
-            <section class="p-panel">
-              <h3>Attacks &amp; Weapons</h3>
-              <div class="p-atk-grid">${attackCards}</div>
-              ${ch.attacks ? `<pre class="p-pre">${escapeHtml(ch.attacks)}</pre>` : ''}
-            </section>
             <section class="p-panel">
               <h3>Features &amp; Traits</h3>
               <pre class="p-pre">${escapeHtml(features)}</pre>
             </section>
+          </div>
+          <div class="p-col p-col-wide">
             <section class="p-panel">
-              <h3>Equipment <span class="p-dim">(${inventoryWeight(inv).toFixed(1)} lb)</span></h3>
-              <table class="p-table"><thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead><tbody>${invRows}</tbody></table>
+              <h3>Combat Summary</h3>
+              <div class="p-atk-mini">${attacks.slice(0,6).map(a => `<div><strong>${escapeHtml(a.name)}</strong> ${escapeHtml(a.bonus)} · ${escapeHtml(a.damage)}</div>`).join('') || '<span class="p-empty">See Attacks section</span>'}</div>
             </section>
           </div>
         </div>
 
-        ${(() => {
-          const sp = spellSheetBlock(ch);
-          const cards = spellSheetCardsHtml(ch);
-          return (sp || cards) ? `<div class="p-spell-wrap">${sp || ''}${cards || ''}</div>` : '';
-        })()}
-        ${umb ? `<div class="p-umb-wrap">${umb}</div>` : ''}
+        <section class="p-section-block">
+          <h2 class="p-section-title">Spellcasting</h2>
+          <div class="p-panel">
+            ${spellSheetBlock(ch) || '<p class="p-empty">No spell slots or spellcasting class.</p>'}
+          </div>
+          <div class="p-panel">
+            <h3>Spell Cards</h3>
+            ${spellSheetCardsHtml(ch) || '<p class="p-empty">No spells prepared or known.</p>'}
+          </div>
+        </section>
+
+        <section class="p-section-block">
+          <h2 class="p-section-title">Attacks</h2>
+          <div class="p-panel">
+            <div class="p-atk-grid">${attackCards || '<p class="p-empty">No attacks listed.</p>'}</div>
+            ${ch.attacks ? `<pre class="p-pre">${escapeHtml(ch.attacks)}</pre>` : '<p class="p-empty">No attack notes.</p>'}
+          </div>
+        </section>
+
+        <section class="p-section-block">
+          <h2 class="p-section-title">Equipment <span class="p-dim">(${inventoryWeight(inv).toFixed(1)} lb)</span></h2>
+          <div class="p-panel">
+            <table class="p-table"><thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead><tbody>${invRows}</tbody></table>
+          </div>
+          <div class="p-panel">
+            <h3>Equipped</h3>
+            <ul class="p-list">${equipped.length ? equipped.map(i => `<li><strong>${escapeHtml(i.name)}</strong> (${escapeHtml(i.category)}${i.damage ? ' · ' + escapeHtml(i.damage) : ''})</li>`).join('') : '<li class="p-empty">Nothing equipped</li>'}</ul>
+          </div>
+        </section>
+
+        ${umb ? `<section class="p-section-block"><h2 class="p-section-title">Umbrarian</h2><div class="p-umb-wrap">${umb}</div></section>` : ''}
 
         ${(race || path || ch.notes) ? `
         <div class="p-grid p-grid-3">
@@ -3708,6 +3742,18 @@ function parseAttackLines(ch) {
         text-align: center; margin-top: 8px; font-size: 0.65rem; letter-spacing: 0.12em;
         text-transform: uppercase; color: #a89880;
       }
+      .p-section-title {
+        font-size: 12pt; font-weight: 700; color: #c4a35a; text-transform: uppercase;
+        letter-spacing: 0.08em; border-bottom: 2px solid rgba(196,163,90,0.4);
+        padding-bottom: 4px; margin: 10px 0 8px;
+      }
+      .p-section-block { margin-bottom: 10px; }
+      .p-break { break-before: auto; page-break-before: auto; margin-top: 8px; }
+      .p-section-block { break-inside: avoid; page-break-inside: avoid; }
+      .p-panel { margin-bottom: 6px; }
+      .p-empty { color: #a89880; font-style: italic; font-size: 9pt; }
+      .p-atk-grid { min-height: 0; }
+      .spell-card-grid { margin-top: 4px; }
       .muted { color: #a89880; }
       .p-spell-wrap { margin-bottom: 6px; }
       .p-spell-wrap .cs-panel { background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.3); border-radius: 6px; padding: 6px 8px; }
