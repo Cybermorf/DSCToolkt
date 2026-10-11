@@ -2389,3 +2389,39 @@ label.small {
 .cs-main-classic {
   align-items: stretch;
 }
+
+
+/* Force Turn — player disruption picker */
+.force-disrupt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+.force-disrupt-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(220px, 40%);
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(196,163,90,0.25);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.2);
+}
+.force-disrupt-name {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.force-disrupt-row .field.compact { margin: 0; }
+.force-disrupt-row select { width: 100%; }
+.dom-tag.disrupt {
+  background: rgba(196, 92, 74, 0.25);
+  color: #e8a090;
+  border-color: rgba(196, 92, 74, 0.45);
+}
+@media (max-width: 700px) {
+  .force-disrupt-row { grid-template-columns: 1fr; }
+}

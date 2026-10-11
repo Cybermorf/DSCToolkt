@@ -4533,10 +4533,79 @@ function parseAttackLines(ch) {
     }
   }
 
+  /** Apply player disruption before / during a Force Turn. Mutates force. */
+  function applyPlayerDisruption(f, level) {
+    const notes = [];
+    const clockBefore = f.agendaClock;
+    if (level === 'minor') {
+      f.agendaClock = clamp(f.agendaClock - 1, 0, 6);
+      f.pressure = clamp(f.pressure + 1, 0, 4);
+      if (f.awareness < 4 && Math.random() < 0.5) f.awareness = clamp(f.awareness + 1, 0, 4);
+      notes.push(`Players disrupted operations: agenda clock retracts ${clockBefore} → ${f.agendaClock}/6.`);
+      notes.push(`Pressure rises to ${f.pressure}/4 as the force reacts.`);
+    } else if (level === 'major') {
+      f.agendaClock = clamp(f.agendaClock - 2, 0, 6);
+      f.pressure = clamp(f.pressure + 1, 0, 4);
+      f.awareness = clamp(f.awareness + 1, 0, 4);
+      const dom = dominantInfluence(f);
+      if (dom === 'political') f.political = clamp(f.political - 1, 0, 6);
+      else if (dom === 'corruptive') f.corruptive = clamp(f.corruptive - 1, 0, 6);
+      else f.disruptive = clamp(f.disruptive - 1, 0, 6);
+      notes.push(`Major player interference: agenda clock retracts ${clockBefore} → ${f.agendaClock}/6.`);
+      notes.push(`Dominant ${dom} influence slips by 1. Awareness ${f.awareness}/4 · Pressure ${f.pressure}/4.`);
+    } else if (level === 'thwarted') {
+      const target = Math.min(f.agendaClock - 3, 2);
+      f.agendaClock = clamp(target, 0, 6);
+      f.pressure = clamp(f.pressure + 2, 0, 4);
+      f.awareness = clamp(f.awareness + 1, 0, 4);
+      const dom = dominantInfluence(f);
+      if (dom === 'political') f.political = clamp(f.political - 1, 0, 6);
+      else if (dom === 'corruptive') f.corruptive = clamp(f.corruptive - 1, 0, 6);
+      else f.disruptive = clamp(f.disruptive - 1, 0, 6);
+      notes.push(`Goal actively thwarted: agenda clock collapses ${clockBefore} → ${f.agendaClock}/6.`);
+      notes.push(`The force is wounded but alert — Awareness ${f.awareness}/4 · Pressure ${f.pressure}/4.`);
+    }
+    if (level !== 'none') {
+      f.status = `Player disruption (${level}): clock ${f.agendaClock}/6`;
+    }
+    return { level, notes, clockBefore, clockAfter: f.agendaClock };
+  }
+
+  function applyFactionGoalRetraction(c, force, disruption) {
+    if (!c.factions || !disruption || disruption.level === 'none') return null;
+    const fname = String(force.name || '').toLowerCase().trim();
+    if (!fname) return null;
+    const fac = c.factions.find(x => {
+      const n = String(x.name || '').toLowerCase().trim();
+      return n && (n === fname || n.includes(fname) || fname.includes(n));
+    });
+    if (!fac) return null;
+    const before = Number(fac.reputation) || 0;
+    let delta = 0;
+    if (disruption.level === 'major') delta = before >= 0 ? -1 : 1;
+    else if (disruption.level === 'thwarted') delta = before > 0 ? -1 : (before < 0 ? 1 : 0);
+    fac.reputation = clamp(before + delta, -3, 3);
+    const goalNote = disruption.level === 'thwarted'
+      ? 'Primary agenda stalled by the party.'
+      : disruption.level === 'major'
+        ? 'Agenda set back by party action.'
+        : 'Operations hindered.';
+    const line = `[Force Turn] ${goalNote} Linked force «${force.name}» clock ${disruption.clockBefore}→${disruption.clockAfter}.`;
+    fac.notes = [fac.notes || '', line].filter(Boolean).join('\n');
+    return {
+      faction: fac.name,
+      reputationBefore: before,
+      reputationAfter: fac.reputation,
+      note: goalNote
+    };
+  }
+
   /** Run one Force Turn for a single force. Mutates the force in place. Returns report object. */
-  function runForceTurn(f) {
+  function runForceTurn(f, disruptionLevel = 'none') {
     const n = normalizeForce(f);
     Object.assign(f, n);
+
+    const disruption = applyPlayerDisruption(f, disruptionLevel || 'none');
 
     const maxInf = Math.max(f.political, f.corruptive, f.disruptive);
     const dom = dominantInfluence(f);
@@ -4544,13 +4613,12 @@ function parseAttackLines(ch) {
       : dom === 'corruptive' ? GENERATORS.corruptiveActions
       : GENERATORS.disruptiveActions;
 
-    // Chance to act scales with influence and pressure (desperate forces act more)
-    const actChance = 0.35 + (maxInf * 0.08) + (f.pressure * 0.05);
+    const disruptPenalty = disruptionLevel === 'none' ? 0 : disruptionLevel === 'minor' ? 0.12 : disruptionLevel === 'major' ? 0.22 : 0.35;
+    const actChance = 0.35 + (maxInf * 0.08) + (f.pressure * 0.05) + (disruptionLevel !== 'none' ? 0.1 : 0);
     const acts = Math.random() < actChance;
 
-    // Chance to advance clock: needs capacity + opportunity
-    const clockChance = 0.25 + (maxInf * 0.07) + (f.pressure >= 3 ? 0.1 : 0);
-    const advancesClock = f.agendaClock < 6 && Math.random() < clockChance;
+    const clockChance = Math.max(0.05, 0.25 + (maxInf * 0.07) + (f.pressure >= 3 ? 0.1 : 0) - disruptPenalty);
+    const advancesClock = disruptionLevel !== 'thwarted' && f.agendaClock < 6 && Math.random() < clockChance;
 
     let actionText = '';
     let clockNote = '';
@@ -4559,36 +4627,39 @@ function parseAttackLines(ch) {
 
     if (acts) {
       actionText = pick(actionTable);
+      if (disruptionLevel !== 'none') actionText = `In reaction to the party: ${actionText}`;
       f.lastAction = actionText;
       f.status = actionText;
     } else {
-      actionText = pick(GENERATORS.statusSnippets);
+      actionText = disruptionLevel !== 'none'
+        ? 'Reeling from setbacks — consolidates assets and watches the party.'
+        : pick(GENERATORS.statusSnippets);
       f.status = actionText;
     }
 
+    if (disruption.notes.length) clockNote = disruption.notes.join(' ');
     if (advancesClock) {
       f.agendaClock = clamp(f.agendaClock + 1, 0, 6);
-      clockNote = `Agenda clock advances to ${f.agendaClock}/6 — ${GENERATORS.clockStageLabels[f.agendaClock]}.`;
+      const adv = `Agenda clock advances to ${f.agendaClock}/6 — ${GENERATORS.clockStageLabels[f.agendaClock]}.`;
+      clockNote = clockNote ? `${clockNote} ${adv}` : adv;
     }
 
-    // Awareness may tick up if force is active and party is visible
-    if (acts && f.awareness < 4 && Math.random() < 0.2 + f.awareness * 0.05) {
+    if (acts && f.awareness < 4 && Math.random() < 0.2 + f.awareness * 0.05 + (disruptionLevel !== 'none' ? 0.2 : 0)) {
       f.awareness = clamp(f.awareness + 1, 0, 4);
       awarenessNote = `Awareness of the party rises to ${f.awareness}/4.`;
     }
 
-    // Pressure responds to clock progress and awareness
     if (f.agendaClock >= 4 && f.pressure < 3 && Math.random() < 0.3) {
       f.pressure = clamp(f.pressure + 1, 0, 4);
       pressureNote = `Pressure rises to ${f.pressure}/4.`;
-    } else if (f.pressure >= 3 && Math.random() < 0.15) {
-      // Desperate forces sometimes overreach and lose pressure after a move
+    } else if (f.pressure >= 3 && disruptionLevel === 'none' && Math.random() < 0.15) {
       f.pressure = clamp(f.pressure - 1, 0, 4);
       pressureNote = `After escalating, pressure eases to ${f.pressure}/4.`;
     }
 
     return {
       name: f.name,
+      forceId: f.id,
       acted: acts,
       action: actionText,
       clock: f.agendaClock,
@@ -4599,54 +4670,137 @@ function parseAttackLines(ch) {
       pressureNote,
       dominant: dom,
       maxInf,
-      goalComplete: f.agendaClock >= 6
+      goalComplete: f.agendaClock >= 6,
+      disruption: disruptionLevel,
+      disruptionNotes: disruption.notes,
+      disruptionDetail: disruption
     };
   }
 
-  function forceTurn() {
+  async function forceTurn() {
     const c = getActive();
     if (!c || c.forces.length === 0) {
       toast('No active forces — add forces first');
       return;
     }
 
-    // Normalize all forces first
     c.forces = c.forces.map(f => {
       const n = normalizeForce(f);
       Object.assign(f, n);
       return f;
     });
 
-    // Take a turn for every force (living world), but report highlights
-    const reports = c.forces.map(f => runForceTurn(f));
+    const rows = c.forces.map(f => `
+      <div class="force-disrupt-row" data-force-id="${escapeAttr(f.id)}">
+        <div class="force-disrupt-name">
+          <strong>${escapeHtml(f.name)}</strong>
+          <span class="muted small">Clock ${f.agendaClock}/6 · ${escapeHtml(f.goal || 'No goal set')}</span>
+        </div>
+        <label class="field compact">
+          <span class="muted small">Party disruption</span>
+          <select class="force-disrupt-select" data-force-id="${escapeAttr(f.id)}">
+            <option value="none" selected>None — goals proceed</option>
+            <option value="minor">Minor — hindered (−1 clock, +pressure)</option>
+            <option value="major">Major — set back (−2 clock, −influence)</option>
+            <option value="thwarted">Thwarted — agenda collapses (−3 clock)</option>
+          </select>
+        </label>
+      </div>`).join('');
+
+    let captured = null;
+    const confirmed = await openModal({
+      title: 'Force Turn — Player Disruption',
+      wide: true,
+      bodyHtml: `
+        <p class="muted">Mark how the party affected each force’s goals this interval. Disruptions <strong>retract agenda clocks</strong> and can update linked factions. Forces then act — disrupted ones retaliate more and advance goals less.</p>
+        <div class="force-disrupt-list">${rows}</div>
+        <div class="field" style="margin-top:0.75rem">
+          <label>DM notes for this turn (optional)</label>
+          <textarea id="force-turn-notes" rows="2" placeholder="What the party did this interval…"></textarea>
+        </div>
+      `,
+      confirmText: 'Run Force Turn',
+      onConfirm: () => {
+        const map = {};
+        document.querySelectorAll('.force-disrupt-select').forEach(sel => {
+          map[sel.getAttribute('data-force-id')] = sel.value || 'none';
+        });
+        captured = {
+          map,
+          notes: (document.getElementById('force-turn-notes')?.value || '').trim()
+        };
+        return true;
+      }
+    });
+    if (!confirmed || !captured) return;
+
+    const factionHits = [];
+    const reports = c.forces.map(f => {
+      const level = captured.map[f.id] || 'none';
+      const report = runForceTurn(f, level);
+      const facHit = applyFactionGoalRetraction(c, f, report.disruptionDetail);
+      if (facHit) {
+        report.factionNote = facHit;
+        factionHits.push(facHit);
+      }
+      return report;
+    });
+
+    if (captured.notes) {
+      c.notes = [c.notes || '', `[Force Turn] ${captured.notes}`].filter(Boolean).join('\n\n');
+    }
+    // Store last force-turn log on campaign
+    c.lastForceTurn = {
+      at: new Date().toISOString(),
+      notes: captured.notes,
+      reports: reports.map(r => ({
+        name: r.name,
+        disruption: r.disruption,
+        clock: r.clock,
+        action: r.action,
+        clockNote: r.clockNote
+      }))
+    };
     c.updatedAt = new Date().toISOString();
     save();
     renderForces();
+    if (typeof renderFactions === 'function') {
+      try { renderFactions(); } catch (e) {}
+    }
 
     const lines = reports.map(r => {
       let html = `<li class="force-turn-item">
         <strong>${escapeHtml(r.name)}</strong>
-        <span class="dom-tag ${r.dominant}">${r.dominant}</span>
-        <div class="turn-action">${escapeHtml(r.action)}</div>`;
+        <span class="dom-tag ${r.dominant}">${r.dominant}</span>`;
+      if (r.disruption && r.disruption !== 'none') {
+        html += `<span class="dom-tag disrupt">${escapeHtml(r.disruption)}</span>`;
+      }
+      html += `<div class="turn-action">${escapeHtml(r.action)}</div>`;
       if (r.clockNote) html += `<div class="turn-clock">⏱ ${escapeHtml(r.clockNote)}</div>`;
       if (r.awarenessNote) html += `<div class="turn-meta">${escapeHtml(r.awarenessNote)}</div>`;
       if (r.pressureNote) html += `<div class="turn-meta">${escapeHtml(r.pressureNote)}</div>`;
+      if (r.factionNote) {
+        html += `<div class="turn-meta">🏛 Faction <strong>${escapeHtml(r.factionNote.faction)}</strong>: ${escapeHtml(r.factionNote.note)} (rep ${r.factionNote.reputationBefore} → ${r.factionNote.reputationAfter})</div>`;
+      }
       if (r.goalComplete) html += `<div class="turn-alert">⚠ Primary goal achieved — the campaign transforms.</div>`;
       html += `</li>`;
       return html;
     }).join('');
 
     openModal({
-      title: 'Dynamic Influence — Force Turn',
+      title: 'Dynamic Influence — Force Turn Results',
+      wide: true,
       bodyHtml: `
-        <p class="muted">After a major operation, downtime, or journey the world moves. Each active force has acted according to its Influences, Agenda Clock, Awareness, and Pressure.</p>
+        <p class="muted">The world moved. Agenda clocks retracted where the party interfered; forces then acted according to influence, awareness, and pressure.</p>
+        ${captured.notes ? `<p class="muted small"><strong>DM notes:</strong> ${escapeHtml(captured.notes)}</p>` : ''}
         <ul class="force-turn-list">${lines}</ul>
-        <p class="muted small">Edit individual forces to adjust clocks, influence ratings, or respond to player interference.</p>
+        ${factionHits.length ? `<p class="muted small">${factionHits.length} linked faction(s) updated.</p>` : '<p class="muted small">Tip: name a Force like its Faction to auto-link reputation when goals are disrupted.</p>'}
       `,
       confirmText: 'Done',
-      onConfirm: () => true,
+      onConfirm: () => true
     });
   }
+
 
   function renderForces() {
     const c = getActive();
