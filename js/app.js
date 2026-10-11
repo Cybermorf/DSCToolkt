@@ -11,9 +11,13 @@
   const STORAGE_KEY = 'darkSunChronicles_v1';
   const WORLDS = ['Luminaris', 'Umbraria', 'Eternum', 'Solara', 'Aetheria', 'Harmonia', 'Celestia'];
 
-    const BESTIARY = (typeof window !== 'undefined' && window.BESTIARY_DATA)
-    ? window.BESTIARY_DATA
-    : [];
+    function getBestiaryList() {
+      if (window.BESTIARY_MERGED && window.BESTIARY_MERGED.length) return window.BESTIARY_MERGED;
+      return (typeof window !== 'undefined' && window.BESTIARY_DATA) ? window.BESTIARY_DATA : [];
+    }
+    // legacy alias used in closures — always call getBestiaryList()
+    let BESTIARY = getBestiaryList();
+    function refreshBestiaryRef() { BESTIARY = getBestiaryList(); }
   // short alias fields kept for older saves: n,w,o,cr,ac,hp + desc/eco/people/run/seeds
   // 115 creatures with descriptions
   // 115 principal creatures from Bestiary of the Seven Worlds
@@ -1257,17 +1261,167 @@
   
   
   
+
+  const COMPENDIUM_IDB_NAME = 'dsc-toolkt';
+  const COMPENDIUM_IDB_STORE = 'compendium';
+  const COMPENDIUM_IDB_KEY = 'user';
+  let _compendiumCache = null;
+  let _compendiumSaveTimer = null;
+
+  function emptyCompendium() {
+    return { spells: [], equipment: [], creatures: [], meta: {} };
+  }
+
+  function openCompendiumDb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error('IndexedDB unavailable'));
+        return;
+      }
+      const req = indexedDB.open(COMPENDIUM_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(COMPENDIUM_IDB_STORE)) {
+          db.createObjectStore(COMPENDIUM_IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error('IDB open failed'));
+    });
+  }
+
+  async function idbGetCompendium() {
+    const db = await openCompendiumDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(COMPENDIUM_IDB_STORE, 'readonly');
+      const store = tx.objectStore(COMPENDIUM_IDB_STORE);
+      const req = store.get(COMPENDIUM_IDB_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbSetCompendium(data) {
+    const db = await openCompendiumDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(COMPENDIUM_IDB_STORE, 'readwrite');
+      const store = tx.objectStore(COMPENDIUM_IDB_STORE);
+      const req = store.put(data, COMPENDIUM_IDB_KEY);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   function getUserCompendium() {
+    if (_compendiumCache) return _compendiumCache;
+    // Synchronous fallback: try tiny localStorage stub / legacy, else empty
     try {
-      return JSON.parse(localStorage.getItem('dsc_compendium_extra') || '{"spells":[],"equipment":[]}');
+      const legacy = localStorage.getItem('dsc_compendium_extra');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        _compendiumCache = {
+          spells: parsed.spells || [],
+          equipment: parsed.equipment || [],
+          creatures: parsed.creatures || [],
+          meta: parsed.meta || {}
+        };
+        return _compendiumCache;
+      }
     } catch (e) {
-      return { spells: [], equipment: [] };
+      // quota or parse error — ignore
     }
+    _compendiumCache = emptyCompendium();
+    return _compendiumCache;
   }
 
   function saveUserCompendium(data) {
-    localStorage.setItem('dsc_compendium_extra', JSON.stringify(data));
+    const normalized = {
+      spells: data.spells || [],
+      equipment: data.equipment || [],
+      creatures: data.creatures || [],
+      meta: data.meta || {}
+    };
+    _compendiumCache = normalized;
+    // Persist to IndexedDB (large capacity). Debounce rapid writes.
+    if (_compendiumSaveTimer) clearTimeout(_compendiumSaveTimer);
+    _compendiumSaveTimer = setTimeout(() => {
+      idbSetCompendium(normalized).then(() => {
+        // Drop legacy localStorage copy so it cannot blow the quota
+        try { localStorage.removeItem('dsc_compendium_extra'); } catch (e) {}
+        // Keep only a tiny pointer in localStorage
+        try {
+          localStorage.setItem('dsc_compendium_meta', JSON.stringify({
+            backend: 'indexeddb',
+            spells: normalized.spells.length,
+            equipment: normalized.equipment.length,
+            creatures: normalized.creatures.length,
+            updatedAt: normalized.meta?.updatedAt || new Date().toISOString()
+          }));
+        } catch (e) {}
+      }).catch(err => {
+        console.warn('IndexedDB save failed', err);
+        // Last resort: try trimmed localStorage (no creature descriptions)
+        try {
+          const slim = {
+            spells: normalized.spells,
+            equipment: normalized.equipment,
+            creatures: (normalized.creatures || []).map(c => ({
+              n: c.n, w: c.w, o: c.o || 'Imported', classif: c.classif,
+              cr: c.cr, ac: c.ac, hp: c.hp, speed: c.speed,
+              str: c.str, dex: c.dex, con: c.con, int: c.int, wis: c.wis, cha: c.cha,
+              source: c.source, _src: c._src || 'Imported', _key: c._key,
+              desc: (c.desc || '').slice(0, 280)
+            })),
+            meta: { ...(normalized.meta || {}), trimmed: true }
+          };
+          localStorage.setItem('dsc_compendium_extra', JSON.stringify(slim));
+        } catch (e2) {
+          console.warn('localStorage fallback also failed', e2);
+          if (typeof toast === 'function') toast('Storage full — could not save full compendium');
+        }
+      });
+    }, 50);
   }
+
+  async function loadUserCompendiumAsync() {
+    try {
+      const fromIdb = await idbGetCompendium();
+      if (fromIdb && (fromIdb.spells || fromIdb.equipment || fromIdb.creatures)) {
+        _compendiumCache = {
+          spells: fromIdb.spells || [],
+          equipment: fromIdb.equipment || [],
+          creatures: fromIdb.creatures || [],
+          meta: fromIdb.meta || {}
+        };
+        try { localStorage.removeItem('dsc_compendium_extra'); } catch (e) {}
+        return _compendiumCache;
+      }
+    } catch (e) {
+      console.warn('IndexedDB load failed', e);
+    }
+    // Migrate legacy localStorage → IndexedDB
+    try {
+      const legacy = localStorage.getItem('dsc_compendium_extra');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        _compendiumCache = {
+          spells: parsed.spells || [],
+          equipment: parsed.equipment || [],
+          creatures: parsed.creatures || [],
+          meta: parsed.meta || {}
+        };
+        await idbSetCompendium(_compendiumCache);
+        try { localStorage.removeItem('dsc_compendium_extra'); } catch (e) {}
+        return _compendiumCache;
+      }
+    } catch (e) {
+      try { localStorage.removeItem('dsc_compendium_extra'); } catch (e2) {}
+    }
+    if (!_compendiumCache) _compendiumCache = emptyCompendium();
+    return _compendiumCache;
+  }
+
+
 
   function mergeSpellRecord(raw) {
     if (!raw || !raw.name) return null;
@@ -1329,6 +1483,11 @@
     const baseEquip = (window.EQUIPMENT_BASE || window.EQUIPMENT || []).slice();
     if (!window.SPELLS_BASE) window.SPELLS_BASE = baseSpells.map(s => ({ ...s }));
     if (!window.EQUIPMENT_BASE) window.EQUIPMENT_BASE = baseEquip.map(e => ({ ...e }));
+    if (!window.BESTIARY_BASE) {
+      window.BESTIARY_BASE = (typeof window !== 'undefined' && window.BESTIARY_DATA)
+        ? window.BESTIARY_DATA.map(b => ({ ...b }))
+        : [];
+    }
     const extra = getUserCompendium();
     const spellMap = new Map(window.SPELLS_BASE.map(s => [s.id, s]));
     (extra.spells || []).forEach(s => {
@@ -1342,6 +1501,15 @@
     });
     window.SPELLS = [...spellMap.values()].sort((a,b) => (a.level-b.level) || a.name.localeCompare(b.name));
     window.EQUIPMENT = [...eqMap.values()];
+    // Bestiary merge: DSC base + imported (imported keyed by n+source)
+    const srcFilter = window.BESTIARY_SOURCE || 'all';
+    const imported = (extra.creatures || []).map(c => ({ ...c, _src: c._src || c.source || 'Imported' }));
+    let list;
+    if (srcFilter === 'dsc') list = window.BESTIARY_BASE.slice();
+    else if (srcFilter === 'imported') list = imported.slice();
+    else list = window.BESTIARY_BASE.concat(imported);
+    window.BESTIARY_MERGED = list;
+    if (typeof refreshBestiaryRef === 'function') refreshBestiaryRef();
   }
 
   function importCompendiumPack(obj) {
@@ -1349,11 +1517,12 @@
     // or Open5e-ish / homebrew arrays
     let spellsIn = [];
     let equipIn = [];
+    let creaturesIn = [];
     let meta = { edition: '', source: '', attribution: '' };
     if (Array.isArray(obj)) {
-      // Heuristic: spells have level/school, equipment have category/cost
       obj.forEach(row => {
         if (row.level != null || row.school || row.castingTime || row.casting_time) spellsIn.push(row);
+        else if (row.n || row.cr != null || row.challenge_rating != null || row.hit_points != null) creaturesIn.push(row);
         else equipIn.push(row);
       });
     } else if (obj && typeof obj === 'object') {
@@ -1362,13 +1531,14 @@
       meta.attribution = obj.attribution || '';
       spellsIn = obj.spells || obj.spell || obj.Spells || [];
       equipIn = obj.equipment || obj.items || obj.gear || obj.Equipment || [];
-      // 5e.tools / other
+      creaturesIn = obj.creatures || obj.monsters || obj.bestiary || [];
       if (!spellsIn.length && obj.compendium?.spells) spellsIn = obj.compendium.spells;
       if (!equipIn.length && obj.compendium?.items) equipIn = obj.compendium.items;
+      if (!creaturesIn.length && obj.compendium?.creatures) creaturesIn = obj.compendium.creatures;
     }
     const extra = getUserCompendium();
     const spellMap = new Map((extra.spells || []).map(s => [s.id || s.name, s]));
-    let sCount = 0, eCount = 0;
+    let sCount = 0, eCount = 0, cCount = 0;
     spellsIn.forEach(raw => {
       const m = mergeSpellRecord(raw);
       if (m) { spellMap.set(m.id, m); sCount++; }
@@ -1378,14 +1548,33 @@
       const m = mergeEquipmentRecord(raw);
       if (m) { eqMap.set(m.id, m); eCount++; }
     });
+    const creMap = new Map((extra.creatures || []).map(c => [c._key || c.n || c.name, c]));
+    creaturesIn.forEach(raw => {
+      let c = raw;
+      if (raw.challenge_rating != null || raw.hit_points != null) c = mapOpen5eCreature(raw);
+      else if (raw.name && !raw.n) c = { ...raw, n: raw.name, o: raw.o || 'Imported', _src: 'Imported' };
+      if (c && (c.n || c.name)) {
+        const key = c._key || c.n || c.name;
+        creMap.set(key, { ...c, _src: c._src || 'Imported' });
+        cCount++;
+      }
+    });
     const next = {
       spells: [...spellMap.values()],
       equipment: [...eqMap.values()],
+      creatures: [...creMap.values()],
       meta: { ...(extra.meta || {}), ...meta, updatedAt: new Date().toISOString() }
     };
     saveUserCompendium(next);
     applyCompendiumToRuntime();
-    return { spells: sCount, equipment: eCount, totalSpells: window.SPELLS.length, totalEquipment: window.EQUIPMENT.length };
+    return {
+      spells: sCount,
+      equipment: eCount,
+      creatures: cCount,
+      totalSpells: window.SPELLS.length,
+      totalEquipment: window.EQUIPMENT.length,
+      totalCreatures: (window.BESTIARY_MERGED || []).length
+    };
   }
 
   
@@ -1540,7 +1729,54 @@
     });
   }
 
-  async function syncOpen5e({ srdOnly = true, spells = true, equipment = true, statusEl } = {}) {
+  function mapOpen5eCreature(c) {
+    const doc = c.document || {};
+    const size = typeof c.size === 'object' ? (c.size?.name || '') : (c.size || '');
+    const type = typeof c.type === 'object' ? (c.type?.name || '') : (c.type || '');
+    const scores = c.ability_scores || {};
+    const speedObj = c.speed || {};
+    const speedParts = [];
+    if (speedObj.walk) speedParts.push(`${speedObj.walk} ft.`);
+    if (speedObj.fly) speedParts.push(`fly ${speedObj.fly} ft.`);
+    if (speedObj.swim) speedParts.push(`swim ${speedObj.swim} ft.`);
+    if (speedObj.climb) speedParts.push(`climb ${speedObj.climb} ft.`);
+    if (speedObj.burrow) speedParts.push(`burrow ${speedObj.burrow} ft.`);
+    const traits = (c.traits || []).map(t => `**${t.name}.** ${(t.desc || '').slice(0, 600)}`).join('\n');
+    const actions = (c.actions || []).map(a => `**${a.name}.** ${(a.desc || '').slice(0, 800)}`).join('\n');
+    const cr = c.challenge_rating != null ? Number(c.challenge_rating) : 0;
+    const name = c.name || 'Unknown';
+    return {
+      n: name,
+      w: doc.display_name || doc.name || 'Open5e',
+      o: 'Imported',
+      classif: [size, type].filter(Boolean).join(' ') || type || '',
+      cr: isNaN(cr) ? 0 : cr,
+      ac: c.armor_class != null ? c.armor_class : 10,
+      hp: c.hit_points != null ? c.hit_points : 1,
+      speed: speedParts.join(', ') || '30 ft.',
+      str: scores.strength || 10,
+      dex: scores.dexterity || 10,
+      con: scores.constitution || 10,
+      int: scores.intelligence || 10,
+      wis: scores.wisdom || 10,
+      cha: scores.charisma || 10,
+      desc: [
+        c.alignment ? `Alignment: ${c.alignment}.` : '',
+        c.languages?.as_string ? `Languages: ${c.languages.as_string}.` : '',
+        traits ? `Traits:\n${traits}` : '',
+        actions ? `Actions:\n${actions}` : ''
+      ].filter(Boolean).join('\n\n'),
+      eco: '',
+      people: '',
+      run: actions ? actions.slice(0, 800) : '',
+      seeds: '',
+      source: doc.display_name || doc.name || 'Open5e',
+      _src: 'Imported',
+      _key: c.key || name
+    };
+  }
+
+  async function syncOpen5e({ srdOnly = true, spells = true, equipment = true, creatures = false, statusEl } = {}) {
     const setStatus = (msg) => {
       if (statusEl) statusEl.textContent = msg;
     };
@@ -1552,7 +1788,8 @@
       source: 'Open5e API v2',
       attribution: 'Data retrieved from the Open5e API v2 (https://api.open5e.com / https://github.com/open5e/open5e-api). Individual documents retain their original licenses.',
       spells: [],
-      equipment: []
+      equipment: [],
+      creatures: []
     };
     if (spells) {
       setStatus('Fetching spells from Open5e v2…');
@@ -1574,8 +1811,16 @@
       pack.equipment = [...weapons.map(mapOpen5eWeapon), ...armor.map(mapOpen5eArmor)].filter(Boolean);
       setStatus(`Mapped ${pack.equipment.length} equipment items`);
     }
+    if (creatures) {
+      setStatus('Fetching creatures from Open5e v2…');
+      const rows = await open5eFetchAll('/creatures/', params, {
+        onPage: (p, n, total) => setStatus(`Creatures: page ${p} (${n}/${total || '?'})…`)
+      });
+      pack.creatures = rows.map(mapOpen5eCreature).filter(Boolean);
+      setStatus(`Mapped ${pack.creatures.length} creatures`);
+    }
     const res = importCompendiumPack(pack);
-    setStatus(`Done — +${res.spells} spells, +${res.equipment} equipment (totals ${res.totalSpells} / ${res.totalEquipment})`);
+    setStatus(`Done — +${res.spells} spells, +${res.equipment} equipment, +${res.creatures || 0} creatures (totals ${res.totalSpells} / ${res.totalEquipment} / ${res.totalCreatures || 0})`);
     return res;
   }
 
@@ -1585,6 +1830,7 @@
     const extra = getUserCompendium();
     const sN = (extra.spells || []).length;
     const eN = (extra.equipment || []).length;
+    const cN = (extra.creatures || []).length;
     root.innerHTML = `
       <div class="compendium-panel">
         <h3>Compendium Import</h3>
@@ -1595,7 +1841,7 @@
           <button type="button" class="btn danger" id="comp-clear-btn">Clear User Imports</button>
           <input type="file" id="comp-import-file" accept=".json,application/json" hidden />
         </div>
-        <p class="muted small">User imports: <strong>${sN}</strong> spells · <strong>${eN}</strong> equipment · Runtime: <strong>${(window.SPELLS||[]).length}</strong> spells · <strong>${(window.EQUIPMENT||[]).length}</strong> equipment</p>
+        <p class="muted small">User imports: <strong>${sN}</strong> spells · <strong>${eN}</strong> equipment · <strong>${cN}</strong> creatures · Runtime: <strong>${(window.SPELLS||[]).length}</strong> spells · <strong>${(window.EQUIPMENT||[]).length}</strong> equipment · <strong>${(window.BESTIARY_MERGED||window.BESTIARY_DATA||[]).length}</strong> creatures</p>
       </div>
       <div class="compendium-panel">
         <h3>Open5e API Sync</h3>
@@ -1605,9 +1851,10 @@
           <span>SRD 5.2 only (<code>document__key=srd-2024</code>)</span>
         </label>
         <div class="form-row">
-          <button type="button" class="btn primary" id="open5e-sync-all">Sync Spells + Equipment</button>
+          <button type="button" class="btn primary" id="open5e-sync-all">Sync Spells + Equipment + Bestiary</button>
           <button type="button" class="btn secondary" id="open5e-sync-spells">Spells only</button>
           <button type="button" class="btn secondary" id="open5e-sync-equip">Weapons &amp; Armor only</button>
+          <button type="button" class="btn secondary" id="open5e-sync-creatures">Bestiary only</button>
         </div>
         <p class="muted small" id="open5e-status">Ready.</p>
       </div>
@@ -1649,7 +1896,8 @@
         source: extra.meta?.source || 'User Import',
         attribution: extra.meta?.attribution || '',
         spells: extra.spells || [],
-        equipment: extra.equipment || []
+        equipment: extra.equipment || [],
+        creatures: extra.creatures || []
       };
       const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
@@ -1660,7 +1908,7 @@
     });
     $('#comp-clear-btn')?.addEventListener('click', () => {
       if (!confirm('Remove all user-imported spells and equipment?')) return;
-      saveUserCompendium({ spells: [], equipment: [] });
+      saveUserCompendium({ spells: [], equipment: [], creatures: [] });
       applyCompendiumToRuntime();
       toast('User compendium cleared');
       renderCompendiumTools();
@@ -1668,13 +1916,14 @@
 
     const statusEl = $('#open5e-status');
     const runSync = async (opts) => {
-      const btns = ['open5e-sync-all', 'open5e-sync-spells', 'open5e-sync-equip'].map(id => document.getElementById(id));
+      const btns = ['open5e-sync-all', 'open5e-sync-spells', 'open5e-sync-equip', 'open5e-sync-creatures'].map(id => document.getElementById(id));
       btns.forEach(b => { if (b) b.disabled = true; });
       try {
         const srdOnly = !!document.getElementById('open5e-srd-only')?.checked;
         await syncOpen5e({ ...opts, srdOnly, statusEl });
         toast('Open5e sync complete');
         renderCompendiumTools();
+        if (typeof renderBestiary === 'function') renderBestiary();
       } catch (err) {
         console.warn(err);
         if (statusEl) statusEl.textContent = 'Error: ' + (err.message || err);
@@ -1683,9 +1932,10 @@
         btns.forEach(b => { if (b) b.disabled = false; });
       }
     };
-    document.getElementById('open5e-sync-all')?.addEventListener('click', () => runSync({ spells: true, equipment: true }));
-    document.getElementById('open5e-sync-spells')?.addEventListener('click', () => runSync({ spells: true, equipment: false }));
-    document.getElementById('open5e-sync-equip')?.addEventListener('click', () => runSync({ spells: false, equipment: true }));
+    document.getElementById('open5e-sync-all')?.addEventListener('click', () => runSync({ spells: true, equipment: true, creatures: true }));
+    document.getElementById('open5e-sync-spells')?.addEventListener('click', () => runSync({ spells: true, equipment: false, creatures: false }));
+    document.getElementById('open5e-sync-equip')?.addEventListener('click', () => runSync({ spells: false, equipment: true, creatures: false }));
+    document.getElementById('open5e-sync-creatures')?.addEventListener('click', () => runSync({ spells: false, equipment: false, creatures: true }));
   }
 
 
@@ -3566,7 +3816,7 @@ function parseAttackLines(ch) {
           ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="p-box p-corrupt"><div class="p-val">${ch.corruption}/6</div><div class="p-lbl">Corruption</div></div>` : ''}
         </div>
 
-        <div class="p-grid">
+        <div class="p-grid p-grid-fill">
           <div class="p-col">
             <section class="p-panel">
               <h3>Ability Scores</h3>
@@ -3580,15 +3830,16 @@ function parseAttackLines(ch) {
               <h3>Skills</h3>
               <div class="p-skills">${escapeHtml(skillLines)}</div>
             </section>
-            <section class="p-panel">
-              <h3>Features &amp; Traits</h3>
-              <pre class="p-pre">${escapeHtml(features)}</pre>
-            </section>
           </div>
-          <div class="p-col p-col-wide">
-            <section class="p-panel">
+          <div class="p-col p-col-wide p-col-stack">
+            <section class="p-panel p-combat-summary">
               <h3>Combat Summary</h3>
-              <div class="p-atk-mini">${attacks.slice(0,6).map(a => `<div><strong>${escapeHtml(a.name)}</strong> ${escapeHtml(a.bonus)} · ${escapeHtml(a.damage)}</div>`).join('') || '<span class="p-empty">See Attacks section</span>'}</div>
+              <div class="p-atk-mini">${attacks.slice(0,8).map(a => `<div><strong>${escapeHtml(a.name)}</strong> ${escapeHtml(a.bonus)} · ${escapeHtml(a.damage)}</div>`).join('') || '<span class="p-empty">No attacks listed</span>'}</div>
+              ${ch.attacks ? `<pre class="p-pre p-pre-tight">${escapeHtml(ch.attacks)}</pre>` : ''}
+            </section>
+            <section class="p-panel p-features-fill">
+              <h3>Features &amp; Traits</h3>
+              <pre class="p-pre">${escapeHtml(features || '—')}</pre>
             </section>
           </div>
         </div>
@@ -3683,7 +3934,13 @@ function parseAttackLines(ch) {
       .p-lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a89880; margin-top: 2px; }
       .p-sub { font-size: 0.65rem; color: #a89880; }
       .p-corrupt .p-val { color: #d08080; }
-      .p-grid { display: grid; grid-template-columns: 28% 1fr; gap: 6px; margin-bottom: 6px; }
+      .p-grid { display: grid; grid-template-columns: 28% 1fr; gap: 6px; margin-bottom: 6px; align-items: start; }
+      .p-grid-fill { align-items: stretch; }
+      .p-col-stack { display: flex; flex-direction: column; gap: 6px; min-height: 100%; }
+      .p-features-fill { flex: 1 1 auto; }
+      .p-features-fill .p-pre { white-space: pre-wrap; margin: 0; font-size: 9pt; line-height: 1.3; }
+      .p-pre-tight { margin: 4px 0 0; font-size: 8.5pt; }
+      .p-combat-summary { flex: 0 0 auto; }
       .p-grid-3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
       .p-panel {
         background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.3);
@@ -5375,6 +5632,7 @@ function renderUmbrarians() {
   }
 
   function renderBestiary() {
+    refreshBestiaryRef();
     const list = $('#bestiary-list');
     const countEl = $('#bestiary-count');
     if (!list) return;
@@ -5441,12 +5699,18 @@ function renderUmbrarians() {
   }
 
   function bindBestiaryListeners() {
-    ['bestiary-search', 'bestiary-world', 'bestiary-origin', 'bestiary-cr'].forEach(id => {
+    ['bestiary-search', 'bestiary-world', 'bestiary-origin', 'bestiary-cr', 'bestiary-source'].forEach(id => {
       const el = document.getElementById(id);
       if (!el || el.dataset.wired) return;
       el.dataset.wired = '1';
       el.addEventListener('input', renderBestiary);
-      el.addEventListener('change', renderBestiary);
+      el.addEventListener('change', () => {
+        if (id === 'bestiary-source') {
+          window.BESTIARY_SOURCE = el.value || 'all';
+          applyCompendiumToRuntime();
+        }
+        renderBestiary();
+      });
     });
   }
 
@@ -5647,6 +5911,11 @@ function renderUmbrarians() {
 
   // ─── Init ────────────────────────────────────────────────────────────────
   function init() {
+    loadUserCompendiumAsync().then(() => {
+      try { applyCompendiumToRuntime(); } catch (e) { console.warn(e); }
+      if (typeof renderCompendiumTools === 'function' && $('#compendium-tools')) renderCompendiumTools();
+      if (typeof renderBestiary === 'function' && $('#view-bestiary')?.classList.contains('active')) renderBestiary();
+    }).catch(e => console.warn(e));
     try { applyCompendiumToRuntime(); } catch (e) { console.warn(e); }
     load();
     updateNavEnabled();
