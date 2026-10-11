@@ -1442,7 +1442,11 @@ const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
         <span class="pointbuy-status muted small" id="m-pb-status"></span>
       </div>
       <div class="standard-array-row hidden" id="m-std-row">
-        <span class="muted small">Assign: 15, 14, 13, 12, 10, 8 — pick each score once.</span>
+        <div class="std-pool-label muted small">Click an ability score to assign the next value (highest → lowest). Dimmed values are already used.</div>
+        <div class="std-pool" id="m-std-pool">
+          ${STANDARD_ARRAY.map(v => `<button type="button" class="std-chip" data-val="${v}" disabled>${v}</button>`).join('')}
+        </div>
+        <button type="button" class="btn secondary btn-tiny" id="m-std-reset">Reset Array</button>
       </div>`;
   }
 
@@ -1674,18 +1678,21 @@ const FEATURE_SECTION = {
     function applyScoreMethod(method) {
       const stdRow = $('#m-std-row');
       if (stdRow) stdRow.classList.toggle('hidden', method !== 'standard');
+      const grid = $('#ability-grid');
+      if (grid) grid.classList.toggle('std-assign-mode', method === 'standard');
+      ABS.forEach(a => {
+        const el = $('#m-' + a);
+        if (el) el.readOnly = method === 'standard';
+      });
       if (method === 'standard') {
-        // assign defaults if not already a permutation
-        const bases = basesFromForm();
-        const vals = ABS.map(a => bases[a]).sort((a,b)=>b-a);
-        const isStd = STANDARD_ARRAY.every((v,i) => vals[i] === v);
-        if (!isStd) {
-          // default assignment order STR..CHA
-          STANDARD_ARRAY.forEach((v, i) => {
-            const el = $('#m-' + ABS[i]);
-            if (el) el.value = v;
-          });
-        }
+        // Do not auto-assign — clear bases so user clicks to place 15→8
+        window.__stdNextIndex = 0;
+        window.__stdAssigned = {};
+        ABS.forEach(a => {
+          const el = $('#m-' + a);
+          if (el) el.value = 8;
+        });
+        updateStdPoolUI();
       } else if (method === 'pointbuy') {
         ABS.forEach(a => {
           const el = $('#m-' + a);
@@ -1695,6 +1702,63 @@ const FEATURE_SECTION = {
           }
         });
       }
+      refreshAbilityDisplay();
+      refreshAttacks(true);
+    }
+
+    function updateStdPoolUI() {
+      const assigned = window.__stdAssigned || {};
+      const usedVals = Object.values(assigned);
+      const nextIdx = window.__stdNextIndex || 0;
+      const pool = $('#m-std-pool');
+      if (pool) {
+        pool.querySelectorAll('.std-chip').forEach(chip => {
+          const v = parseInt(chip.dataset.val, 10);
+          const used = usedVals.includes(v);
+          const isNext = !used && STANDARD_ARRAY[nextIdx] === v;
+          chip.classList.toggle('used', used);
+          chip.classList.toggle('next', isNext);
+          chip.disabled = true;
+        });
+      }
+      // Make ability boxes clickable targets
+      ABS.forEach(a => {
+        const box = document.querySelector(`.ability-box[data-ab="${a}"]`);
+        if (!box) return;
+        box.classList.toggle('std-target', !(assigned[a]));
+        box.classList.toggle('std-filled', !!assigned[a]);
+      });
+      const pbStatus = $('#m-pb-status');
+      if (pbStatus) {
+        if (nextIdx >= STANDARD_ARRAY.length) pbStatus.textContent = 'Standard array complete';
+        else pbStatus.textContent = `Next: assign ${STANDARD_ARRAY[nextIdx]} — click an ability`;
+      }
+    }
+
+    function assignStdToAbility(ab) {
+      if ((document.querySelector('input[name="m-ab-method"]:checked')?.value) !== 'standard') return;
+      if (!window.__stdAssigned) window.__stdAssigned = {};
+      if (window.__stdAssigned[ab] != null) return; // already assigned
+      const idx = window.__stdNextIndex || 0;
+      if (idx >= STANDARD_ARRAY.length) return;
+      const val = STANDARD_ARRAY[idx];
+      window.__stdAssigned[ab] = val;
+      window.__stdNextIndex = idx + 1;
+      const el = $('#m-' + ab);
+      if (el) el.value = val;
+      updateStdPoolUI();
+      refreshAbilityDisplay();
+      refreshAttacks(true);
+    }
+
+    function resetStdArray() {
+      window.__stdNextIndex = 0;
+      window.__stdAssigned = {};
+      ABS.forEach(a => {
+        const el = $('#m-' + a);
+        if (el) el.value = 8;
+      });
+      updateStdPoolUI();
       refreshAbilityDisplay();
       refreshAttacks(true);
     }
@@ -1814,6 +1878,36 @@ const FEATURE_SECTION = {
     document.querySelectorAll('input[name="m-ab-method"]').forEach(r => {
       r.addEventListener('change', () => applyScoreMethod(r.value));
     });
+    // Standard array: click ability box / label to assign next score
+    ABS.forEach(a => {
+      const box = document.querySelector(`.ability-box[data-ab="${a}"]`);
+      if (!box) return;
+      box.addEventListener('click', (e) => {
+        if ((document.querySelector('input[name="m-ab-method"]:checked')?.value) !== 'standard') return;
+        // ignore pure input typing when not readonly path
+        assignStdToAbility(a);
+      });
+    });
+    $('#m-std-reset')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      resetStdArray();
+    });
+    // If already on standard when opening edit, init pool UI without wiping saved scores
+    if ((document.querySelector('input[name="m-ab-method"]:checked')?.value) === 'standard') {
+      const bases = basesFromForm();
+      const vals = ABS.map(a => bases[a]);
+      const sorted = [...vals].sort((x,y)=>y-x);
+      const matches = STANDARD_ARRAY.every((v,i) => sorted[i] === v);
+      if (matches && new Set(vals).size === 6) {
+        window.__stdAssigned = {};
+        ABS.forEach(a => { window.__stdAssigned[a] = bases[a]; });
+        window.__stdNextIndex = 6;
+        ABS.forEach(a => { const el = $('#m-' + a); if (el) el.readOnly = true; });
+        $('#m-std-row')?.classList.remove('hidden');
+        $('#ability-grid')?.classList.add('std-assign-mode');
+        updateStdPoolUI();
+      }
+    }
     // Mark HP/AC/speed manual if user edits
     ['m-hp','m-hpmax','m-ac','m-speed'].forEach(id => {
       document.getElementById(id)?.addEventListener('input', function() { this.dataset.manual = '1'; });
@@ -2097,17 +2191,70 @@ const FEATURE_SECTION = {
       </div>`;
   }
 
+  function parseAttackLines(ch) {
+    const lines = [];
+    const inv = ch.inventory || [];
+    const weapons = inv.filter(i => i.equipped && i.category === 'weapon');
+    const pb = ch.profBonus || 2;
+    const str = abilityModNum(ch.str);
+    const dex = abilityModNum(ch.dex);
+    weapons.forEach(w => {
+      const finesse = (w.props || '').toLowerCase().includes('finesse');
+      const ranged = (w.weaponType || '').includes('ranged') || (w.props || '').toLowerCase().includes('ammunition');
+      const mod = (finesse || ranged) ? Math.max(str, dex) : str;
+      const atk = mod + pb;
+      lines.push({
+        name: w.name,
+        bonus: atk >= 0 ? `+${atk}` : `${atk}`,
+        damage: `${w.damage || '?'}${mod >= 0 ? '+' + mod : mod} ${w.damageType || ''}`.trim(),
+        range: ranged ? ((w.props || '').match(/\((\d+\/\d+)\)/) || [])[1] || 'ranged' : '5 ft.',
+        props: w.props || w.weaponType || ''
+      });
+    });
+    // Also parse free-text attacks
+    String(ch.attacks || '').split('\n').forEach(line => {
+      line = line.trim();
+      if (!line || /extra attack|sneak attack|note:/i.test(line)) return;
+      const name = line.split(':')[0].trim();
+      if (weapons.some(w => w.name === name)) return;
+      if (name.length < 2) return;
+      const bonusM = line.match(/([+-]\d+)\s*to hit/i);
+      const dmgM = line.match(/,\s*([^,]+)$/) || line.match(/hit,\s*(.+)/i);
+      lines.push({
+        name,
+        bonus: bonusM ? bonusM[1] : '—',
+        damage: dmgM ? dmgM[1].trim() : line,
+        range: '—',
+        props: ''
+      });
+    });
+    return lines;
+  }
+
   function characterSheetViewHtml(ch) {
     const race = getPhbRaces().find(r => r.name === ch.race);
     const cls = findPhbClass(ch.class);
     const path = findMoonPath(ch.subclass);
-    const bon = getRaceBonuses(ch.race || '');
     const inv = ch.inventory || [];
     const equipped = inv.filter(i => i.equipped);
     const armor = equipped.find(i => i.category === 'armor');
     const shield = equipped.find(i => i.category === 'shield');
-    const weapons = equipped.filter(i => i.category === 'weapon');
     const acCalc = calcAcFromInventory(inv, ch, ch.class);
+    const attacks = parseAttackLines(ch);
+    const initMod = abilityModNum(ch.dex);
+    const initStr = (initMod >= 0 ? '+' : '') + initMod;
+    const passivePer = 10 + abilityModNum(ch.wis) + ((ch.skills || '').toLowerCase().includes('perception') ? (ch.profBonus || 2) : 0);
+
+    const skillsAll = (window.PHB_SKILLS || []).map(s => s.name || s).filter(Boolean);
+    const skillProfs = new Set((ch.skills || '').split(/[,;]+/).map(s => s.trim().split(/\s+\+/)[0].trim().toLowerCase()).filter(Boolean));
+    const skillRows = (skillsAll.length ? skillsAll : ['Acrobatics','Animal Handling','Arcana','Athletics','Deception','History','Insight','Intimidation','Investigation','Medicine','Nature','Perception','Performance','Persuasion','Religion','Sleight of Hand','Stealth','Survival']).map(name => {
+      const ab = ({Acrobatics:'dex','Animal Handling':'wis',Arcana:'int',Athletics:'str',Deception:'cha',History:'int',Insight:'wis',Intimidation:'cha',Investigation:'int',Medicine:'wis',Nature:'int',Perception:'wis',Performance:'cha',Persuasion:'cha',Religion:'int','Sleight of Hand':'dex',Stealth:'dex',Survival:'wis'})[name] || 'int';
+      const mod = abilityModNum(ch[ab]);
+      const prof = skillProfs.has(name.toLowerCase());
+      const total = mod + (prof ? (ch.profBonus || 2) : 0);
+      const t = total >= 0 ? '+' + total : '' + total;
+      return `<div class="cs-skill ${prof ? 'prof' : ''}"><span class="cs-skill-check">${prof ? '●' : '○'}</span><span class="cs-skill-mod">${t}</span><span class="cs-skill-name">${escapeHtml(name)}</span><span class="cs-skill-ab">${ab.slice(0,3).toUpperCase()}</span></div>`;
+    }).join('');
 
     const abBlock = ABS.map(a => {
       const total = ch[a] || 10;
@@ -2117,6 +2264,17 @@ const FEATURE_SECTION = {
         <div class="cs-ab-score">${total}</div>
       </div>`;
     }).join('');
+
+    const attackCards = attacks.length ? attacks.map(a => `
+      <div class="cs-atk-card">
+        <div class="cs-atk-name">${escapeHtml(a.name)}</div>
+        <div class="cs-atk-stats">
+          <div><span class="cs-atk-lbl">Atk Bonus</span><span class="cs-atk-val">${escapeHtml(a.bonus)}</span></div>
+          <div><span class="cs-atk-lbl">Damage/Type</span><span class="cs-atk-val">${escapeHtml(a.damage)}</span></div>
+          <div><span class="cs-atk-lbl">Range</span><span class="cs-atk-val">${escapeHtml(a.range)}</span></div>
+        </div>
+        ${a.props ? `<div class="cs-atk-props">${escapeHtml(a.props)}</div>` : ''}
+      </div>`).join('') : '<p class="muted">No attacks listed. Equip weapons or add attacks on the character sheet.</p>';
 
     const invRows = inv.length ? inv.map(i =>
       `<tr class="${i.equipped ? 'equipped-row' : ''}">
@@ -2129,74 +2287,103 @@ const FEATURE_SECTION = {
 
     return `
       <div class="cs-sheet">
-        <div class="cs-top">
-          <div class="cs-portrait-block">
-            <div class="cs-portrait-ring"><span>${escapeHtml((ch.name || '?').charAt(0).toUpperCase())}</span></div>
-            <div class="cs-name-block">
-              <div class="cs-char-name">${escapeHtml(ch.name || 'Unnamed')}</div>
-              <div class="cs-char-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
-              <div class="cs-char-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}</div>
-              <div class="cs-char-meta muted">${escapeHtml(ch.player || '')}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
+        <div class="cs-tabs">
+          <button type="button" class="cs-tab active" data-cs-page="1">Page 1 · Combat</button>
+          <button type="button" class="cs-tab" data-cs-page="2">Page 2 · Attacks</button>
+          <button type="button" class="cs-tab" data-cs-page="3">Page 3 · Story</button>
+        </div>
+
+        <!-- PAGE 1 -->
+        <div class="cs-page active" data-cs-page="1">
+          <div class="cs-top">
+            <div class="cs-portrait-block">
+              <div class="cs-portrait-ring"><span>${escapeHtml((ch.name || '?').charAt(0).toUpperCase())}</span></div>
+              <div class="cs-name-block">
+                <div class="cs-char-name">${escapeHtml(ch.name || 'Unnamed')}</div>
+                <div class="cs-char-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
+                <div class="cs-char-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}</div>
+                <div class="cs-char-meta muted">${escapeHtml(ch.player || '')}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
+              </div>
+              <div class="cs-header-right">
+                <div class="cs-mini-stat"><span class="cs-mini-lbl">Initiative</span><span class="cs-mini-val">${initStr}</span></div>
+                <div class="cs-mini-stat"><span class="cs-mini-lbl">Proficiency</span><span class="cs-mini-val">+${ch.profBonus || 2}</span></div>
+              </div>
+            </div>
+            <div class="cs-combat-row">
+              <div class="cs-stat-box"><div class="cs-stat-val">${ch.ac}</div><div class="cs-stat-label">Armor Class</div><div class="cs-stat-sub muted small">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''}</div></div>
+              <div class="cs-stat-box"><div class="cs-stat-val">${ch.hp}<span class="cs-hp-max">/${ch.hpMax}</span></div><div class="cs-stat-label">Hit Points</div></div>
+              <div class="cs-stat-box"><div class="cs-stat-val">${escapeHtml((ch.speed || '30 ft.').replace(' ft.',''))}</div><div class="cs-stat-label">Speed</div></div>
+              <div class="cs-stat-box"><div class="cs-stat-val">${passivePer}</div><div class="cs-stat-label">Passive Perception</div></div>
+              ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="cs-stat-box cs-corrupt"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>` : ''}
             </div>
           </div>
-          <div class="cs-combat-row">
-            <div class="cs-stat-box"><div class="cs-stat-val">${ch.ac}</div><div class="cs-stat-label">Armor Class</div><div class="cs-stat-sub muted small">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''} · calc ${acCalc}</div></div>
-            <div class="cs-stat-box"><div class="cs-stat-val">${ch.hp}<span class="cs-hp-max">/${ch.hpMax}</span></div><div class="cs-stat-label">Hit Points</div></div>
-            <div class="cs-stat-box"><div class="cs-stat-val">${escapeHtml((ch.speed || '30 ft.').replace(' ft.',''))}</div><div class="cs-stat-label">Speed</div></div>
-            <div class="cs-stat-box"><div class="cs-stat-val">+${ch.profBonus || 2}</div><div class="cs-stat-label">Prof Bonus</div></div>
-            ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="cs-stat-box cs-corrupt"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>` : ''}
+          <div class="cs-main cs-main-classic">
+            <div class="cs-col-left">
+              <div class="cs-panel"><div class="cs-panel-title">Ability Scores</div><div class="cs-abilities">${abBlock}</div></div>
+              <div class="cs-panel"><div class="cs-panel-title">Saving Throws</div><div class="cs-body">${escapeHtml(ch.saves || '—')}</div></div>
+              <div class="cs-panel cs-skills-panel"><div class="cs-panel-title">Skills</div><div class="cs-skills">${skillRows}</div></div>
+            </div>
+            <div class="cs-col-right">
+              <div class="cs-panel">
+                <div class="cs-panel-title">Attacks (summary)</div>
+                <div class="cs-atk-mini">${attacks.slice(0,4).map(a => `<div class="cs-atk-mini-row"><strong>${escapeHtml(a.name)}</strong> ${escapeHtml(a.bonus)} · ${escapeHtml(a.damage)}</div>`).join('') || '<span class="muted">See Page 2</span>'}</div>
+                <p class="muted small">Full attack cards on Page 2</p>
+              </div>
+              <div class="cs-panel">
+                <div class="cs-panel-title">Features &amp; Traits</div>
+                <pre class="cs-pre cs-pre-scroll">${escapeHtml(ch.features || '—')}</pre>
+              </div>
+              <div class="cs-panel">
+                <div class="cs-panel-title">Equipment</div>
+                <table class="cs-inv-table">
+                  <thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead>
+                  <tbody>${invRows}</tbody>
+                </table>
+                <div class="muted small">Weight ${inventoryWeight(inv).toFixed(1)} lb</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="cs-main">
-          <div class="cs-col-left">
-            <div class="cs-panel">
-              <div class="cs-panel-title">Ability Scores</div>
-              <div class="cs-abilities">${abBlock}</div>
-            </div>
-            <div class="cs-panel">
-              <div class="cs-panel-title">Saving Throws</div>
-              <div class="cs-body">${escapeHtml(ch.saves || '—')}</div>
-            </div>
-            <div class="cs-panel">
-              <div class="cs-panel-title">Skills</div>
-              <div class="cs-body">${escapeHtml(ch.skills || '—')}</div>
-            </div>
-            ${ch.isUmbrarian ? `<div class="cs-panel cs-umb">
-              <div class="cs-panel-title">Umbrarian</div>
-              <div class="cs-body">${escapeHtml(ch.umbrarianStage || '—')} · ${escapeHtml(ch.shard || 'Shard')} · ${escapeHtml(ch.shardAbility || '')}</div>
+        <!-- PAGE 2 ATTACKS -->
+        <div class="cs-page" data-cs-page="2">
+          <div class="cs-page-title">Attacks &amp; Weapons</div>
+          <div class="cs-atk-grid">${attackCards}</div>
+          <div class="cs-panel" style="margin-top:0.75rem">
+            <div class="cs-panel-title">Attack Notes / Spell Attacks</div>
+            <pre class="cs-pre">${escapeHtml(ch.attacks || '—')}</pre>
+          </div>
+          <div class="cs-panel">
+            <div class="cs-panel-title">Equipped Gear</div>
+            <ul class="trait-list compact">
+              ${equipped.length ? equipped.map(i => `<li><strong>${escapeHtml(i.name)}</strong> (${escapeHtml(i.category)}${i.damage ? ' · ' + escapeHtml(i.damage) + ' ' + escapeHtml(i.damageType||'') : ''}${i.acBase != null ? ' · AC ' + i.acBase : ''})</li>`).join('') : '<li class="muted">Nothing equipped</li>'}
+            </ul>
+          </div>
+        </div>
+
+        <!-- PAGE 3 STORY -->
+        <div class="cs-page" data-cs-page="3">
+          <div class="cs-page-title">Character Details</div>
+          <div class="cs-footer-panels">
+            ${race ? `<div class="cs-panel"><div class="cs-panel-title">Race — ${escapeHtml(race.name)}</div>
+              <p class="muted small">${escapeHtml(race.tagline || race.short || '')}</p>
+              <ul class="trait-list compact">${(race.traits||[]).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
             </div>` : ''}
-          </div>
-          <div class="cs-col-right">
-            <div class="cs-panel">
-              <div class="cs-panel-title">Attacks &amp; Spellcasting</div>
-              <pre class="cs-pre">${escapeHtml(ch.attacks || '—')}</pre>
-              ${weapons.length ? `<div class="muted small">Equipped: ${weapons.map(w => escapeHtml(w.name)).join(', ')}</div>` : ''}
-            </div>
-            <div class="cs-panel">
-              <div class="cs-panel-title">Features &amp; Traits</div>
-              <pre class="cs-pre cs-pre-scroll">${escapeHtml(ch.features || '—')}</pre>
-            </div>
-            <div class="cs-panel">
-              <div class="cs-panel-title">Equipment</div>
-              <table class="cs-inv-table">
-                <thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead>
-                <tbody>${invRows}</tbody>
-              </table>
-              <div class="muted small">Total weight: ${inventoryWeight(inv).toFixed(1)} lb</div>
-            </div>
+            ${cls ? `<div class="cs-panel"><div class="cs-panel-title">Class — ${escapeHtml(cls.name)}</div>
+              <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)}</p>
+              <p>${escapeHtml(cls.summary || '')}</p>
+            </div>` : ''}
+            ${path ? `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(path.name)}</div>
+              <p class="muted small">${escapeHtml(path.summary || '')}</p>
+              <ul class="trait-list compact">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
+            </div>` : ''}
+            ${ch.isUmbrarian ? `<div class="cs-panel cs-umb"><div class="cs-panel-title">Umbrarian</div>
+              <div class="cs-body">Stage: <strong>${escapeHtml(ch.umbrarianStage || '—')}</strong> · Shard: <strong>${escapeHtml(ch.shard || '—')}</strong> · ${escapeHtml(ch.shardAbility || '')} · Corruption ${ch.corruption}/6</div>
+            </div>` : ''}
+            ${ch.notes ? `<div class="cs-panel"><div class="cs-panel-title">Notes &amp; Backstory</div><pre class="cs-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
           </div>
         </div>
 
-        <div class="cs-footer-panels">
-          ${race ? `<div class="cs-panel"><div class="cs-panel-title">Race — ${escapeHtml(race.name)}</div>
-            <ul class="trait-list compact">${(race.traits||[]).slice(0,8).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
-          </div>` : ''}
-          ${path ? `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(path.name)}</div>
-            <ul class="trait-list compact">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
-          </div>` : ''}
-          ${ch.notes ? `<div class="cs-panel"><div class="cs-panel-title">Notes</div><pre class="cs-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
-        </div>
         <p class="cs-footer-brand muted small">The Dark Sun Chronicles · Character Sheet</p>
       </div>`;
   }
@@ -2208,9 +2395,21 @@ const FEATURE_SECTION = {
       confirmText: 'Close',
       cancelText: '',
       wide: true,
-      onConfirm: () => true
+      onConfirm: () => true,
+      afterOpen: () => {
+        const root = $('#modal-body');
+        if (!root) return;
+        root.querySelectorAll('.cs-tab').forEach(tab => {
+          tab.addEventListener('click', () => {
+            const page = tab.dataset.csPage;
+            root.querySelectorAll('.cs-tab').forEach(t => t.classList.toggle('active', t === tab));
+            root.querySelectorAll('.cs-page').forEach(p => p.classList.toggle('active', p.dataset.csPage === page));
+          });
+        });
+      }
     });
   }
+
 
 
   function renderParty() {
