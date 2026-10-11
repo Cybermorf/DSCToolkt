@@ -538,12 +538,15 @@
   // ─── Modal ───────────────────────────────────────────────────────────────
   let modalResolve = null;
 
-  function openModal({ title, bodyHtml, confirmText = 'Save', onConfirm, afterOpen, wide = false }) {
+  function openModal({ title, bodyHtml, confirmText = 'Save', onConfirm, afterOpen, wide = false, xwide = false }) {
     $('#modal-title').textContent = title;
     $('#modal-body').innerHTML = bodyHtml;
     $('#modal-confirm').textContent = confirmText;
     const panel = $('.modal-panel');
-    if (panel) panel.classList.toggle('wide', !!wide);
+    if (panel) {
+      panel.classList.toggle('wide', !!wide || !!xwide);
+      panel.classList.toggle('xwide', !!xwide);
+    }
     $('#modal').classList.remove('hidden');
 
     // Run afterOpen immediately so generators / extra UI can bind while modal is visible
@@ -554,7 +557,7 @@
     return new Promise(resolve => {
       modalResolve = (result) => {
         $('#modal').classList.add('hidden');
-        if (panel) panel.classList.remove('wide');
+        if (panel) { panel.classList.remove('wide'); panel.classList.remove('xwide'); }
         resolve(result);
       };
       $('#modal-confirm').onclick = () => {
@@ -1010,7 +1013,13 @@
       shard: ch.shard || '',
       shardAbility: ch.shardAbility || '',
       notes: ch.notes || '',
-      avatar: ch.avatar || ''
+      avatar: ch.avatar || '',
+      spellcastingAbility: ch.spellcastingAbility || '',
+      spells: ch.spells || '',
+      spellSlots: ch.spellSlots && typeof ch.spellSlots === 'object' ? ch.spellSlots : {},
+      spellSlotsUsed: ch.spellSlotsUsed && typeof ch.spellSlotsUsed === 'object' ? ch.spellSlotsUsed : {},
+      cantrips: ch.cantrips || '',
+      spellIds: Array.isArray(ch.spellIds) ? ch.spellIds : []
     };
   }
 
@@ -1245,7 +1254,235 @@
   /** Feature sections that can be updated independently without wiping others. */
   
   
-  function getEquipmentList() {
+  
+  
+  function getSpellLibrary() {
+    return (typeof window !== 'undefined' && window.SPELLS) ? window.SPELLS : [];
+  }
+
+  function findSpell(idOrName) {
+    const lib = getSpellLibrary();
+    const q = String(idOrName || '').toLowerCase();
+    return lib.find(s => s.id === q || s.name.toLowerCase() === q) || null;
+  }
+
+  function spellsForClass(className) {
+    const lib = getSpellLibrary();
+    if (!className) return lib;
+    return lib.filter(s => (s.classes || []).includes(className));
+  }
+
+  function parseKnownSpellIds(ch) {
+    if (Array.isArray(ch.spellIds) && ch.spellIds.length) return ch.spellIds.slice();
+    // recover from text lists
+    const names = []
+      .concat(String(ch.cantrips || '').split(/[\n,;]+/))
+      .concat(String(ch.spells || '').split(/[\n,;]+/))
+      .map(s => s.trim().replace(/\s*\(.*?\)\s*$/, ''))
+      .filter(Boolean);
+    const ids = [];
+    names.forEach(n => {
+      const sp = findSpell(n);
+      if (sp) ids.push(sp.id);
+    });
+    return ids;
+  }
+
+  function spellCardHtml(sp, opts = {}) {
+    if (!sp) return '';
+    const lvl = sp.level === 0 ? 'Cantrip' : `${sp.level}${sp.level===1?'st':sp.level===2?'nd':sp.level===3?'rd':'th'}-level`;
+    const tags = [
+      sp.ritual ? 'Ritual' : '',
+      sp.concentration ? 'Concentration' : ''
+    ].filter(Boolean).join(' · ');
+    return `<article class="spell-card" data-spell-id="${escapeAttr(sp.id)}">
+      <header class="spell-card-head">
+        <div class="spell-card-title">${escapeHtml(sp.name)}</div>
+        <div class="spell-card-sub">${escapeHtml(lvl)} ${escapeHtml(sp.school)}${tags ? ' · ' + escapeHtml(tags) : ''}</div>
+      </header>
+      <div class="spell-card-meta">
+        <div><span>Casting Time</span><strong>${escapeHtml(sp.time)}</strong></div>
+        <div><span>Range</span><strong>${escapeHtml(sp.range)}</strong></div>
+        <div><span>Components</span><strong>${escapeHtml(sp.components)}</strong></div>
+        <div><span>Duration</span><strong>${escapeHtml(sp.duration)}</strong></div>
+      </div>
+      <p class="spell-card-body">${escapeHtml(sp.summary)}</p>
+      ${opts.removable ? `<button type="button" class="btn danger btn-tiny spell-remove" data-spell-id="${escapeAttr(sp.id)}">Remove</button>` : ''}
+    </article>`;
+  }
+
+  function spellSheetCardsHtml(ch) {
+    const ids = parseKnownSpellIds(ch);
+    if (!ids.length) return '';
+    const cards = ids.map(id => findSpell(id)).filter(Boolean)
+      .sort((a,b) => a.level - b.level || a.name.localeCompare(b.name))
+      .map(sp => spellCardHtml(sp));
+    if (!cards.length) return '';
+    return `<div class="cs-panel"><div class="cs-panel-title">Spell Cards</div>
+      <div class="spell-card-grid">${cards.join('')}</div></div>`;
+  }
+
+function getCasterType(className) {
+    if ((window.FULL_CASTERS || []).includes(className)) return 'full';
+    if ((window.HALF_CASTERS || []).includes(className)) return 'half';
+    if ((window.PACT_CASTERS || []).includes(className)) return 'pact';
+    return 'none';
+  }
+
+  function defaultSpellAbility(className) {
+    const map = {
+      Bard: 'CHA', Cleric: 'WIS', Druid: 'WIS', Sorcerer: 'CHA', Wizard: 'INT',
+      Paladin: 'CHA', Ranger: 'WIS', Warlock: 'CHA', 'Moon Guardian': 'WIS'
+    };
+    return map[className] || '';
+  }
+
+  function getSpellSlotMaxes(className, level) {
+    const lvl = clamp(Number(level) || 1, 1, 20);
+    const type = getCasterType(className);
+    if (type === 'full') {
+      const row = (window.SPELL_SLOTS_FULL || [])[lvl] || [];
+      const out = {};
+      row.forEach((n, i) => { out[i + 1] = n; });
+      return out;
+    }
+    if (type === 'half') {
+      const row = (window.SPELL_SLOTS_HALF || [])[lvl] || [];
+      const out = {};
+      row.forEach((n, i) => { out[i + 1] = n; });
+      return out;
+    }
+    if (type === 'pact') {
+      const row = (window.SPELL_SLOTS_WARLOCK || [])[lvl];
+      if (!row) return {};
+      return { pactLevel: row[0], pactCount: row[1] };
+    }
+    return {};
+  }
+
+  function collectSpellSlotsUsed() {
+    const used = {};
+    try {
+      const pact = $('#m-slot-pact');
+      if (pact) used.pact = clamp(parseInt(pact.value, 10) || 0, 0, 99);
+      document.querySelectorAll('.m-slot').forEach(inp => {
+        used[inp.dataset.sl] = clamp(parseInt(inp.value, 10) || 0, 0, 99);
+      });
+    } catch (e) {}
+    return used;
+  }
+
+  function spellSlotsEditorHtml(ch) {
+    const type = getCasterType(ch.class);
+    if (type === 'none') {
+      return `<p class="muted small" id="m-spell-none">This class has no spell slots. (Subclass casting can be tracked in Features.)</p>
+        <div id="m-spell-body" class="hidden"></div>`;
+    }
+    const maxes = getSpellSlotMaxes(ch.class, ch.level);
+    const used = ch.spellSlotsUsed || {};
+    let slotsHtml = '';
+    if (type === 'pact') {
+      const pl = maxes.pactLevel || 1;
+      const pc = maxes.pactCount || 1;
+      const u = used.pact != null ? used.pact : 0;
+      slotsHtml = `<div class="spell-slots-row">
+        <label>Pact slots (L${pl}) <input type="number" id="m-slot-pact" min="0" max="${pc}" value="${u}" /> / ${pc}</label>
+      </div>
+      <p class="muted small">Warlock slots all recover on a Short Rest.</p>`;
+    } else {
+      const levels = Object.keys(maxes).map(Number).sort((a,b)=>a-b);
+      slotsHtml = `<div class="spell-slots-row">${levels.map(sl => {
+        const max = maxes[sl];
+        const u = used[sl] != null ? used[sl] : 0;
+        return `<label class="spell-slot-chip">L${sl} <input type="number" class="m-slot" data-sl="${sl}" min="0" max="${max}" value="${u}" /> / ${max}</label>`;
+      }).join('')}</div>`;
+    }
+    const ab = ch.spellcastingAbility || defaultSpellAbility(ch.class);
+    return `
+      <div id="m-spell-body">
+        <div class="form-row triple">
+          <div class="field"><label>Spellcasting Ability</label>
+            <select id="m-spell-ab">
+              <option value="INT" ${ab==='INT'?'selected':''}>Intelligence</option>
+              <option value="WIS" ${ab==='WIS'?'selected':''}>Wisdom</option>
+              <option value="CHA" ${ab==='CHA'?'selected':''}>Charisma</option>
+            </select>
+          </div>
+          <div class="field"><label>Spell Save DC</label>
+            <input type="text" id="m-spell-dc" readonly value="" />
+          </div>
+          <div class="field"><label>Spell Attack</label>
+            <input type="text" id="m-spell-atk" readonly value="" />
+          </div>
+        </div>
+        <div class="field"><label>Spell Slots (used / max)</label>${slotsHtml}</div>
+        <div class="field">
+          <label>Spell Library — search &amp; add</label>
+          <div class="spell-picker">
+            <div class="form-row">
+              <div class="field"><input type="search" id="m-spell-search" placeholder="Search spells…" autocomplete="off" /></div>
+              <div class="field"><select id="m-spell-level-filter">
+                <option value="all">All levels</option>
+                <option value="0">Cantrips</option>
+                <option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option>
+                <option value="4">4th</option><option value="5">5th</option><option value="6">6th</option>
+                <option value="7">7th</option><option value="8">8th</option><option value="9">9th</option>
+              </select></div>
+            </div>
+            <div id="m-spell-results" class="spell-results"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Known / Prepared Spells</label>
+          <div id="m-spell-known" class="spell-known-list"></div>
+          <textarea id="m-cantrips" class="hidden">${escapeHtml(ch.cantrips || '')}</textarea>
+          <textarea id="m-spells" class="hidden">${escapeHtml(ch.spells || '')}</textarea>
+          <input type="hidden" id="m-spell-ids" value="${escapeAttr((ch.spellIds || []).join(','))}" />
+        </div>
+      </div>`;
+  }
+
+  function computeSpellDcAtk(ability, scores, pb) {
+    const key = (ability || 'WIS').toLowerCase();
+    const mod = abilityModNum(scores[key] != null ? scores[key] : 10);
+    const p = Number(pb) || 2;
+    return { dc: 8 + p + mod, atk: p + mod, mod, ability: (ability || 'WIS').toUpperCase() };
+  }
+
+  function spellSheetBlock(ch) {
+    const type = getCasterType(ch.class);
+    if (type === 'none' && !(ch.spells || ch.cantrips)) return '';
+    const ab = ch.spellcastingAbility || defaultSpellAbility(ch.class) || 'WIS';
+    const pb = ch.profBonus || 2;
+    const info = computeSpellDcAtk(ab, ch, pb);
+    const maxes = getSpellSlotMaxes(ch.class, ch.level);
+    const used = ch.spellSlotsUsed || {};
+    let slotsLine = '';
+    if (type === 'pact') {
+      const u = used.pact != null ? used.pact : 0;
+      slotsLine = `Pact L${maxes.pactLevel}: ${u}/${maxes.pactCount}`;
+    } else if (type !== 'none') {
+      slotsLine = Object.keys(maxes).map(Number).sort((a,b)=>a-b).map(sl => {
+        const u = used[sl] != null ? used[sl] : 0;
+        return `L${sl} ${u}/${maxes[sl]}`;
+      }).join(' · ');
+    }
+    const cantrips = (ch.cantrips || '').trim();
+    const spells = (ch.spells || '').trim();
+    return `
+      <div class="cs-panel">
+        <div class="cs-panel-title">Spellcasting</div>
+        <div class="cs-umb-stats">
+          <div class="cs-stat-box"><div class="cs-stat-val">${info.dc}</div><div class="cs-stat-label">Spell Save DC</div><div class="cs-stat-sub muted small">${info.ability}</div></div>
+          <div class="cs-stat-box"><div class="cs-stat-val">${info.atk >= 0 ? '+' + info.atk : info.atk}</div><div class="cs-stat-label">Spell Attack</div></div>
+        </div>
+        ${slotsLine ? `<p class="cs-body"><strong>Slots:</strong> ${escapeHtml(slotsLine)}</p>` : ''}
+        ${cantrips ? `<p class="cs-body"><strong>Cantrips:</strong> ${escapeHtml(cantrips)}</p>` : ''}
+        ${spells ? `<pre class="cs-pre">${escapeHtml(spells)}</pre>` : ''}
+      </div>`;
+  }
+
+function getEquipmentList() {
     return (typeof window !== 'undefined' && window.EQUIPMENT) ? window.EQUIPMENT : [];
   }
 
@@ -1505,7 +1742,95 @@ const FEATURE_SECTION = {
 
 
   
-  function wireAvatarPicker() {
+  
+  function wireSpellPicker() {
+    const results = $('#m-spell-results');
+    const known = $('#m-spell-known');
+    const search = $('#m-spell-search');
+    const levelF = $('#m-spell-level-filter');
+    const idsEl = $('#m-spell-ids');
+    if (!known) return;
+
+    function getIds() {
+      const raw = (idsEl?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+      return raw;
+    }
+    function setIds(ids) {
+      if (idsEl) idsEl.value = ids.join(',');
+      // sync text fields for export compatibility
+      const spells = ids.map(id => findSpell(id)).filter(Boolean);
+      const cantrips = spells.filter(s => s.level === 0).map(s => s.name);
+      const leveled = spells.filter(s => s.level > 0).map(s => `${s.name} (${s.level === 1 ? '1st' : s.level === 2 ? '2nd' : s.level === 3 ? '3rd' : s.level + 'th'})`);
+      if ($('#m-cantrips')) $('#m-cantrips').value = cantrips.join(', ');
+      if ($('#m-spells')) $('#m-spells').value = leveled.join('\n');
+      renderKnown();
+    }
+    function renderKnown() {
+      const ids = getIds();
+      if (!ids.length) {
+        known.innerHTML = '<p class="muted small">No spells selected. Search the library and click Add.</p>';
+        return;
+      }
+      known.innerHTML = `<div class="spell-card-grid">${ids.map(id => {
+        const sp = findSpell(id);
+        return sp ? spellCardHtml(sp, { removable: true }) : '';
+      }).join('')}</div>`;
+      known.querySelectorAll('.spell-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          setIds(getIds().filter(id => id !== btn.dataset.spellId));
+        });
+      });
+    }
+    function refreshResults() {
+      if (!results) return;
+      const cname = $('#m-class')?.value || '';
+      const q = (search?.value || '').trim().toLowerCase();
+      const lf = levelF?.value || 'all';
+      let list = spellsForClass(cname);
+      if (lf !== 'all') list = list.filter(s => String(s.level) === lf);
+      if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || (s.school || '').toLowerCase().includes(q) || (s.summary || '').toLowerCase().includes(q));
+      list = list.slice(0, 30);
+      const have = new Set(getIds());
+      if (!list.length) {
+        results.innerHTML = '<p class="muted small">No spells match.</p>';
+        return;
+      }
+      results.innerHTML = `<ul class="spell-search-list">${list.map(s => {
+        const lvl = s.level === 0 ? 'Cantrip' : `L${s.level}`;
+        const added = have.has(s.id);
+        return `<li class="spell-search-item">
+          <div><strong>${escapeHtml(s.name)}</strong> <span class="muted small">${lvl} · ${escapeHtml(s.school)}</span>
+          <div class="muted small">${escapeHtml(s.summary.slice(0, 100))}${s.summary.length > 100 ? '…' : ''}</div></div>
+          <button type="button" class="btn secondary btn-tiny spell-add" data-spell-id="${escapeAttr(s.id)}" ${added ? 'disabled' : ''}>${added ? 'Added' : 'Add'}</button>
+        </li>`;
+      }).join('')}</ul>`;
+      results.querySelectorAll('.spell-add').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.spellId;
+          const ids = getIds();
+          if (!ids.includes(id)) setIds(ids.concat(id));
+          refreshResults();
+        });
+      });
+    }
+    search?.addEventListener('input', refreshResults);
+    levelF?.addEventListener('change', refreshResults);
+    // init from character
+    if (idsEl && !idsEl.value) {
+      // try recover
+      const recovered = parseKnownSpellIds({
+        spellIds: [],
+        cantrips: $('#m-cantrips')?.value,
+        spells: $('#m-spells')?.value
+      });
+      if (recovered.length) idsEl.value = recovered.join(',');
+    }
+    renderKnown();
+    refreshResults();
+    window.__refreshSpellPicker = refreshResults;
+  }
+
+function wireAvatarPicker() {
     const file = $('#m-avatar-file');
     const uploadBtn = $('#m-avatar-upload');
     const clearBtn = $('#m-avatar-clear');
@@ -1763,6 +2088,7 @@ function wireInventoryUI() {
           hint.textContent = `Shard DC ${8 + pb + mod} (${mental[0].a}) · auto from highest mental score. Traits & gifts apply to Features.`;
         }
       }
+      if (typeof refreshSpellDc === 'function') refreshSpellDc();
     }
     function applyScoreMethod(method) {
       const stdRow = $('#m-std-row');
@@ -1901,6 +2227,37 @@ function wireInventoryUI() {
       features.value = setFeatureSection(features.value, FEATURE_SECTION.race, lines);
     }
 
+
+    function refreshSpellSection() {
+      const sec = $('#m-spell-section');
+      if (!sec) return;
+      const cname = classSel?.value || '';
+      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
+      const type = getCasterType(cname);
+      // Rebuild editor when class/level changes
+      const fakeCh = {
+        class: cname,
+        level: lvl,
+        spellcastingAbility: $('#m-spell-ab')?.value || defaultSpellAbility(cname),
+        spellSlotsUsed: collectSpellSlotsUsed(),
+        cantrips: $('#m-cantrips')?.value || '',
+        spells: $('#m-spells')?.value || ''
+      };
+      sec.innerHTML = `<label class="section-label">Spellcasting</label>${spellSlotsEditorHtml(fakeCh)}`;
+      refreshSpellDc();
+      wireSpellPicker();
+    }
+    function refreshSpellDc() {
+      const ab = $('#m-spell-ab')?.value || defaultSpellAbility(classSel?.value || '');
+      const totals = scoresFromForm();
+      const pb = parseInt(profInp?.value, 10) || 2;
+      const info = computeSpellDcAtk(ab, totals, pb);
+      const dcEl = $('#m-spell-dc');
+      const atkEl = $('#m-spell-atk');
+      if (dcEl) dcEl.value = String(info.dc);
+      if (atkEl) atkEl.value = (info.atk >= 0 ? '+' : '') + info.atk;
+    }
+
     function refreshClassUI() {
       const cname = classSel ? classSel.value : '';
       if (skillBox) skillBox.innerHTML = skillPickerHtml(cname, []);
@@ -1928,6 +2285,7 @@ function wireInventoryUI() {
       if (acEl) delete acEl.dataset.manual;
       refreshAbilityDisplay();
       refreshAttacks(true);
+      refreshSpellSection();
     }
 
     function refreshProf() {
@@ -1937,6 +2295,8 @@ function wireInventoryUI() {
       }
       refreshAttacks(true);
       if (classSel?.value === 'Moon Guardian') applyMoonPathToFeatures();
+      if (typeof refreshSpellSection === 'function') refreshSpellSection();
+      if (typeof refreshSpellDc === 'function') refreshSpellDc();
     }
 
     classSel?.addEventListener('change', refreshClassUI);
@@ -2120,6 +2480,10 @@ function wireInventoryUI() {
         <div id="m-skill-picker">${skillPickerHtml(ch.class, selectedSkills)}</div>
         <div class="field" style="margin-top:0.5rem"><label>Skills (text summary)</label><textarea id="m-skills" rows="2" placeholder="Auto-filled from checkboxes, or type freely">${escapeHtml(ch.skills)}</textarea></div>
         <div class="field"><label>Attacks &amp; Spell Attack</label><textarea id="m-attacks" rows="2" placeholder="Longbow +7 (1d8+3), Fire Bolt +5 (1d10)">${escapeHtml(ch.attacks)}</textarea></div>
+        <div class="sheet-section" id="m-spell-section">
+          <label class="section-label">Spellcasting</label>
+          ${spellSlotsEditorHtml(ch)}
+        </div>
         <div class="field"><label>Features &amp; Traits</label><textarea id="m-features" rows="3" placeholder="Class features, racial traits, feats…">${escapeHtml(ch.features)}</textarea></div>
         <div class="field full-width">
           <label>Inventory &amp; Equipment</label>
@@ -2154,6 +2518,7 @@ function wireInventoryUI() {
       title: existing ? `Character Sheet — ${ch.name || 'Edit'}` : 'New Character Sheet',
       bodyHtml: body,
       wide: true,
+      xwide: true,
       onConfirm: () => {
         const name = $('#m-name').value.trim();
         if (!name) { toast('Name required'); return false; }
@@ -2200,6 +2565,10 @@ function wireInventoryUI() {
           skills: skillsText,
           attacks: $('#m-attacks').value.trim(),
           features: $('#m-features').value.trim(),
+          spellcastingAbility: $('#m-spell-ab')?.value || '',
+          cantrips: $('#m-cantrips')?.value.trim() || '',
+          spells: $('#m-spells')?.value.trim() || '',
+          spellSlotsUsed: collectSpellSlotsUsed(),
           equipment: ($('#m-equipment')?.value || '').trim() || (window.__draftInventory || []).map(i => i.name + (i.qty > 1 ? ' ×' + i.qty : '') + (i.equipped ? ' (equipped)' : '')).join(', '),
           inventory: (window.__draftInventory || []).map(normalizeInventoryItem),
           notes: $('#m-notes').value.trim()
@@ -2218,6 +2587,7 @@ function wireInventoryUI() {
         wireCharacterFormHelpers();
         wireInventoryUI();
         wireAvatarPicker();
+        wireSpellPicker();
         const grid = $('#ability-grid');
         if (grid) {
           grid.querySelectorAll('.ability-score').forEach(inp => {
@@ -2608,6 +2978,7 @@ function parseAttackLines(ch) {
       confirmText: 'Close',
       cancelText: '',
       wide: true,
+      xwide: true,
       onConfirm: () => true,
       afterOpen: () => {
         const root = $('#modal-body');
@@ -2671,140 +3042,243 @@ function parseAttackLines(ch) {
   }
 
   function printCharacterSheet(ch) {
-    const html = characterSheetViewHtml(ch);
+    // Build a denser print-only layout (same visual language, no empty page breaks)
+    const race = getPhbRaces().find(r => r.name === ch.race);
+    const cls = findPhbClass(ch.class);
+    const path = findMoonPath(ch.subclass);
+    const inv = ch.inventory || [];
+    const equipped = inv.filter(i => i.equipped);
+    const armor = equipped.find(i => i.category === 'armor');
+    const shield = equipped.find(i => i.category === 'shield');
+    const attacks = parseAttackLines(ch);
+    const initMod = abilityModNum(ch.dex);
+    const initStr = (initMod >= 0 ? '+' : '') + initMod;
+    const passivePer = 10 + abilityModNum(ch.wis) + ((ch.skills || '').toLowerCase().includes('perception') ? (ch.profBonus || 2) : 0);
+
+    const abBlock = ABS.map(a => {
+      const total = ch[a] || 10;
+      return `<div class="p-ab"><div class="p-ab-lbl">${a.toUpperCase()}</div><div class="p-ab-mod">${modStr(total)}</div><div class="p-ab-sc">${total}</div></div>`;
+    }).join('');
+
+    const attackCards = attacks.length ? attacks.map(a => `
+      <div class="p-atk">
+        <div class="p-atk-name">${escapeHtml(a.name)}</div>
+        <div class="p-atk-row"><span>Atk</span><strong>${escapeHtml(a.bonus)}</strong></div>
+        <div class="p-atk-row"><span>Dmg</span><strong>${escapeHtml(a.damage)}</strong></div>
+        <div class="p-atk-row"><span>Range</span><strong>${escapeHtml(a.range)}</strong></div>
+        ${a.props ? `<div class="p-atk-props">${escapeHtml(a.props)}</div>` : ''}
+      </div>`).join('') : '<span class="muted">No attacks</span>';
+
+    const invRows = inv.length ? inv.map(i =>
+      `<tr class="${i.equipped ? 'eq' : ''}"><td>${i.equipped ? '●' : ''}</td><td>${escapeHtml(i.name)}${i.qty > 1 ? ' ×' + i.qty : ''}</td><td>${escapeHtml(i.category)}</td><td>${i.weight ? (i.weight * i.qty) + ' lb' : '—'}</td></tr>`
+    ).join('') : '<tr><td colspan="4">—</td></tr>';
+
+    // Compact skills: only proficient + a short list feel
+    const skillLines = (ch.skills || '—');
+
+    const umb = ch.isUmbrarian ? umbrarianSheetBlock(ch) : '';
+
+    // Features once (avoid duplicating race/path blocks that are already in features)
+    const features = ch.features || '—';
+
+    const html = `
+      <div class="p-sheet">
+        <header class="p-head">
+          ${portraitHtml(ch)}
+          <div class="p-id">
+            <div class="p-name">${escapeHtml(ch.name || 'Unnamed')}</div>
+            <div class="p-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
+            <div class="p-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
+          </div>
+          <div class="p-head-stats">
+            <div class="p-pill"><span>Init</span><strong>${initStr}</strong></div>
+            <div class="p-pill"><span>PB</span><strong>+${ch.profBonus || 2}</strong></div>
+          </div>
+        </header>
+
+        <div class="p-combat">
+          <div class="p-box"><div class="p-val">${ch.ac}</div><div class="p-lbl">Armor Class</div><div class="p-sub">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''}</div></div>
+          <div class="p-box"><div class="p-val">${ch.hp}<span class="p-dim">/${ch.hpMax}</span></div><div class="p-lbl">Hit Points</div></div>
+          <div class="p-box"><div class="p-val">${escapeHtml((ch.speed || '30 ft.').replace(' ft.',''))}</div><div class="p-lbl">Speed</div></div>
+          <div class="p-box"><div class="p-val">${passivePer}</div><div class="p-lbl">Passive Perc.</div></div>
+          ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="p-box p-corrupt"><div class="p-val">${ch.corruption}/6</div><div class="p-lbl">Corruption</div></div>` : ''}
+        </div>
+
+        <div class="p-grid">
+          <div class="p-col">
+            <section class="p-panel">
+              <h3>Ability Scores</h3>
+              <div class="p-abs">${abBlock}</div>
+            </section>
+            <section class="p-panel">
+              <h3>Saving Throws</h3>
+              <div>${escapeHtml(ch.saves || '—')}</div>
+            </section>
+            <section class="p-panel">
+              <h3>Skills</h3>
+              <div class="p-skills">${escapeHtml(skillLines)}</div>
+            </section>
+          </div>
+          <div class="p-col p-col-wide">
+            <section class="p-panel">
+              <h3>Attacks &amp; Weapons</h3>
+              <div class="p-atk-grid">${attackCards}</div>
+              ${ch.attacks ? `<pre class="p-pre">${escapeHtml(ch.attacks)}</pre>` : ''}
+            </section>
+            <section class="p-panel">
+              <h3>Features &amp; Traits</h3>
+              <pre class="p-pre">${escapeHtml(features)}</pre>
+            </section>
+            <section class="p-panel">
+              <h3>Equipment <span class="p-dim">(${inventoryWeight(inv).toFixed(1)} lb)</span></h3>
+              <table class="p-table"><thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead><tbody>${invRows}</tbody></table>
+            </section>
+          </div>
+        </div>
+
+        ${(() => {
+          const sp = spellSheetBlock(ch);
+          const cards = spellSheetCardsHtml(ch);
+          return (sp || cards) ? `<div class="p-spell-wrap">${sp || ''}${cards || ''}</div>` : '';
+        })()}
+        ${umb ? `<div class="p-umb-wrap">${umb}</div>` : ''}
+
+        ${(race || path || ch.notes) ? `
+        <div class="p-grid p-grid-3">
+          ${race ? `<section class="p-panel"><h3>Race — ${escapeHtml(race.name)}</h3>
+            <ul class="p-list">${(race.traits||[]).slice(0,10).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
+          </section>` : ''}
+          ${path ? `<section class="p-panel"><h3>${escapeHtml(path.name)}</h3>
+            <ul class="p-list">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
+          </section>` : ''}
+          ${ch.notes ? `<section class="p-panel"><h3>Notes</h3><pre class="p-pre">${escapeHtml(ch.notes)}</pre></section>` : ''}
+        </div>` : ''}
+
+        <footer class="p-foot">The Dark Sun Chronicles · Character Sheet</footer>
+      </div>`;
+
     const w = window.open('', '_blank');
     if (!w) { toast('Allow pop-ups to print'); return; }
-    // Mirror digital sheet styling (DSC parchment)
     const css = `
       * { box-sizing: border-box; }
+      @page { size: A4 portrait; margin: 10mm; }
+      html, body { width: 210mm; }
       body {
+        margin: 0 auto; padding: 0;
         font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-        background: #14110e;
-        color: #e8dcc8;
-        margin: 0;
-        padding: 20px;
+        background: #14110e; color: #e8dcc8;
+        font-size: 10pt; line-height: 1.25;
       }
-      .cs-toolbar { display: none !important; }
-      .cs-tabs { display: none !important; }
-      .cs-page { display: block !important; page-break-after: always; margin-bottom: 28px; }
-      .cs-page:last-of-type { page-break-after: auto; }
-      .cs-sheet { max-width: 920px; margin: 0 auto; }
-      .cs-page-title {
-        font-size: 1.05rem; font-weight: 700; color: #c4a35a;
-        margin-bottom: 0.65rem; letter-spacing: 0.04em; text-transform: uppercase;
-      }
-      .cs-portrait-block {
-        display: flex; gap: 0.85rem; align-items: center;
-        margin-bottom: 0.75rem; padding-bottom: 0.65rem;
-        border-bottom: 2px solid rgba(196,163,90,0.35);
-      }
+      .p-sheet { width: 100%; max-width: 190mm; margin: 0 auto; }
+      .p-head { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid rgba(196,163,90,0.35); padding-bottom: 8px; margin-bottom: 8px; }
       .cs-portrait-ring {
-        width: 72px; height: 72px; border-radius: 50%;
-        border: 3px solid #c4a35a;
+        width: 56px; height: 56px; border-radius: 50%; border: 2px solid #c4a35a;
         background: radial-gradient(circle at 30% 30%, #3a3028, #1a1510);
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.75rem; font-weight: 700; color: #c4a35a; flex-shrink: 0;
-        overflow: hidden;
+        font-size: 1.4rem; font-weight: 700; color: #c4a35a; overflow: hidden; flex-shrink: 0;
       }
       .cs-portrait-ring.has-avatar { padding: 0; }
       .cs-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .cs-char-name { font-size: 1.5rem; font-weight: 700; color: #f0e6d0; }
-      .cs-char-meta { font-size: 0.9rem; color: #a89880; }
-      .cs-header-right { margin-left: auto; display: flex; gap: 0.5rem; }
-      .cs-mini-stat {
-        text-align: center; border: 1px solid rgba(196,163,90,0.3);
-        border-radius: 6px; padding: 0.25rem 0.5rem; min-width: 4.5rem;
+      .p-name { font-size: 1.35rem; font-weight: 700; color: #f0e6d0; line-height: 1.15; }
+      .p-meta { color: #a89880; font-size: 0.85rem; }
+      .p-id { flex: 1; min-width: 0; }
+      .p-head-stats { display: flex; gap: 6px; }
+      .p-pill {
+        border: 1px solid rgba(196,163,90,0.35); border-radius: 6px; padding: 4px 8px; text-align: center;
       }
-      .cs-mini-lbl { display: block; font-size: 0.65rem; color: #a89880; text-transform: uppercase; }
-      .cs-mini-val { font-size: 1.15rem; font-weight: 700; color: #c4a35a; }
-      .cs-combat-row {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-        gap: 0.5rem; margin-bottom: 0.75rem;
+      .p-pill span { display: block; font-size: 0.65rem; color: #a89880; text-transform: uppercase; }
+      .p-pill strong { color: #c4a35a; font-size: 1rem; }
+      .p-combat {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+        gap: 6px; margin-bottom: 8px;
       }
-      .cs-stat-box {
-        background: rgba(28,22,18,0.92); border: 1px solid rgba(196,163,90,0.35);
-        border-radius: 6px; text-align: center; padding: 0.5rem 0.35rem;
+      .p-box {
+        background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.35);
+        border-radius: 6px; text-align: center; padding: 6px 4px;
       }
-      .cs-stat-val { font-size: 1.55rem; font-weight: 700; color: #c4a35a; line-height: 1.1; }
-      .cs-hp-max { font-size: 0.95rem; color: #a89880; font-weight: 500; }
-      .cs-stat-label {
-        font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em;
-        color: #a89880; margin-top: 0.15rem;
+      .p-val { font-size: 1.35rem; font-weight: 700; color: #c4a35a; line-height: 1.1; }
+      .p-dim { color: #a89880; font-weight: 500; font-size: 0.9em; }
+      .p-lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a89880; margin-top: 2px; }
+      .p-sub { font-size: 0.65rem; color: #a89880; }
+      .p-corrupt .p-val { color: #d08080; }
+      .p-grid { display: grid; grid-template-columns: 28% 1fr; gap: 6px; margin-bottom: 6px; }
+      .p-grid-3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+      .p-panel {
+        background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.3);
+        border-radius: 6px; padding: 6px 8px; margin-bottom: 6px;
       }
-      .cs-stat-sub { font-size: 0.7rem; color: #a89880; }
-      .cs-stat-box.cs-corrupt .cs-stat-val { color: #d08080; }
-      .cs-main { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 0.65rem; }
-      .cs-panel {
-        background: rgba(28,22,18,0.92); border: 1px solid rgba(196,163,90,0.35);
-        border-radius: 6px; padding: 0.5rem 0.65rem; margin-bottom: 0.55rem;
+      .p-panel h3 {
+        margin: 0 0 4px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
+        color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 2px;
       }
-      .cs-panel-title {
-        font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
-        color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.35);
-        padding-bottom: 0.25rem; margin-bottom: 0.4rem; font-weight: 700;
+      .p-abs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+      .p-ab {
+        text-align: center; border: 1px solid rgba(196,163,90,0.2); border-radius: 4px;
+        padding: 3px; background: rgba(0,0,0,0.2);
       }
-      .cs-abilities { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
-      .cs-ability {
-        text-align: center; border: 1px solid rgba(196,163,90,0.2);
-        border-radius: 4px; padding: 0.3rem; background: rgba(0,0,0,0.2);
+      .p-ab-lbl { font-size: 0.62rem; color: #a89880; }
+      .p-ab-mod { font-size: 1.05rem; font-weight: 700; color: #f0e6d0; }
+      .p-ab-sc {
+        display: inline-block; font-size: 0.72rem; color: #c4a35a;
+        border: 1px solid rgba(196,163,90,0.3); border-radius: 999px; padding: 0 5px;
       }
-      .cs-ab-label { font-size: 0.68rem; color: #a89880; letter-spacing: 0.05em; }
-      .cs-ab-mod { font-size: 1.25rem; font-weight: 700; color: #f0e6d0; }
-      .cs-ab-score {
-        display: inline-block; min-width: 1.6rem; font-size: 0.8rem;
-        border: 1px solid rgba(196,163,90,0.35); border-radius: 999px;
-        padding: 0.05rem 0.35rem; margin-top: 0.15rem; color: #c4a35a;
+      .p-skills { font-size: 0.8rem; }
+      .p-atk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+      .p-atk {
+        border: 1px solid rgba(196,163,90,0.35); border-radius: 6px; padding: 5px 7px;
+        background: rgba(0,0,0,0.15);
       }
-      .cs-body { font-size: 0.88rem; line-height: 1.35; }
-      .cs-pre { white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; margin: 0; color: #e8dcc8; }
-      .cs-pre-scroll { max-height: none; }
-      .cs-inv-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-      .cs-inv-table th {
-        text-align: left; color: #a89880; font-weight: 600; font-size: 0.7rem;
-        text-transform: uppercase; border-bottom: 1px solid rgba(196,163,90,0.35); padding: 0.2rem 0.25rem;
+      .p-atk-name { font-weight: 700; color: #f0e6d0; border-bottom: 1px solid rgba(196,163,90,0.2); margin-bottom: 3px; padding-bottom: 2px; font-size: 0.85rem; }
+      .p-atk-row { display: flex; justify-content: space-between; gap: 6px; font-size: 0.78rem; }
+      .p-atk-row span { color: #a89880; }
+      .p-atk-row strong { color: #c4a35a; }
+      .p-atk-props { font-size: 0.68rem; color: #a89880; margin-top: 2px; }
+      .p-pre {
+        white-space: pre-wrap; font-family: inherit; font-size: 0.78rem;
+        margin: 4px 0 0; color: #e8dcc8; max-height: none;
       }
-      .cs-inv-table td { padding: 0.25rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
-      .cs-inv-table tr.equipped-row td { color: #c4a35a; }
-      .cs-skills { font-size: 0.8rem; }
-      .cs-skill {
-        display: grid; grid-template-columns: 1rem 2.2rem 1fr 2rem;
-        gap: 0.25rem; align-items: center; padding: 0.1rem 0;
+      .p-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+      .p-table th { text-align: left; color: #a89880; font-size: 0.65rem; text-transform: uppercase; border-bottom: 1px solid rgba(196,163,90,0.3); padding: 2px 3px; }
+      .p-table td { padding: 2px 3px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+      .p-table tr.eq td { color: #c4a35a; }
+      .p-list { margin: 0; padding-left: 1rem; font-size: 0.75rem; }
+      .p-list li { margin-bottom: 2px; }
+      .p-umb-wrap { margin-bottom: 8px; }
+      .p-umb-wrap .cs-panel { margin-bottom: 0; }
+      .p-umb-wrap .cs-panel-title {
+        font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
+        color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 2px; margin-bottom: 4px; font-weight: 700;
       }
-      .cs-skill.prof .cs-skill-name { color: #f0e6d0; font-weight: 600; }
-      .cs-skill-check { color: #c4a35a; text-align: center; }
-      .cs-atk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.65rem; }
-      .cs-atk-card {
-        background: rgba(28,22,18,0.92); border: 1px solid rgba(196,163,90,0.4);
-        border-radius: 8px; padding: 0.65rem 0.75rem;
+      .p-umb-wrap .cs-umb { border: 1px solid rgba(196,92,74,0.45); border-radius: 6px; padding: 6px 8px; background: rgba(28,22,18,0.95); }
+      .p-umb-wrap .cs-umb-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin: 4px 0; }
+      .p-umb-wrap .cs-stat-box { text-align: center; border: 1px solid rgba(196,163,90,0.3); border-radius: 4px; padding: 4px; }
+      .p-umb-wrap .cs-stat-val { font-size: 1.1rem; font-weight: 700; color: #c4a35a; }
+      .p-umb-wrap .cs-stat-label { font-size: 0.6rem; color: #a89880; text-transform: uppercase; }
+      .p-umb-wrap .cs-stat-sub { font-size: 0.62rem; color: #a89880; }
+      .p-umb-wrap .trait-list { margin: 0; padding-left: 1rem; font-size: 0.75rem; }
+      .p-foot {
+        text-align: center; margin-top: 8px; font-size: 0.65rem; letter-spacing: 0.12em;
+        text-transform: uppercase; color: #a89880;
       }
-      .cs-atk-name {
-        font-weight: 700; font-size: 1rem; color: #f0e6d0;
-        border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 0.3rem; margin-bottom: 0.45rem;
-      }
-      .cs-atk-stats { display: grid; gap: 0.35rem; }
-      .cs-atk-stats > div { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
-      .cs-atk-lbl { color: #a89880; font-size: 0.72rem; text-transform: uppercase; }
-      .cs-atk-val { font-weight: 700; color: #c4a35a; }
-      .cs-atk-props { margin-top: 0.4rem; font-size: 0.75rem; color: #a89880; }
-      .cs-footer-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.55rem; }
-      .cs-footer-brand {
-        text-align: center; margin-top: 0.75rem; letter-spacing: 0.12em;
-        text-transform: uppercase; font-size: 0.68rem; color: #a89880;
-      }
-      .cs-umb { border-color: rgba(196,92,74,0.45) !important; }
-      .cs-umb-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.45rem; margin: 0.45rem 0; }
-      .trait-list { margin: 0; padding-left: 1.1rem; }
-      .trait-list.compact { font-size: 0.8rem; }
       .muted { color: #a89880; }
-      .cs-atk-mini-row { font-size: 0.85rem; padding: 0.15rem 0; }
+      .p-spell-wrap { margin-bottom: 6px; }
+      .p-spell-wrap .cs-panel { background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.3); border-radius: 6px; padding: 6px 8px; }
+      .p-spell-wrap .cs-panel-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 2px; margin-bottom: 4px; font-weight: 700; }
+      .p-spell-wrap .cs-umb-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 4px 0; }
+      .p-spell-wrap .cs-stat-box { text-align: center; border: 1px solid rgba(196,163,90,0.3); border-radius: 4px; padding: 4px; }
+      .p-spell-wrap .cs-stat-val { font-size: 1.1rem; font-weight: 700; color: #c4a35a; }
+      .p-spell-wrap .cs-stat-label { font-size: 0.6rem; color: #a89880; text-transform: uppercase; }
+      .p-spell-wrap .cs-pre { white-space: pre-wrap; font-family: inherit; font-size: 0.78rem; margin: 2px 0 0; }
       @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .cs-page { page-break-inside: avoid; }
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #14110e; }
+        .p-panel, .p-box, .p-atk, .p-ab { break-inside: avoid; page-break-inside: avoid; }
+        .p-grid { break-inside: auto; }
       }
     `;
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(ch.name || 'Sheet').replace(/[<>]/g,'')}</title><style>${css}</style></head><body>${html}<script>window.onload=function(){setTimeout(function(){window.print();},200);}</script></body></html>`);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(ch.name || 'Sheet').replace(/[<>]/g,'')}</title><style>${css}</style></head><body>${html}<script>window.onload=function(){setTimeout(function(){window.print();},150);}</script></body></html>`);
     w.document.close();
   }
+
 
 
 

@@ -2180,3 +2180,79 @@ label.small {
   gap: 0.75rem;
   align-items: flex-start;
 }
+
+
+/* Extra-wide character modals (near A4 reading width) */
+.modal-panel.wide {
+  max-width: min(960px, 96vw);
+  width: 100%;
+}
+.modal-panel.xwide {
+  max-width: min(1100px, 98vw);
+  width: 100%;
+}
+.modal-panel.xwide #modal-body {
+  max-height: min(78vh, 900px);
+  overflow-y: auto;
+}
+
+/* Spell slots editor */
+.spell-slots-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: center;
+}
+.spell-slot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid rgba(196,163,90,0.3);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.15);
+}
+.spell-slot-chip input,
+#m-slot-pact {
+  width: 2.8rem;
+}
+#m-spell-dc, #m-spell-atk {
+  font-weight: 700;
+  color: var(--accent, #c4a35a);
+}
+
+/* Spell picker & cards */
+.spell-picker { margin-top: 0.25rem; }
+.spell-results { max-height: 180px; overflow-y: auto; margin-top: 0.4rem; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 0.25rem; }
+.spell-search-list { list-style: none; margin: 0; padding: 0; }
+.spell-search-item {
+  display: flex; gap: 0.5rem; align-items: flex-start; justify-content: space-between;
+  padding: 0.4rem 0.35rem; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.spell-known-list { margin-top: 0.35rem; }
+.spell-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.55rem;
+}
+.spell-card {
+  background: rgba(28, 22, 18, 0.95);
+  border: 1px solid rgba(196, 163, 90, 0.4);
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  font-size: 0.82rem;
+}
+.spell-card-title { font-weight: 700; color: #f0e6d0; font-size: 0.95rem; }
+.spell-card-sub { color: #a89880; font-size: 0.72rem; margin-bottom: 0.35rem; }
+.spell-card-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.2rem 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+}
+.spell-card-meta span { display: block; color: #a89880; text-transform: uppercase; font-size: 0.62rem; letter-spacing: 0.04em; }
+.spell-card-meta strong { color: #c4a35a; font-weight: 600; }
+.spell-card-body { margin: 0; color: #e8dcc8; line-height: 1.35; }
+.spell-card .spell-remove { margin-top: 0.35rem; }

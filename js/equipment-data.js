@@ -96,3 +96,25 @@ window.EQUIPMENT = [
   { id: 'ammunition-bolts', name: 'Crossbow Bolts (20)', category: 'gear', cost: '1 gp', weight: 1.5 },
   { id: 'ammunition-bullets', name: 'Sling Bullets (20)', category: 'gear', cost: '4 cp', weight: 1.5 }
 ];
+
+/** Spell slot progression (5e). Index = character level 1–20. Values = slots by spell level 1–9 */
+window.SPELL_SLOTS_FULL = [
+  null,
+  [2],[3],[4,2],[4,3],[4,3,2],[4,3,3],[4,3,3,1],[4,3,3,2],[4,3,3,3,1],[4,3,3,3,2],
+  [4,3,3,3,2,1],[4,3,3,3,2,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1],[4,3,3,3,2,1,1,1],
+  [4,3,3,3,2,1,1,1],[4,3,3,3,2,1,1,1,1],[4,3,3,3,3,1,1,1,1],[4,3,3,3,3,2,1,1,1],[4,3,3,3,3,2,2,1,1]
+];
+window.SPELL_SLOTS_HALF = [
+  null,
+  [],[],[2],[3],[3],[3],[4],[4],[4,2],[4,2],
+  [4,3],[4,3],[4,3,2],[4,3,2],[4,3,3],[4,3,3],[4,3,3,1],[4,3,3,1],[4,3,3,2],[4,3,3,2]
+];
+/** Warlock pact slots: [slotLevel, slotCount] by character level */
+window.SPELL_SLOTS_WARLOCK = [
+  null,
+  [1,1],[1,2],[2,2],[2,2],[3,2],[3,2],[4,2],[4,2],[5,2],[5,2],
+  [5,3],[5,3],[5,3],[5,3],[5,3],[5,3],[5,4],[5,4],[5,4],[5,4]
+];
+window.FULL_CASTERS = ['Bard','Cleric','Druid','Sorcerer','Wizard'];
+window.HALF_CASTERS = ['Paladin','Ranger','Moon Guardian'];
+window.PACT_CASTERS = ['Warlock'];
