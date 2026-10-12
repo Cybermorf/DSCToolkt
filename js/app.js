@@ -1634,33 +1634,59 @@
     return t;
   }
 
+
   function mapOpen5eSpell(s) {
     const level = s.level != null ? Number(s.level) : 0;
     const classes = Array.isArray(s.classes)
-      ? s.classes.map(c => (typeof c === 'string' ? c : (c.name || ''))).filter(Boolean)
+      ? s.classes.map(c => (typeof c === 'string' ? c : (c.name || c.key || ''))).filter(Boolean)
       : [];
-    const school = typeof s.school === 'object' && s.school
-      ? (s.school.name || 'Unknown')
-      : (s.school || 'Unknown');
-    const durationRaw = s.duration || '—';
-    const concentration = s.concentration === true || /concentration/i.test(String(durationRaw));
-    const duration = concentration && !/concentration/i.test(String(durationRaw))
-      ? `Concentration, ${durationRaw}`
-      : String(durationRaw);
-    const desc = [s.desc || '', s.higher_level ? `\n\nAt Higher Levels. ${s.higher_level}` : ''].join('').trim();
+    let school = 'Unknown';
+    if (typeof s.school === 'object' && s.school) school = s.school.name || s.school.key || 'Unknown';
+    else if (s.school) school = String(s.school);
+    school = String(school).replace(/_/g, ' ');
+    school = school.charAt(0).toUpperCase() + school.slice(1);
+
+    // v2 may put overrides on casting_options[0]
+    const opt = Array.isArray(s.casting_options) && s.casting_options.length ? s.casting_options[0] : {};
+    let durationRaw = opt.duration != null ? opt.duration : (s.duration || '—');
+    durationRaw = String(durationRaw).replace(/_/g, ' ');
+    const concentration = s.concentration === true || opt.concentration === true || /concentration/i.test(durationRaw);
+    let duration = durationRaw;
+    if (concentration && !/concentration/i.test(durationRaw)) duration = `Concentration, ${durationRaw}`;
+
+    let time = open5eCastingTime(s);
+    if (opt.type && opt.type !== 'default' && !s.casting_time) {
+      time = open5eCastingTime({ casting_time: opt.type, reaction_condition: s.reaction_condition });
+    }
+
+    let range = s.range_text || '';
+    if (!range && (opt.range != null || s.range != null)) {
+      const r = opt.range != null ? opt.range : s.range;
+      range = `${r} ${s.range_unit || 'feet'}`.trim();
+    }
+    if (!range) range = '—';
+
+    const descParts = [s.desc || ''];
+    if (s.higher_level) descParts.push(`\n\nAt Higher Levels. ${s.higher_level}`);
+    if (s.damage_roll) descParts.push(`\n\nDamage: ${s.damage_roll}`);
+    if (s.saving_throw_ability) descParts.push(`\n\nSave: ${s.saving_throw_ability}`);
+    const desc = descParts.join('').trim();
     const doc = s.document || {};
+    const key = s.key || s.name || '';
+    const id = String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || String(s.name).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
     return mergeSpellRecord({
-      id: (s.key || s.name || '').toLowerCase().replace(/^[^_]*_/, '') || s.name,
+      id,
       name: s.name,
       level,
-      school: String(school).replace(/^\w/, c => c.toUpperCase()),
-      time: open5eCastingTime(s),
-      range: s.range_text || (s.range != null ? `${s.range} ${s.range_unit || 'feet'}` : '—'),
+      school,
+      time,
+      range,
       components: open5eComponents(s),
       duration,
       classes,
       description: desc,
-      summary: (s.desc || '').slice(0, 200),
+      summary: (s.desc || '').slice(0, 220),
       ritual: !!s.ritual,
       concentration,
       source: doc.display_name || doc.name || doc.key || 'Open5e'
@@ -1684,102 +1710,180 @@
       ? (w.damage_type.name || '').toLowerCase()
       : String(w.damage_type || '').toLowerCase();
     const doc = w.document || {};
+    const key = w.key || w.name || '';
     return mergeEquipmentRecord({
-      id: (w.key || w.name || '').toLowerCase().replace(/^[^_]*_/, '') || w.name,
+      id: String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
       name: w.name,
       category: 'weapon',
       weaponType,
       damage: w.damage_dice || '',
       damageType: dtype,
       props,
-      cost: w.cost || '',
-      weight: parseFloat(String(w.weight || '0').replace(/[^\d.]/g, '')) || 0,
-      notes: doc.display_name ? `Source: ${doc.display_name}` : '',
+      cost: w.cost != null ? String(w.cost) : '',
+      weight: w.weight != null ? Number(w.weight) || 0 : 0,
+      notes: [props, ranged && w.range ? `Range ${w.range}${w.long_range ? '/' + w.long_range : ''}` : ''].filter(Boolean).join(' · '),
       source: doc.display_name || doc.name || 'Open5e'
     });
   }
 
   function mapOpen5eArmor(a) {
-    const cat = String(a.category || '').toLowerCase();
-    const isShield = cat.includes('shield') || /shield/i.test(a.name || '');
     const doc = a.document || {};
-    const source = doc.display_name || doc.name || 'Open5e';
+    const catRaw = (a.category || '').toLowerCase();
+    const isShield = catRaw.includes('shield') || /shield/i.test(a.name || '');
+    const key = a.key || a.name || '';
+    const id = String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     if (isShield) {
       return mergeEquipmentRecord({
-        id: (a.key || a.name || '').toLowerCase().replace(/^[^_]*_/, '') || a.name,
+        id,
         name: a.name,
         category: 'shield',
         acBonus: 2,
-        cost: a.cost || '',
-        weight: parseFloat(String(a.weight || '0').replace(/[^\d.]/g, '')) || 0,
+        cost: a.cost != null ? String(a.cost) : '',
+        weight: a.weight != null ? Number(a.weight) || 0 : 0,
         notes: a.ac_display || '',
-        source
+        source: doc.display_name || doc.name || 'Open5e'
       });
     }
     let armorType = 'light';
-    if (cat.includes('heavy')) armorType = 'heavy';
-    else if (cat.includes('medium')) armorType = 'medium';
-    let acDexMax = null;
-    if (a.ac_add_dexmod === false) acDexMax = 0;
-    else if (a.ac_cap_dexmod != null) acDexMax = a.ac_cap_dexmod;
+    if (catRaw.includes('medium')) armorType = 'medium';
+    else if (catRaw.includes('heavy')) armorType = 'heavy';
+    else if (catRaw.includes('light')) armorType = 'light';
     return mergeEquipmentRecord({
-      id: (a.key || a.name || '').toLowerCase().replace(/^[^_]*_/, '') || a.name,
+      id,
       name: a.name,
       category: 'armor',
       armorType,
-      acBase: a.ac_base != null ? a.ac_base : 11,
-      acDexMax,
-      cost: a.cost || '',
-      weight: parseFloat(String(a.weight || '0').replace(/[^\d.]/g, '')) || 0,
-      notes: [
-        a.ac_display || '',
-        a.grants_stealth_disadvantage ? 'Stealth disadvantage.' : '',
-        a.strength_score_required ? `Str ${a.strength_score_required}.` : ''
-      ].filter(Boolean).join(' '),
-      source
+      acBase: a.ac_base != null ? Number(a.ac_base) : 11,
+      acDexMax: a.ac_cap_dexmod != null ? a.ac_cap_dexmod : (a.ac_add_dexmod === false ? 0 : null),
+      cost: a.cost != null ? String(a.cost) : '',
+      weight: a.weight != null ? Number(a.weight) || 0 : 0,
+      notes: [a.ac_display || '', a.grants_stealth_disadvantage ? 'Stealth disadvantage' : '', a.strength_score_required ? `Str ${a.strength_score_required}` : ''].filter(Boolean).join(' · '),
+      source: doc.display_name || doc.name || 'Open5e'
+    });
+  }
+
+  function mapOpen5eItem(it) {
+    const doc = it.document || {};
+    const catObj = it.category;
+    const catName = (typeof catObj === 'object' ? (catObj.name || catObj.key) : catObj) || 'gear';
+    const catL = String(catName).toLowerCase();
+    let category = 'gear';
+    if (catL.includes('weapon')) category = 'weapon';
+    else if (catL.includes('armor')) category = 'armor';
+    else if (catL.includes('shield')) category = 'shield';
+    else if (catL.includes('tool')) category = 'tool';
+    const key = it.key || it.name || '';
+    const id = String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return mergeEquipmentRecord({
+      id,
+      name: it.name,
+      category,
+      cost: it.cost != null ? String(it.cost) : '',
+      weight: it.weight != null ? Number(it.weight) || 0 : 0,
+      notes: (it.desc || '').slice(0, 500),
+      source: doc.display_name || doc.name || 'Open5e'
+    });
+  }
+
+  function mapOpen5eMagicItem(it) {
+    const doc = it.document || {};
+    const rarity = typeof it.rarity === 'object' ? (it.rarity.name || '') : (it.rarity || '');
+    const key = it.key || it.name || '';
+    const id = 'magic-' + String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    let category = 'gear';
+    if (it.armor) category = /shield/i.test(it.armor.name || '') ? 'shield' : 'armor';
+    else if (it.weapon) category = 'weapon';
+    const notes = [
+      rarity ? `Rarity: ${rarity}` : '',
+      it.requires_attunement ? `Attunement${it.attunement_detail ? ': ' + it.attunement_detail : ''}` : '',
+      (it.desc || '').slice(0, 600)
+    ].filter(Boolean).join('\n');
+    const rec = {
+      id,
+      name: it.name,
+      category,
+      cost: it.cost != null ? String(it.cost) : '',
+      weight: it.weight != null ? Number(it.weight) || 0 : 0,
+      notes,
+      source: doc.display_name || doc.name || 'Open5e',
+      magic: true,
+      rarity
+    };
+    if (category === 'armor' && it.armor) {
+      rec.armorType = (it.armor.category || 'medium').toLowerCase();
+      rec.acBase = it.armor.ac_base != null ? Number(it.armor.ac_base) : 11;
+      rec.acDexMax = it.armor.ac_cap_dexmod != null ? it.armor.ac_cap_dexmod : null;
+    }
+    if (category === 'weapon' && it.weapon) {
+      rec.damage = it.weapon.damage_dice || '';
+      rec.weaponType = it.weapon.is_simple ? 'simple melee' : 'martial melee';
+    }
+    return mergeEquipmentRecord(rec);
+  }
+
+  function mapOpen5eFeat(f) {
+    const doc = f.document || {};
+    const key = f.key || f.name || '';
+    const id = 'feat-' + String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const benefits = Array.isArray(f.benefits) ? f.benefits.map(b => (typeof b === 'string' ? b : (b.desc || b.name || ''))).filter(Boolean).join('\n') : '';
+    const notes = [
+      f.prerequisite ? `Prerequisite: ${f.prerequisite}` : '',
+      f.desc || '',
+      benefits
+    ].filter(Boolean).join('\n\n');
+    return mergeEquipmentRecord({
+      id,
+      name: f.name + ' (Feat)',
+      category: 'gear',
+      cost: '',
+      weight: 0,
+      notes: notes.slice(0, 900),
+      source: doc.display_name || doc.name || 'Open5e',
+      isFeat: true
     });
   }
 
   function mapOpen5eCreature(c) {
     const doc = c.document || {};
-    const size = typeof c.size === 'object' ? (c.size?.name || '') : (c.size || '');
-    const type = typeof c.type === 'object' ? (c.type?.name || '') : (c.type || '');
-    const scores = c.ability_scores || {};
+    const scores = c.ability_scores || c.abilities || {};
+    const size = typeof c.size === 'object' ? (c.size.name || '') : (c.size || '');
+    const type = typeof c.type === 'object' ? (c.type.name || '') : (c.type || c.creature_type || '');
     const speedObj = c.speed || {};
-    const speedParts = [];
-    if (speedObj.walk) speedParts.push(`${speedObj.walk} ft.`);
-    if (speedObj.fly) speedParts.push(`fly ${speedObj.fly} ft.`);
-    if (speedObj.swim) speedParts.push(`swim ${speedObj.swim} ft.`);
-    if (speedObj.climb) speedParts.push(`climb ${speedObj.climb} ft.`);
-    if (speedObj.burrow) speedParts.push(`burrow ${speedObj.burrow} ft.`);
-    const traits = (c.traits || []).map(t => `**${t.name}.** ${(t.desc || '').slice(0, 600)}`).join('\n');
-    const actions = (c.actions || []).map(a => `**${a.name}.** ${(a.desc || '').slice(0, 800)}`).join('\n');
-    const cr = c.challenge_rating != null ? Number(c.challenge_rating) : 0;
+    let speedParts = [];
+    if (typeof speedObj === 'object' && speedObj) {
+      Object.entries(speedObj).forEach(([k, v]) => {
+        if (v != null && k !== 'unit') speedParts.push(`${k} ${v}${speedObj.unit ? ' ' + speedObj.unit : ' ft.'}`);
+      });
+    } else if (typeof c.speed === 'string') speedParts = [c.speed];
+    const traits = (c.traits || []).map(t => `**${t.name}.** ${(t.desc || '').slice(0, 600)}`).join('\\n');
+    const actions = (c.actions || []).map(a => `**${a.name}.** ${(a.desc || '').slice(0, 800)}`).join('\\n');
+    const cr = c.challenge_rating_text != null ? c.challenge_rating_text : (c.challenge_rating != null ? Number(c.challenge_rating) : 0);
     const name = c.name || 'Unknown';
+    const ac = c.armor_class != null ? c.armor_class : (c.ac != null ? c.ac : 10);
     return {
       n: name,
       w: doc.display_name || doc.name || 'Open5e',
       o: 'Imported',
       classif: [size, type].filter(Boolean).join(' ') || type || '',
-      cr: isNaN(cr) ? 0 : cr,
-      ac: c.armor_class != null ? c.armor_class : 10,
-      hp: c.hit_points != null ? c.hit_points : 1,
+      cr: typeof cr === 'number' && !isNaN(cr) ? cr : parseFloat(cr) || 0,
+      ac: typeof ac === 'object' ? (ac.value || ac.armor_class || 10) : ac,
+      hp: c.hit_points != null ? c.hit_points : (c.hp != null ? c.hp : 1),
       speed: speedParts.join(', ') || '30 ft.',
-      str: scores.strength || 10,
-      dex: scores.dexterity || 10,
-      con: scores.constitution || 10,
-      int: scores.intelligence || 10,
-      wis: scores.wisdom || 10,
-      cha: scores.charisma || 10,
+      str: scores.strength || scores.str || 10,
+      dex: scores.dexterity || scores.dex || 10,
+      con: scores.constitution || scores.con || 10,
+      int: scores.intelligence || scores.int || 10,
+      wis: scores.wisdom || scores.wis || 10,
+      cha: scores.charisma || scores.cha || 10,
       desc: [
         c.alignment ? `Alignment: ${c.alignment}.` : '',
         c.languages?.as_string ? `Languages: ${c.languages.as_string}.` : '',
-        traits ? `Traits:\n${traits}` : '',
-        actions ? `Actions:\n${actions}` : ''
-      ].filter(Boolean).join('\n\n'),
+        traits ? `Traits:\\n${traits}` : '',
+        actions ? `Actions:\\n${actions}` : ''
+      ].filter(Boolean).join('\\n\\n'),
       eco: '',
       people: '',
-      run: actions ? actions.slice(0, 800) : '',
+      run: actions ? String(actions).slice(0, 800) : '',
       seeds: '',
       source: doc.display_name || doc.name || 'Open5e',
       _src: 'Imported',
@@ -1787,52 +1891,107 @@
     };
   }
 
-  async function syncOpen5e({ srdOnly = true, spells = true, equipment = true, creatures = false, statusEl } = {}) {
-    const setStatus = (msg) => {
-      if (statusEl) statusEl.textContent = msg;
-    };
-    // v2 uses document__key (e.g. srd-2024 for SRD 5.2)
+  async function syncOpen5e({
+    srdOnly = true,
+    spells = true,
+    equipment = true,
+    items = true,
+    magicItems = true,
+    feats = false,
+    creatures = false,
+    statusEl
+  } = {}) {
+    const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
     const params = srdOnly ? { document__key: 'srd-2024' } : {};
     const pack = {
-      format: 'DSCToolkt-compendium-v1',
-      edition: srdOnly ? '5e-srd-2024-open5e' : '5e-open5e-v2-all',
-      source: 'Open5e API v2',
-      attribution: 'Data retrieved from the Open5e API v2 (https://api.open5e.com / https://github.com/open5e/open5e-api). Individual documents retain their original licenses.',
       spells: [],
       equipment: [],
-      creatures: []
+      creatures: [],
+      meta: {
+        edition: srdOnly ? '5e-srd-2024-open5e' : '5e-open5e-v2-all',
+        source: 'Open5e API v2',
+        attribution: 'Data from Open5e API v2 (https://api.open5e.com). Documents retain their original licenses.',
+        syncedAt: new Date().toISOString()
+      }
     };
-    if (spells) {
-      setStatus('Fetching spells from Open5e v2…');
-      const rows = await open5eFetchAll('/spells/', params, {
-        onPage: (p, n, total) => setStatus(`Spells: page ${p} (${n}/${total || '?'})…`)
-      });
-      pack.spells = rows.map(mapOpen5eSpell).filter(Boolean);
-      setStatus(`Mapped ${pack.spells.length} spells`);
+
+    try {
+      if (spells) {
+        setStatus('Fetching spells…');
+        const rows = await open5eFetchAll('/spells/', params, {
+          maxPages: 120,
+          onPage: (p, n, total) => setStatus(`Spells page ${p} — ${n}/${total || '?'}`)
+        });
+        pack.spells = rows.map(mapOpen5eSpell).filter(Boolean);
+        setStatus(`Mapped ${pack.spells.length} spells`);
+      }
+
+      if (equipment) {
+        setStatus('Fetching weapons…');
+        const weapons = await open5eFetchAll('/weapons/', params, {
+          maxPages: 40,
+          onPage: (p, n, total) => setStatus(`Weapons page ${p} — ${n}/${total || '?'}`)
+        });
+        setStatus('Fetching armor…');
+        const armor = await open5eFetchAll('/armor/', params, {
+          maxPages: 20,
+          onPage: (p, n, total) => setStatus(`Armor page ${p} — ${n}/${total || '?'}`)
+        });
+        pack.equipment.push(...weapons.map(mapOpen5eWeapon).filter(Boolean));
+        pack.equipment.push(...armor.map(mapOpen5eArmor).filter(Boolean));
+      }
+
+      if (items) {
+        setStatus('Fetching adventuring gear (items)…');
+        const rows = await open5eFetchAll('/items/', params, {
+          maxPages: 80,
+          onPage: (p, n, total) => setStatus(`Items page ${p} — ${n}/${total || '?'}`)
+        });
+        pack.equipment.push(...rows.map(mapOpen5eItem).filter(Boolean));
+      }
+
+      if (magicItems) {
+        setStatus('Fetching magic items…');
+        const rows = await open5eFetchAll('/magicitems/', params, {
+          maxPages: 120,
+          onPage: (p, n, total) => setStatus(`Magic items page ${p} — ${n}/${total || '?'}`)
+        });
+        pack.equipment.push(...rows.map(mapOpen5eMagicItem).filter(Boolean));
+      }
+
+      if (feats) {
+        setStatus('Fetching feats…');
+        const rows = await open5eFetchAll('/feats/', params, {
+          maxPages: 40,
+          onPage: (p, n, total) => setStatus(`Feats page ${p} — ${n}/${total || '?'}`)
+        });
+        pack.equipment.push(...rows.map(mapOpen5eFeat).filter(Boolean));
+      }
+
+
+      if (creatures) {
+        setStatus('Fetching creatures (bestiary)…');
+        try {
+          const rows = await open5eFetchAll('/creatures/', params, {
+            maxPages: 150,
+            onPage: (p, n, total) => setStatus(`Creatures page ${p} — ${n}/${total || '?'}`)
+          });
+          pack.creatures = rows.map(mapOpen5eCreature).filter(Boolean);
+        } catch (err) {
+          console.warn('Creature sync failed', err);
+          setStatus('Creature sync failed (API may rate-limit). Spells/equipment still saved.');
+        }
+      }
+
+      setStatus(`Merging ${pack.spells.length} spells, ${pack.equipment.length} equipment…`);
+      const res = importCompendiumPack(pack);
+      setStatus(`Done — +${res.spells} spells, +${res.equipment} equipment${res.creatures ? ', +' + res.creatures + ' creatures' : ''}. Runtime: ${res.totalSpells} spells / ${res.totalEquipment} equipment.`);
+      return res;
+    } catch (err) {
+      console.warn(err);
+      setStatus('Error: ' + (err.message || err));
+      throw err;
     }
-    if (equipment) {
-      setStatus('Fetching weapons from Open5e v2…');
-      const weapons = await open5eFetchAll('/weapons/', params, {
-        onPage: (p, n, total) => setStatus(`Weapons: page ${p} (${n}/${total || '?'})…`)
-      });
-      setStatus('Fetching armor from Open5e v2…');
-      const armor = await open5eFetchAll('/armor/', params, {
-        onPage: (p, n, total) => setStatus(`Armor: page ${p} (${n}/${total || '?'})…`)
-      });
-      pack.equipment = [...weapons.map(mapOpen5eWeapon), ...armor.map(mapOpen5eArmor)].filter(Boolean);
-      setStatus(`Mapped ${pack.equipment.length} equipment items`);
-    }
-    if (creatures) {
-      setStatus('Fetching creatures from Open5e v2…');
-      const rows = await open5eFetchAll('/creatures/', params, {
-        onPage: (p, n, total) => setStatus(`Creatures: page ${p} (${n}/${total || '?'})…`)
-      });
-      pack.creatures = rows.map(mapOpen5eCreature).filter(Boolean);
-      setStatus(`Mapped ${pack.creatures.length} creatures`);
-    }
-    const res = importCompendiumPack(pack);
-    setStatus(`Done — +${res.spells} spells, +${res.equipment} equipment, +${res.creatures || 0} creatures (totals ${res.totalSpells} / ${res.totalEquipment} / ${res.totalCreatures || 0})`);
-    return res;
   }
 
   function renderCompendiumTools() {
@@ -1856,15 +2015,18 @@
       </div>
       <div class="compendium-panel">
         <h3>Open5e API Sync</h3>
-        <p class="muted small">Live updates from the <a href="https://github.com/open5e/open5e-api" target="_blank" rel="noopener">Open5e API v2</a> (<code>api.open5e.com/v2</code>). Merges into your user compendium.</p>
+        <p class="muted small">Import <strong>spells</strong>, weapons, armor, adventuring gear, magic items, and feats from the <a href="https://github.com/open5e/open5e-api" target="_blank" rel="noopener">Open5e API v2</a> (<code>api.open5e.com/v2</code>). Merges into your user compendium.</p>
         <label class="checkbox-row" style="margin:0.4rem 0">
           <input type="checkbox" id="open5e-srd-only" checked />
           <span>SRD 5.2 only (<code>document__key=srd-2024</code>)</span>
         </label>
         <div class="form-row">
-          <button type="button" class="btn primary" id="open5e-sync-all">Sync Spells + Equipment + Bestiary</button>
+          <button type="button" class="btn primary" id="open5e-sync-all">Sync All (Spells, Gear, Magic, Bestiary)</button>
           <button type="button" class="btn secondary" id="open5e-sync-spells">Spells only</button>
-          <button type="button" class="btn secondary" id="open5e-sync-equip">Weapons &amp; Armor only</button>
+          <button type="button" class="btn secondary" id="open5e-sync-equip">Weapons &amp; Armor</button>
+          <button type="button" class="btn secondary" id="open5e-sync-items">Adventuring gear</button>
+          <button type="button" class="btn secondary" id="open5e-sync-magic">Magic items</button>
+          <button type="button" class="btn secondary" id="open5e-sync-feats">Feats</button>
           <button type="button" class="btn secondary" id="open5e-sync-creatures">Bestiary only</button>
         </div>
         <p class="muted small" id="open5e-status">Ready.</p>
@@ -1927,26 +2089,30 @@
 
     const statusEl = $('#open5e-status');
     const runSync = async (opts) => {
-      const btns = ['open5e-sync-all', 'open5e-sync-spells', 'open5e-sync-equip', 'open5e-sync-creatures'].map(id => document.getElementById(id));
+      const ids = ['open5e-sync-all','open5e-sync-spells','open5e-sync-equip','open5e-sync-items','open5e-sync-magic','open5e-sync-feats','open5e-sync-creatures'];
+      const btns = ids.map(id => document.getElementById(id));
       btns.forEach(b => { if (b) b.disabled = true; });
       try {
         const srdOnly = !!document.getElementById('open5e-srd-only')?.checked;
-        await syncOpen5e({ ...opts, srdOnly, statusEl });
+        await syncOpen5e({ spells: false, equipment: false, items: false, magicItems: false, feats: false, creatures: false, ...opts, srdOnly, statusEl });
         toast('Open5e sync complete');
         renderCompendiumTools();
         if (typeof renderBestiary === 'function') renderBestiary();
       } catch (err) {
         console.warn(err);
         if (statusEl) statusEl.textContent = 'Error: ' + (err.message || err);
-        toast('Open5e sync failed — check network');
+        toast('Open5e sync failed — check network / try SRD only');
       } finally {
         btns.forEach(b => { if (b) b.disabled = false; });
       }
     };
-    document.getElementById('open5e-sync-all')?.addEventListener('click', () => runSync({ spells: true, equipment: true, creatures: true }));
-    document.getElementById('open5e-sync-spells')?.addEventListener('click', () => runSync({ spells: true, equipment: false, creatures: false }));
-    document.getElementById('open5e-sync-equip')?.addEventListener('click', () => runSync({ spells: false, equipment: true, creatures: false }));
-    document.getElementById('open5e-sync-creatures')?.addEventListener('click', () => runSync({ spells: false, equipment: false, creatures: true }));
+    document.getElementById('open5e-sync-all')?.addEventListener('click', () => runSync({ spells: true, equipment: true, items: true, magicItems: true, feats: true, creatures: true }));
+    document.getElementById('open5e-sync-spells')?.addEventListener('click', () => runSync({ spells: true }));
+    document.getElementById('open5e-sync-equip')?.addEventListener('click', () => runSync({ equipment: true }));
+    document.getElementById('open5e-sync-items')?.addEventListener('click', () => runSync({ items: true }));
+    document.getElementById('open5e-sync-magic')?.addEventListener('click', () => runSync({ magicItems: true }));
+    document.getElementById('open5e-sync-feats')?.addEventListener('click', () => runSync({ feats: true }));
+    document.getElementById('open5e-sync-creatures')?.addEventListener('click', () => runSync({ creatures: true }));
   }
 
 
