@@ -982,6 +982,16 @@
   }
 
   function normalizeCharacter(ch) {
+    ch = ch || {};
+    const _mc = normalizeClassLevels(ch);
+    if (_mc.length && _mc[0].name) {
+      ch.classes = _mc;
+      ch.level = _mc.reduce((s, c) => s + c.level, 0) || ch.level || 1;
+      ch.class = _mc[0].name;
+      if (_mc[0].subclass) ch.subclass = _mc[0].subclass;
+      ch.profBonus = ch.profBonus || profBonusForTotalLevel(ch.level);
+    }
+
     return {
       id: ch.id,
       name: ch.name || '',
@@ -1012,6 +1022,7 @@
       equipment: ch.equipment || '',
       inventory: Array.isArray(ch.inventory) ? ch.inventory.map(normalizeInventoryItem) : [],
       corruption: clamp(Number(ch.corruption) || 0, 0, 6),
+      classes: normalizeClassLevels(ch),
       isUmbrarian: !!ch.isUmbrarian,
       umbrarianStage: ch.umbrarianStage || '',
       shard: ch.shard || '',
@@ -2020,7 +2031,271 @@
       <div class="spell-card-grid">${cards.join('')}</div></div>`;
   }
 
-function getCasterType(className) {
+
+  // ─── Multiclass (PHB rules) ──────────────────────────────────────────────
+  const MULTICLASS_PREREQS = {
+    Barbarian: { any: ['str'], min: 13 },
+    Bard: { all: ['cha'], min: 13 },
+    Cleric: { all: ['wis'], min: 13 },
+    Druid: { all: ['wis'], min: 13 },
+    Fighter: { any: ['str', 'dex'], min: 13 },
+    Monk: { all: ['dex', 'wis'], min: 13 },
+    Paladin: { all: ['str', 'cha'], min: 13 },
+    Ranger: { all: ['dex', 'wis'], min: 13 },
+    Rogue: { all: ['dex'], min: 13 },
+    Sorcerer: { all: ['cha'], min: 13 },
+    Warlock: { all: ['cha'], min: 13 },
+    Wizard: { all: ['int'], min: 13 },
+    'Moon Guardian': { any: ['wis', 'cha'], min: 13 },
+    Bloodhunter: { any: ['str', 'dex'], min: 13 },
+    Ghostblade: { any: ['dex', 'int'], min: 13 },
+    Shadowblade: { any: ['dex', 'cha'], min: 13 }
+  };
+
+  const THIRD_CASTERS = ['Fighter', 'Rogue']; // Eldritch Knight / Arcane Trickster — treated when subclass hints
+
+  function normalizeClassLevels(ch) {
+    let list = Array.isArray(ch.classes) ? ch.classes.map(c => ({
+      name: String(c.name || c.class || '').trim(),
+      level: clamp(parseInt(c.level, 10) || 1, 1, 40),
+      subclass: String(c.subclass || '').trim()
+    })).filter(c => c.name) : [];
+    if (!list.length && ch.class) {
+      list = [{ name: ch.class, level: clamp(parseInt(ch.level, 10) || 1, 1, 40), subclass: ch.subclass || '' }];
+    }
+    if (!list.length) list = [{ name: '', level: 1, subclass: '' }];
+    return list;
+  }
+
+  function totalCharacterLevel(ch) {
+    return normalizeClassLevels(ch).reduce((s, c) => s + (c.level || 0), 0) || clamp(parseInt(ch.level, 10) || 1, 1, 40);
+  }
+
+  function primaryClassName(ch) {
+    const list = normalizeClassLevels(ch);
+    return (list[0] && list[0].name) || ch.class || '';
+  }
+
+  function classLevelsSummary(ch) {
+    return normalizeClassLevels(ch)
+      .filter(c => c.name)
+      .map(c => `${c.name} ${c.level}${c.subclass ? ' (' + c.subclass + ')' : ''}`)
+      .join(' / ') || (ch.class ? `${ch.class} ${ch.level || 1}` : '—');
+  }
+
+  function profBonusForTotalLevel(level) {
+    const lvl = clamp(Number(level) || 1, 1, 40);
+    if (window.PHB_PROF_BY_LEVEL && window.PHB_PROF_BY_LEVEL[Math.min(lvl, 20)]) {
+      if (lvl <= 20) return window.PHB_PROF_BY_LEVEL[lvl] || 2;
+    }
+    // PHB progression, extended for epic (DM optional)
+    if (lvl <= 4) return 2;
+    if (lvl <= 8) return 3;
+    if (lvl <= 12) return 4;
+    if (lvl <= 16) return 5;
+    if (lvl <= 20) return 6;
+    if (lvl <= 24) return 7;
+    if (lvl <= 28) return 8;
+    if (lvl <= 32) return 9;
+    return 10;
+  }
+
+  function checkMulticlassPrereq(className, scores) {
+    const rule = MULTICLASS_PREREQS[className];
+    if (!rule) return { ok: true, note: '' };
+    const min = rule.min || 13;
+    const val = (k) => Number(scores[k]) || 10;
+    if (rule.any) {
+      const ok = rule.any.some(a => val(a) >= min);
+      return { ok, note: ok ? '' : `Requires ${rule.any.map(a => a.toUpperCase()).join(' or ')} ${min}+` };
+    }
+    if (rule.all) {
+      const ok = rule.all.every(a => val(a) >= min);
+      return { ok, note: ok ? '' : `Requires ${rule.all.map(a => a.toUpperCase() + ' ' + min).join(' and ')}` };
+    }
+    return { ok: true, note: '' };
+  }
+
+  /** Multiclass caster level for the combined spell slot table (PHB). */
+  function multiclassCasterLevel(ch) {
+    let total = 0;
+    const list = normalizeClassLevels(ch);
+    list.forEach(c => {
+      if (!c.name || !c.level) return;
+      const type = getCasterType(c.name);
+      if (type === 'full') total += c.level;
+      else if (type === 'half') total += Math.floor(c.level / 2);
+      else if (type === 'pact') { /* pact magic separate */ }
+      else if (THIRD_CASTERS.includes(c.name)) {
+        // Only if subclass suggests caster archetype
+        const sub = (c.subclass || '').toLowerCase();
+        if (sub.includes('eldritch') || sub.includes('arcane trickster') || sub.includes('trickster')) {
+          total += Math.floor(c.level / 3);
+        }
+      }
+    });
+    return total;
+  }
+
+  function warlockLevels(ch) {
+    return normalizeClassLevels(ch).filter(c => c.name === 'Warlock').reduce((s, c) => s + c.level, 0);
+  }
+
+  function getMulticlassSpellSlotMaxes(ch) {
+    const casterLvl = clamp(multiclassCasterLevel(ch), 0, 20);
+    const out = {};
+    if (casterLvl > 0) {
+      const row = (window.SPELL_SLOTS_FULL || [])[casterLvl] || [];
+      row.forEach((n, i) => { out[i + 1] = n; });
+    }
+    const wl = warlockLevels(ch);
+    if (wl > 0) {
+      const row = (window.SPELL_SLOTS_WARLOCK || [])[clamp(wl, 1, 20)];
+      if (row) {
+        out.pactLevel = row[0];
+        out.pactCount = row[1];
+      }
+    }
+    return out;
+  }
+
+  function multiclassEditorHtml(ch, opts = {}) {
+    const allowEpic = opts.allowEpic !== false;
+    const maxLvl = allowEpic ? 40 : 20;
+    const list = normalizeClassLevels(ch);
+    const rows = list.map((c, idx) => `
+      <div class="mc-row" data-mc-idx="${idx}">
+        <select class="mc-class" data-idx="${idx}">
+          <option value="">— Class —</option>
+          ${classOptionsHtml(c.name)}
+        </select>
+        <input type="number" class="mc-level" data-idx="${idx}" min="1" max="${maxLvl}" value="${c.level}" title="Levels in this class" />
+        <input type="text" class="mc-subclass" data-idx="${idx}" value="${escapeAttr(c.subclass)}" placeholder="Subclass" />
+        <button type="button" class="btn ghost btn-tiny mc-remove" data-idx="${idx}" title="Remove">✕</button>
+      </div>`).join('');
+    const total = list.reduce((s, c) => s + (c.level || 0), 0);
+    return `
+      <div class="multiclass-editor" id="m-multiclass">
+        <div class="mc-head">
+          <span>Class</span><span>Lvl</span><span>Subclass</span><span></span>
+        </div>
+        <div id="m-mc-rows">${rows}</div>
+        <div class="mc-footer">
+          <button type="button" class="btn secondary btn-tiny" id="m-mc-add">+ Add class</button>
+          <span class="muted small" id="m-mc-total">Character level: <strong>${total}</strong>${total > 20 ? ' <em>(epic)</em>' : ''}</span>
+        </div>
+        <p class="muted small">Multiclass follows PHB rules: total level sums class levels; proficiency from total level; spell slots use the multiclass caster table. ${allowEpic ? 'Levels above 20 are allowed (DM option).' : 'Max total level 20.'}</p>
+        <p class="muted small" id="m-mc-prereq"></p>
+      </div>`;
+  }
+
+  function readMulticlassFromForm() {
+    const rows = document.querySelectorAll('#m-mc-rows .mc-row');
+    const list = [];
+    rows.forEach(row => {
+      const name = row.querySelector('.mc-class')?.value?.trim() || '';
+      const level = clamp(parseInt(row.querySelector('.mc-level')?.value, 10) || 1, 1, 40);
+      const subclass = row.querySelector('.mc-subclass')?.value?.trim() || '';
+      if (name) list.push({ name, level, subclass });
+    });
+    if (!list.length) {
+      const fallback = $('#m-class')?.value?.trim();
+      if (fallback) list.push({ name: fallback, level: clamp(parseInt($('#m-level')?.value, 10) || 1, 1, 40), subclass: $('#m-subclass')?.value?.trim() || '' });
+    }
+    return list;
+  }
+
+  function wireMulticlassEditor(existing) {
+    const root = $('#m-multiclass');
+    if (!root) return;
+    const allowEpic = true;
+    const maxLvl = 40;
+
+    function scoresFromForm() {
+      return {
+        str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str')?.value, 10) || 10,
+        dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex')?.value, 10) || 10,
+        con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con')?.value, 10) || 10,
+        int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int')?.value, 10) || 10,
+        wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis')?.value, 10) || 10,
+        cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha')?.value, 10) || 10
+      };
+    }
+
+    function updateTotal() {
+      const list = readMulticlassFromForm();
+      const total = list.reduce((s, c) => s + c.level, 0) || 1;
+      const el = $('#m-mc-total');
+      if (el) el.innerHTML = `Character level: <strong>${total}</strong>${total > 20 ? ' <em>(epic)</em>' : ''}`;
+      const levelInp = $('#m-level');
+      if (levelInp) levelInp.value = total;
+      const profInp = $('#m-prof');
+      if (profInp) profInp.value = profBonusForTotalLevel(total);
+      // prereqs for secondary+ classes
+      const scores = scoresFromForm();
+      const notes = [];
+      list.forEach((c, i) => {
+        if (i === 0) return;
+        const r = checkMulticlassPrereq(c.name, scores);
+        if (!r.ok) notes.push(`${c.name}: ${r.note}`);
+      });
+      const pre = $('#m-mc-prereq');
+      if (pre) pre.textContent = notes.length ? '⚠ ' + notes.join(' · ') : (list.length > 1 ? 'Multiclass ability prerequisites look OK.' : '');
+      // sync primary class fields for legacy UI pieces
+      const primary = list[0];
+      if (primary) {
+        const cs = $('#m-class');
+        const sc = $('#m-subclass');
+        if (cs) cs.value = primary.name;
+        if (sc) sc.value = primary.subclass || '';
+      }
+      if (typeof refreshSpellSection === 'function') refreshSpellSection();
+      if (typeof refreshSpellDc === 'function') refreshSpellDc();
+      if (typeof refreshAttacks === 'function') refreshAttacks(true);
+    }
+
+    root.addEventListener('input', (e) => {
+      if (e.target.classList.contains('mc-level') || e.target.classList.contains('mc-subclass')) updateTotal();
+    });
+    root.addEventListener('change', (e) => {
+      if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-level')) updateTotal();
+    });
+    root.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mc-remove');
+      if (btn) {
+        const row = btn.closest('.mc-row');
+        const box = $('#m-mc-rows');
+        if (row && box && box.querySelectorAll('.mc-row').length > 1) {
+          row.remove();
+          updateTotal();
+        } else {
+          toast('Keep at least one class');
+        }
+      }
+    });
+    $('#m-mc-add')?.addEventListener('click', () => {
+      const box = $('#m-mc-rows');
+      if (!box) return;
+      const idx = box.querySelectorAll('.mc-row').length;
+      const div = document.createElement('div');
+      div.className = 'mc-row';
+      div.dataset.mcIdx = String(idx);
+      div.innerHTML = `
+        <select class="mc-class" data-idx="${idx}">
+          <option value="">— Class —</option>
+          ${classOptionsHtml('')}
+        </select>
+        <input type="number" class="mc-level" data-idx="${idx}" min="1" max="${maxLvl}" value="1" />
+        <input type="text" class="mc-subclass" data-idx="${idx}" value="" placeholder="Subclass" />
+        <button type="button" class="btn ghost btn-tiny mc-remove" data-idx="${idx}" title="Remove">✕</button>`;
+      box.appendChild(div);
+      updateTotal();
+    });
+    updateTotal();
+  }
+
+
+  function getCasterType(className) {
     if ((window.FULL_CASTERS || []).includes(className)) return 'full';
     if ((window.HALF_CASTERS || []).includes(className)) return 'half';
     if ((window.PACT_CASTERS || []).includes(className)) return 'pact';
@@ -2071,29 +2346,36 @@ function getCasterType(className) {
   }
 
   function spellSlotsEditorHtml(ch) {
-    const type = getCasterType(ch.class);
-    if (type === 'none') {
+    const list = normalizeClassLevels(ch);
+    const multi = list.length > 1 || multiclassCasterLevel(ch) > 0 || warlockLevels(ch) > 0;
+    const primary = primaryClassName(ch);
+    const type = multi ? (multiclassCasterLevel(ch) > 0 ? 'full' : (warlockLevels(ch) > 0 ? 'pact' : getCasterType(primary))) : getCasterType(primary);
+    if (type === 'none' && warlockLevels(ch) === 0) {
       return `<p class="muted small" id="m-spell-none">This class has no spell slots. (Subclass casting can be tracked in Features.)</p>
         <div id="m-spell-body" class="hidden"></div>`;
     }
-    const maxes = getSpellSlotMaxes(ch.class, ch.level);
+    const maxes = multi || list.length > 1 ? getMulticlassSpellSlotMaxes(ch) : getSpellSlotMaxes(primary, totalCharacterLevel(ch));
     const used = ch.spellSlotsUsed || {};
     let slotsHtml = '';
-    if (type === 'pact') {
-      const pl = maxes.pactLevel || 1;
-      const pc = maxes.pactCount || 1;
-      const u = used.pact != null ? used.pact : 0;
-      slotsHtml = `<div class="spell-slots-row">
-        <label>Pact slots (L${pl}) <input type="number" id="m-slot-pact" min="0" max="${pc}" value="${u}" /> / ${pc}</label>
-      </div>
-      <p class="muted small">Warlock slots all recover on a Short Rest.</p>`;
-    } else {
-      const levels = Object.keys(maxes).map(Number).sort((a,b)=>a-b);
-      slotsHtml = `<div class="spell-slots-row">${levels.map(sl => {
-        const max = maxes[sl];
-        const u = used[sl] != null ? used[sl] : 0;
-        return `<label class="spell-slot-chip">L${sl} <input type="number" class="m-slot" data-sl="${sl}" min="0" max="${max}" value="${u}" /> / ${max}</label>`;
-      }).join('')}</div>`;
+    {
+      const levels = Object.keys(maxes).map(Number).filter(n => !isNaN(n)).sort((a,b)=>a-b);
+      if (levels.length) {
+        slotsHtml += `<div class="spell-slots-row">${levels.map(sl => {
+          const max = maxes[sl];
+          const u = used[sl] != null ? used[sl] : 0;
+          return `<label class="spell-slot-chip">L${sl} <input type="number" class="m-slot" data-sl="${sl}" min="0" max="${max}" value="${u}" /> / ${max}</label>`;
+        }).join('')}</div>`;
+      }
+      if (maxes.pactLevel) {
+        const pl = maxes.pactLevel || 1;
+        const pc = maxes.pactCount || 1;
+        const u = used.pact != null ? used.pact : 0;
+        slotsHtml += `<div class="spell-slots-row">
+          <label>Pact slots (L${pl}) <input type="number" id="m-slot-pact" min="0" max="${pc}" value="${u}" /> / ${pc}</label>
+        </div>
+        <p class="muted small">Warlock pact slots recover on a Short Rest. Multiclass spell slots (above) use Long Rest.</p>`;
+      }
+      if (!slotsHtml) slotsHtml = `<p class="muted small">No spell slots at this level.</p>`;
     }
     const ab = ch.spellcastingAbility || defaultSpellAbility(ch.class);
     return `
@@ -2987,9 +3269,9 @@ function wireInventoryUI() {
     }
 
     function refreshProf() {
-      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
-      if (profInp && window.PHB_PROF_BY_LEVEL) {
-        profInp.value = window.PHB_PROF_BY_LEVEL[lvl] || 2;
+      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 40);
+      if (profInp) {
+        profInp.value = profBonusForTotalLevel(lvl);
       }
       refreshAttacks(true);
       if (classSel?.value === 'Moon Guardian') applyMoonPathToFeatures();
@@ -3096,12 +3378,16 @@ function wireInventoryUI() {
           <div class="field"><label>Character Name</label><input type="text" id="m-name" value="${escapeAttr(ch.name)}" placeholder="Character name" /></div>
           <div class="field"><label>Player</label><input type="text" id="m-player" value="${escapeAttr(ch.player)}" placeholder="Player name" /></div>
         </div>
-        <div class="form-row triple">
+        <div class="form-row triple hidden" id="m-class-legacy-row">
           <div class="field"><label>Class</label>
-            <select id="m-class">${classOptionsHtml(ch.class)}</select>
+            <select id="m-class">${classOptionsHtml(primaryClassName(ch))}</select>
           </div>
-          <div class="field"><label>Subclass</label><input type="text" id="m-subclass" value="${escapeAttr(ch.subclass)}" placeholder="Optional / Moon Path" /></div>
-          <div class="field"><label>Level</label><input type="number" id="m-level" min="1" max="20" value="${ch.level}" /></div>
+          <div class="field"><label>Subclass</label><input type="text" id="m-subclass" value="${escapeAttr((normalizeClassLevels(ch)[0]||{}).subclass || ch.subclass || '')}" placeholder="Optional / Moon Path" /></div>
+          <div class="field"><label>Level</label><input type="number" id="m-level" min="1" max="40" value="${totalCharacterLevel(ch)}" /></div>
+        </div>
+        <div class="sheet-section">
+          <label class="section-label">Classes &amp; Multiclass</label>
+          ${multiclassEditorHtml(ch, { allowEpic: true })}
         </div>
         <div class="form-row ${ch.class === 'Moon Guardian' || (ch.subclass||'').includes('Path of') ? '' : 'hidden'}" id="m-moon-path-wrap">
           <div class="field"><label>Moon Guardian Path</label>
@@ -3169,7 +3455,7 @@ function wireInventoryUI() {
         </div>
         <div class="form-row">
           <div class="field"><label>Speed</label><input type="text" id="m-speed" value="${escapeAttr(ch.speed)}" placeholder="30 ft." /></div>
-          <div class="field"><label>Proficiency Bonus</label><input type="number" id="m-prof" min="2" max="6" value="${ch.profBonus}" /></div>
+          <div class="field"><label>Proficiency Bonus</label><input type="number" id="m-prof" min="2" max="10" value="${ch.profBonus}" /></div>
         </div>
       </div>
       <div class="sheet-section">
@@ -3220,7 +3506,7 @@ function wireInventoryUI() {
       onConfirm: () => {
         const name = $('#m-name').value.trim();
         if (!name) { toast('Name required'); return false; }
-        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 20);
+        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 40);
         const playerVal = $('#m-player').value.trim();
         const checked = [...document.querySelectorAll('.m-skill-cb:checked')].map(cb => cb.value);
         let skillsText = $('#m-skills').value.trim();
@@ -3232,9 +3518,10 @@ function wireInventoryUI() {
           player: playerVal,
           avatar: ($('#m-avatar-data')?.value || window.__draftAvatar || ''),
           type: existing?.type || (playerVal === 'NPC' ? 'ally' : 'pc'),
-          class: $('#m-class').value.trim(),
-          subclass: $('#m-subclass').value.trim(),
-          level,
+          classes: readMulticlassFromForm(),
+          class: (readMulticlassFromForm()[0] || {}).name || $('#m-class').value.trim(),
+          subclass: (readMulticlassFromForm()[0] || {}).subclass || $('#m-subclass').value.trim(),
+          level: (() => { const list = readMulticlassFromForm(); return list.reduce((s, c) => s + c.level, 0) || 1; })(),
           race: $('#m-race').value.trim(),
           background: $('#m-background').value.trim(),
           alignment: $('#m-alignment').value.trim(),
@@ -3283,6 +3570,7 @@ function wireInventoryUI() {
         const avData = $('#m-avatar-data');
         if (avData) avData.value = window.__draftAvatar;
         wireCharacterFormHelpers();
+        wireMulticlassEditor(existing);
         wireInventoryUI();
         wireAvatarPicker();
         wireSpellPicker();
@@ -3371,7 +3659,7 @@ function wireInventoryUI() {
         ${portraitHtml(ch, 'sm')}
         <div>
           <h3>${escapeHtml(ch.name || 'Unnamed')}</h3>
-          <p class="muted small">${escapeHtml(roleLabel)} · ${escapeHtml(ch.race || '—')} ${ch.class ? '· ' + escapeHtml(ch.class) : ''}${ch.subclass ? ' (' + escapeHtml(ch.subclass) + ')' : ''} · L${ch.level}</p>
+          <p class="muted small">${escapeHtml(roleLabel)} · ${escapeHtml(ch.race || '—')} · ${escapeHtml(classLevelsSummary(ch))} · L${totalCharacterLevel(ch)}</p>
         </div>
         <div class="sheet-card-stats">
           <span class="stat-chip" title="AC">AC ${ch.ac}</span>
@@ -3588,7 +3876,7 @@ function parseAttackLines(ch) {
               ${portraitHtml(ch)}
               <div class="cs-name-block">
                 <div class="cs-char-name">${escapeHtml(ch.name || 'Unnamed')}</div>
-                <div class="cs-char-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
+                <div class="cs-char-meta">${escapeHtml(classLevelsSummary(ch))} · Level ${totalCharacterLevel(ch)}</div>
                 <div class="cs-char-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}</div>
                 <div class="cs-char-meta muted">${escapeHtml(ch.player || '')}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
               </div>
@@ -4202,7 +4490,7 @@ function parseAttackLines(ch) {
       onConfirm: () => {
         const name = $('#m-name').value.trim();
         if (!name) { toast('Name required'); return false; }
-        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 20);
+        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 40);
         const data = {
           name,
           player: 'NPC',
