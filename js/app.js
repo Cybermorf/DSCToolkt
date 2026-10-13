@@ -1533,7 +1533,8 @@
     if (Array.isArray(obj)) {
       obj.forEach(row => {
         if (row.level != null || row.school || row.castingTime || row.casting_time) spellsIn.push(row);
-        else if (row.n || row.cr != null || row.challenge_rating != null || row.hit_points != null) creaturesIn.push(row);
+        else if (row.stats || row.n || row.cr != null || row.challenge_rating != null || row.hit_points != null || row.challengeRating != null)
+          creaturesIn.push(row);
         else equipIn.push(row);
       });
     } else if (obj && typeof obj === 'object') {
@@ -1543,6 +1544,10 @@
       spellsIn = obj.spells || obj.spell || obj.Spells || [];
       equipIn = obj.equipment || obj.items || obj.gear || obj.Equipment || [];
       creaturesIn = obj.creatures || obj.monsters || obj.bestiary || [];
+      // CritterDB single creature export
+      if (!creaturesIn.length && obj.stats && obj.name) creaturesIn = [obj];
+      // CritterDB bestiary export { name, creatures: [...] }
+      if (!creaturesIn.length && Array.isArray(obj.Creatures)) creaturesIn = obj.Creatures;
       if (!spellsIn.length && obj.compendium?.spells) spellsIn = obj.compendium.spells;
       if (!equipIn.length && obj.compendium?.items) equipIn = obj.compendium.items;
       if (!creaturesIn.length && obj.compendium?.creatures) creaturesIn = obj.compendium.creatures;
@@ -1562,7 +1567,10 @@
     const creMap = new Map((extra.creatures || []).map(c => [c._key || c.n || c.name, c]));
     creaturesIn.forEach(raw => {
       let c = raw;
-      if (raw.challenge_rating != null || raw.hit_points != null) c = mapOpen5eCreature(raw);
+      if (raw && raw.stats && (raw.stats.abilityScores || raw.stats.armorClass != null))
+        c = mapCritterDbCreature(raw);
+      else if (raw.challenge_rating != null || raw.hit_points != null || raw.ability_scores)
+        c = mapOpen5eCreature(raw);
       else if (raw.name && !raw.n) c = { ...raw, n: raw.name, o: raw.o || 'Imported', _src: 'Imported' };
       if (c && (c.n || c.name)) {
         const key = c._key || c.n || c.name;
@@ -1891,6 +1899,360 @@
     };
   }
 
+
+  function stripHtmlTags(s) {
+    return String(s || '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/?i>/gi, '')
+      .replace(/<\/?b>/gi, '')
+      .replace(/<\/?em>/gi, '')
+      .replace(/<\/?strong>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .trim();
+  }
+
+  function abilityModFromScore(score) {
+    const n = Number(score);
+    if (isNaN(n)) return 0;
+    return Math.floor((n - 10) / 2);
+  }
+
+  function mapCritterDbCreature(c, sourceLabel) {
+    if (!c || !c.name) return null;
+    const st = c.stats || {};
+    const ab = st.abilityScores || {};
+    const flavor = c.flavor || {};
+    const con = ab.constitution != null ? ab.constitution : 10;
+    const hitDie = st.hitDieSize != null ? Number(st.hitDieSize) : 8;
+    const numHD = st.numHitDie != null ? Number(st.numHitDie) : 1;
+    // Average HP: numHD × ((die+1)/2) + numHD × Con mod
+    const avgHp = Math.max(1, Math.floor(numHD * ((hitDie + 1) / 2) + numHD * abilityModFromScore(con)));
+    const hp = st.hitPoints != null ? Number(st.hitPoints) : avgHp;
+
+    const fmtList = (arr, title) => {
+      if (!Array.isArray(arr) || !arr.length) return '';
+      return arr.map(x => {
+        if (typeof x === 'string') return `**${x}**`;
+        const name = x.name || x.title || '';
+        const desc = stripHtmlTags(x.description || x.desc || '');
+        return name ? `**${name}.** ${desc}` : desc;
+      }).filter(Boolean).join('\n');
+    };
+
+    const traits = fmtList(st.additionalAbilities || st.traits, 'Traits');
+    const actions = fmtList(st.actions, 'Actions');
+    const reactions = fmtList(st.reactions, 'Reactions');
+    const legendary = fmtList(st.legendaryActions, 'Legendary');
+    const legIntro = st.legendaryActionsDescription
+      ? stripHtmlTags(st.legendaryActionsDescription)
+      : (st.legendaryActionsPerRound
+          ? `The creature can take ${st.legendaryActionsPerRound} legendary actions, choosing from the options below.`
+          : '');
+
+    const resist = (st.damageResistances || []).join(', ');
+    const immune = (st.damageImmunities || []).join(', ');
+    const vuln = (st.damageVulnerabilities || []).join(', ');
+    const cimm = (st.conditionImmunities || []).join(', ');
+    const senses = Array.isArray(st.senses) ? st.senses.join(', ') : (st.senses || '');
+    const langs = Array.isArray(st.languages) ? st.languages.join(', ') : (st.languages || '');
+    const skills = Array.isArray(st.skills)
+      ? st.skills.map(s => (typeof s === 'string' ? s : `${s.name || ''} ${s.modifier != null ? s.modifier : ''}`).trim()).filter(Boolean).join(', ')
+      : '';
+    const saves = Array.isArray(st.savingThrows)
+      ? st.savingThrows.map(s => (typeof s === 'string' ? s : `${s.ability || s.name || ''} ${s.modifier != null ? s.modifier : ''}`).trim()).filter(Boolean).join(', ')
+      : '';
+
+    const descParts = [
+      st.alignment ? `Alignment: ${st.alignment}.` : '',
+      langs ? `Languages: ${langs}.` : '',
+      senses ? `Senses: ${senses}.` : '',
+      skills ? `Skills: ${skills}.` : '',
+      saves ? `Saving Throws: ${saves}.` : '',
+      resist ? `Damage Resistances: ${resist}.` : '',
+      immune ? `Damage Immunities: ${immune}.` : '',
+      vuln ? `Damage Vulnerabilities: ${vuln}.` : '',
+      cimm ? `Condition Immunities: ${cimm}.` : '',
+      flavor.description ? stripHtmlTags(flavor.description) : '',
+      traits ? `Traits:\n${traits}` : '',
+      actions ? `Actions:\n${actions}` : '',
+      reactions ? `Reactions:\n${reactions}` : '',
+      (legIntro || legendary) ? `Legendary Actions:\n${[legIntro, legendary].filter(Boolean).join('\n')}` : ''
+    ].filter(Boolean);
+
+    const runParts = [actions, reactions, legendary].filter(Boolean).join('\n\n');
+    const src = sourceLabel || 'CritterDB';
+    const key = c._id || c.id || c.name;
+
+    return {
+      n: c.name,
+      w: src,
+      o: 'Imported',
+      classif: [st.size, st.race].filter(Boolean).join(' ') || (st.race || ''),
+      cr: st.challengeRating != null ? Number(st.challengeRating) : 0,
+      ac: st.armorClass != null ? Number(st.armorClass) : 10,
+      hp,
+      speed: st.speed || '30 ft.',
+      str: ab.strength != null ? ab.strength : 10,
+      dex: ab.dexterity != null ? ab.dexterity : 10,
+      con: ab.constitution != null ? ab.constitution : 10,
+      int: ab.intelligence != null ? ab.intelligence : 10,
+      wis: ab.wisdom != null ? ab.wisdom : 10,
+      cha: ab.charisma != null ? ab.charisma : 10,
+      desc: descParts.join('\n\n'),
+      eco: flavor.environment || '',
+      people: flavor.faction || '',
+      run: runParts.slice(0, 2000),
+      seeds: '',
+      source: src,
+      _src: 'Imported',
+      _key: 'critterdb-' + String(key)
+    };
+  }
+
+  function parseCritterDbBestiaryId(input) {
+    const s = String(input || '').trim();
+    if (!s) return '';
+    // Full URL: .../publishedbestiary/view/HEX or .../bestiary/view/HEX
+    const m = s.match(/(?:publishedbestiary|bestiary)\/(?:view\/)?([a-f0-9]{24})/i)
+      || s.match(/publishedbestiaries\/([a-f0-9]{24})/i)
+      || s.match(/\b([a-f0-9]{24})\b/i);
+    return m ? m[1] : (s.length === 24 && /^[a-f0-9]+$/i.test(s) ? s : '');
+  }
+
+  /**
+   * Fetch CritterDB JSON, with CORS-proxy fallbacks for GitHub Pages / browser use.
+   * Tries direct first, then public proxies.
+   */
+  async function critterDbFetchJson(targetUrl) {
+    const attempts = [
+      { label: 'direct', url: targetUrl },
+      { label: 'corsproxy.io', url: 'https://corsproxy.io/?' + encodeURIComponent(targetUrl) },
+      { label: 'allorigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl) },
+      { label: 'codetabs', url: 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(targetUrl) },
+      { label: 'corsproxy.org', url: 'https://corsproxy.org/?' + encodeURIComponent(targetUrl) }
+    ];
+    let lastErr = null;
+    for (const a of attempts) {
+      try {
+        const res = await fetch(a.url, {
+          headers: a.label === 'direct' ? { 'Accept': 'application/json' } : { 'Accept': 'application/json, text/plain, */*' },
+          mode: 'cors'
+        });
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status} (${a.label})`);
+          continue;
+        }
+        const text = await res.text();
+        const trimmed = (text || '').trim();
+        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+          lastErr = new Error(`Non-JSON response (${a.label})`);
+          continue;
+        }
+        return JSON.parse(trimmed);
+      } catch (err) {
+        lastErr = err;
+        continue;
+      }
+    }
+    throw new Error(
+      (lastErr && lastErr.message) || 'CritterDB blocked by browser CORS. Use the local crawl script (tools/critterdb-bulk-crawl.mjs) or JSON export.'
+    );
+  }
+
+  async function fetchCritterDbPublishedBestiary(bestiaryId, { onPage, maxPages = 40 } = {}) {
+    const id = parseCritterDbBestiaryId(bestiaryId);
+    if (!id) throw new Error('Invalid CritterDB bestiary id or URL');
+    const all = [];
+    let page = 1;
+    while (page <= maxPages) {
+      const url = `https://critterdb.com/api/publishedbestiaries/${id}/creatures/${page}`;
+      let batch;
+      try {
+        batch = await critterDbFetchJson(url);
+      } catch (err) {
+        if (page === 1) throw err;
+        break;
+      }
+      if (!Array.isArray(batch) || !batch.length) break;
+      all.push(...batch);
+      if (typeof onPage === 'function') onPage(page, all.length);
+      // CritterDB pages typically return up to 25; stop when short page
+      if (batch.length < 20) break;
+      page += 1;
+    }
+    return all;
+  }
+
+  async function syncCritterDb({ bestiaryIdOrUrl, statusEl } = {}) {
+    const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+    setStatus('Fetching CritterDB bestiary…');
+    const rows = await fetchCritterDbPublishedBestiary(bestiaryIdOrUrl, {
+      onPage: (p, n) => setStatus(`CritterDB page ${p} — ${n} creatures…`)
+    });
+    if (!rows.length) {
+      setStatus('No creatures returned.');
+      return { creatures: 0 };
+    }
+    const mapped = rows.map(r => mapCritterDbCreature(r, 'CritterDB')).filter(Boolean);
+    const pack = {
+      creatures: mapped,
+      meta: {
+        edition: '5e-critterdb',
+        source: 'CritterDB',
+        attribution: 'Imported from CritterDB (https://critterdb.com). Respect original authors’ licenses.',
+        bestiaryId: parseCritterDbBestiaryId(bestiaryIdOrUrl),
+        syncedAt: new Date().toISOString()
+      }
+    };
+    setStatus(`Merging ${mapped.length} creatures…`);
+    const res = importCompendiumPack(pack);
+    setStatus(`Done — +${res.creatures} CritterDB creatures (bestiary total ${res.totalCreatures}).`);
+    return res;
+  }
+
+  function importCritterDbText(text) {
+    const data = JSON.parse(text);
+    // Normalize to pack
+    let creatures = [];
+    if (Array.isArray(data)) creatures = data;
+    else if (data.creatures) creatures = data.creatures;
+    else if (data.stats && data.name) creatures = [data];
+    else throw new Error('Unrecognized CritterDB JSON (need creature or bestiary with creatures[])');
+    const mapped = creatures.map(r => mapCritterDbCreature(r, data.name ? `CritterDB: ${data.name}` : 'CritterDB')).filter(Boolean);
+    return importCompendiumPack({
+      creatures: mapped,
+      meta: {
+        edition: '5e-critterdb',
+        source: data.name || 'CritterDB JSON',
+        attribution: 'Imported from CritterDB JSON export.'
+      }
+    });
+  }
+
+  function sleepMs(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  /** List published bestiary summaries from recent/popular feeds (paginated). */
+  async function fetchCritterDbBestiaryIndex({ lists = ['recent', 'popular'], maxPagesPerList = 80, onProgress } = {}) {
+    const byId = new Map();
+    for (const list of lists) {
+      for (let page = 1; page <= maxPagesPerList; page++) {
+        const url = `https://critterdb.com/api/publishedbestiaries/${list}/${page}`;
+        let batch;
+        try {
+          batch = await critterDbFetchJson(url);
+        } catch (err) {
+          if (page === 1) throw new Error(`Network error listing ${list} p${page}: ${err.message || err}`);
+          break;
+        }
+        if (!Array.isArray(batch) || !batch.length) break;
+        batch.forEach(b => {
+          const id = b._id || b.id;
+          if (id) byId.set(id, { id, name: b.name || id, description: b.description || '' });
+        });
+        if (typeof onProgress === 'function') {
+          onProgress({ phase: 'index', list, page, bestiaries: byId.size });
+        }
+        if (batch.length < 5) break; // likely last page
+        await sleepMs(120);
+      }
+    }
+    // most popular (single payload if available)
+    try {
+      const data = await critterDbFetchJson('https://critterdb.com/api/publishedbestiaries/mostpopular');
+      const arr = Array.isArray(data) ? data : (data.bestiaries || data.results || []);
+      arr.forEach(b => {
+        const id = b._id || b.id;
+        if (id) byId.set(id, { id, name: b.name || id, description: b.description || '' });
+      });
+    } catch (e) { /* optional */ }
+    return [...byId.values()];
+  }
+
+  /**
+   * Bulk crawl all discoverable public bestiaries (recent + popular feeds)
+   * and merge creatures into the user compendium.
+   */
+  async function syncCritterDbCatalog({
+    statusEl,
+    maxBestiaries = 500,
+    maxPagesPerList = 100,
+    delayMs = 150,
+    abortSignal
+  } = {}) {
+    const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+    setStatus('Indexing published bestiaries (recent + popular)…');
+    const index = await fetchCritterDbBestiaryIndex({
+      lists: ['recent', 'popular'],
+      maxPagesPerList,
+      onProgress: ({ list, page, bestiaries }) => {
+        setStatus(`Indexing ${list} p${page} — ${bestiaries} unique bestiaries…`);
+      }
+    });
+    if (!index.length) {
+      setStatus('No published bestiaries found (API empty or blocked).');
+      return { bestiaries: 0, creatures: 0 };
+    }
+    const slice = index.slice(0, maxBestiaries);
+    setStatus(`Found ${index.length} bestiaries — importing up to ${slice.length}…`);
+
+    let totalMapped = 0;
+    let bestiariesOk = 0;
+    let bestiariesFail = 0;
+    const allMapped = [];
+
+    for (let i = 0; i < slice.length; i++) {
+      if (abortSignal?.aborted) {
+        setStatus(`Aborted after ${bestiariesOk} bestiaries / ${totalMapped} creatures.`);
+        break;
+      }
+      const b = slice[i];
+      setStatus(`Bestiary ${i + 1}/${slice.length}: ${b.name}…`);
+      try {
+        const rows = await fetchCritterDbPublishedBestiary(b.id, {
+          maxPages: 60,
+          onPage: (p, n) => setStatus(`Bestiary ${i + 1}/${slice.length}: ${b.name} — creature page ${p} (${n})`)
+        });
+        const mapped = rows
+          .map(r => mapCritterDbCreature(r, `CritterDB: ${b.name}`))
+          .filter(Boolean);
+        allMapped.push(...mapped);
+        totalMapped += mapped.length;
+        bestiariesOk++;
+      } catch (err) {
+        console.warn('CritterDB bestiary failed', b.id, err);
+        bestiariesFail++;
+      }
+      // Merge in chunks so progress is saved if the tab dies mid-crawl
+      if (allMapped.length >= 80 || i === slice.length - 1) {
+        if (allMapped.length) {
+          importCompendiumPack({
+            creatures: allMapped.splice(0, allMapped.length),
+            meta: {
+              edition: '5e-critterdb-bulk',
+              source: 'CritterDB public catalog',
+              attribution: 'Bulk import from CritterDB published bestiaries (https://critterdb.com). Respect authors’ licenses.',
+              syncedAt: new Date().toISOString()
+            }
+          });
+        }
+      }
+      await sleepMs(delayMs);
+    }
+
+    applyCompendiumToRuntime();
+    const totalCreatures = (window.BESTIARY_MERGED || []).length;
+    setStatus(`Done — ${bestiariesOk} bestiaries OK, ${bestiariesFail} failed, ~${totalMapped} creatures merged (runtime bestiary ${totalCreatures}).`);
+    return { bestiaries: bestiariesOk, failed: bestiariesFail, creatures: totalMapped, totalCreatures };
+  }
+
+
   async function syncOpen5e({
     srdOnly = true,
     spells = true,
@@ -2031,6 +2393,31 @@
         </div>
         <p class="muted small" id="open5e-status">Ready.</p>
       </div>
+      <div class="compendium-panel">
+        <h3>CritterDB Import</h3>
+        <p class="muted small">Import published bestiaries from <a href="https://critterdb.com/#/index" target="_blank" rel="noopener">CritterDB</a> into your Bestiary (source: Imported). Paste a published bestiary URL or id, or upload/paste a CritterDB JSON export.</p>
+        <div class="form-row">
+          <div class="field" style="flex:1">
+            <label>Published bestiary URL or ID</label>
+            <input type="text" id="critterdb-id" placeholder="https://critterdb.com/#/publishedbestiary/view/…" />
+          </div>
+        </div>
+        <div class="form-row">
+          <button type="button" class="btn primary" id="critterdb-fetch">Fetch from CritterDB</button>
+          <button type="button" class="btn secondary" id="critterdb-bulk">Bulk crawl public catalog</button>
+          <button type="button" class="btn secondary" id="critterdb-json-btn">Import CritterDB JSON file</button>
+          <input type="file" id="critterdb-json-file" accept=".json,application/json" hidden />
+        </div>
+        <p class="muted small">Bulk crawl walks <code>recent</code> + <code>popular</code> published lists. Browsers often block CritterDB (CORS). If bulk fails, run <code>node tools/critterdb-bulk-crawl.mjs</code> locally, then import the generated JSON file here.</p>
+        <div class="field">
+          <label>Or paste CritterDB JSON</label>
+          <textarea id="critterdb-paste" rows="4" placeholder='{ "name": "…", "creatures": [ … ] } or a single creature object'></textarea>
+        </div>
+        <div class="form-row">
+          <button type="button" class="btn secondary" id="critterdb-paste-btn">Import pasted JSON</button>
+        </div>
+        <p class="muted small" id="critterdb-status">Ready. Live fetch uses CORS proxies if the browser blocks CritterDB directly.</p>
+      </div>
       <details class="compendium-sample">
         <summary>Sample JSON pack format</summary>
         <pre class="sample-pre">{
@@ -2113,6 +2500,80 @@
     document.getElementById('open5e-sync-magic')?.addEventListener('click', () => runSync({ magicItems: true }));
     document.getElementById('open5e-sync-feats')?.addEventListener('click', () => runSync({ feats: true }));
     document.getElementById('open5e-sync-creatures')?.addEventListener('click', () => runSync({ creatures: true }));
+
+    // CritterDB
+    const cdStatus = document.getElementById('critterdb-status');
+    document.getElementById('critterdb-fetch')?.addEventListener('click', async () => {
+      const id = document.getElementById('critterdb-id')?.value || '';
+      const btn = document.getElementById('critterdb-fetch');
+      if (btn) btn.disabled = true;
+      try {
+        await syncCritterDb({ bestiaryIdOrUrl: id, statusEl: cdStatus });
+        toast('CritterDB import complete');
+        renderCompendiumTools();
+        if (typeof renderBestiary === 'function') renderBestiary();
+      } catch (err) {
+        console.warn(err);
+        if (cdStatus) cdStatus.textContent = 'Error: ' + (err.message || err) + ' — try JSON export from CritterDB instead.';
+        toast('CritterDB fetch failed');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+    document.getElementById('critterdb-bulk')?.addEventListener('click', async () => {
+      const btn = document.getElementById('critterdb-bulk');
+      const fetchBtn = document.getElementById('critterdb-fetch');
+      if (btn) btn.disabled = true;
+      if (fetchBtn) fetchBtn.disabled = true;
+      try {
+        if (cdStatus) cdStatus.textContent = 'Starting bulk crawl…';
+        const res = await syncCritterDbCatalog({ statusEl: cdStatus, maxBestiaries: 500, maxPagesPerList: 100, delayMs: 150 });
+        toast(`CritterDB bulk: ${res.bestiaries} bestiaries, ${res.creatures} creatures`);
+        renderCompendiumTools();
+        if (typeof renderBestiary === 'function') renderBestiary();
+      } catch (err) {
+        console.warn(err);
+        if (cdStatus) cdStatus.textContent = 'Bulk error: ' + (err.message || err) + ' — CORS or network may block browser fetch.';
+        toast('CritterDB bulk crawl failed');
+      } finally {
+        if (btn) btn.disabled = false;
+        if (fetchBtn) fetchBtn.disabled = false;
+      }
+    });
+    document.getElementById('critterdb-json-btn')?.addEventListener('click', () => {
+      document.getElementById('critterdb-json-file')?.click();
+    });
+    document.getElementById('critterdb-json-file')?.addEventListener('change', async (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const res = importCritterDbText(text);
+        if (cdStatus) cdStatus.textContent = `Imported +${res.creatures} creatures from file.`;
+        toast('CritterDB JSON imported');
+        renderCompendiumTools();
+        if (typeof renderBestiary === 'function') renderBestiary();
+      } catch (err) {
+        console.warn(err);
+        if (cdStatus) cdStatus.textContent = 'Error: ' + (err.message || err);
+        toast('CritterDB JSON import failed');
+      }
+      ev.target.value = '';
+    });
+    document.getElementById('critterdb-paste-btn')?.addEventListener('click', () => {
+      const text = document.getElementById('critterdb-paste')?.value || '';
+      try {
+        const res = importCritterDbText(text);
+        if (cdStatus) cdStatus.textContent = `Imported +${res.creatures} creatures from paste.`;
+        toast('CritterDB JSON imported');
+        renderCompendiumTools();
+        if (typeof renderBestiary === 'function') renderBestiary();
+      } catch (err) {
+        console.warn(err);
+        if (cdStatus) cdStatus.textContent = 'Error: ' + (err.message || err);
+        toast('CritterDB paste import failed');
+      }
+    });
   }
 
 
