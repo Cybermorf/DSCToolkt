@@ -160,3 +160,12 @@ Site: `https://<user>.github.io/<repo>/`
 ---
 
 *The Dark Sun Chronicles · DM Companion*
+
+
+## Extensions (Play Aids & VTT)
+
+- **Tools → Play Aids**: conditions reference, backgrounds, encounter builder, loot, calendar, random tables, timeline, region checklist
+- **Character sheet**: inspiration, death saves, conditions, short/long rest, attunement (3), prepared spells, background
+- **Bestiary → Refresh**: reload imported creatures from storage
+- **VTT**: export/import Foundry actor JSON and Roll20 handouts/tables (Tools panel)
+- **CritterDB**: `node tools/critterdb-bulk-crawl.mjs` then import JSON

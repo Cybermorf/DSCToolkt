@@ -88,29 +88,50 @@ async function fetchCreatures(bestiaryId) {
 console.log('CritterDB bulk crawl →', OUT);
 const index = await listBestiaries();
 const slice = index.slice(0, MAX_BESTIARIES);
-const creatures = [];
+
+// Dedupe by CritterDB _id first, then by lowercase name
+const byCreatureId = new Map();
+const byCreatureName = new Map();
+let skippedDup = 0;
+
 for (let i = 0; i < slice.length; i++) {
   const b = slice[i];
   process.stdout.write(`\rBestiary ${i + 1}/${slice.length}: ${b.name}          `);
   try {
     const rows = await fetchCreatures(b.id);
-    rows.forEach((c) => {
-      if (c && typeof c === 'object') c._bestiaryName = b.name;
-      creatures.push(c);
-    });
+    for (const c of rows) {
+      if (!c || typeof c !== 'object') continue;
+      c._bestiaryName = b.name;
+      const cid = String(c._id || c.id || '').trim();
+      const nm = String(c.name || '').trim().toLowerCase();
+      if (cid && byCreatureId.has(cid)) {
+        skippedDup++;
+        continue;
+      }
+      if (nm && byCreatureName.has(nm)) {
+        skippedDup++;
+        continue;
+      }
+      if (cid) byCreatureId.set(cid, c);
+      if (nm) byCreatureName.set(nm, cid || nm);
+      // store under stable key in id map even if only name
+      if (!cid && nm) byCreatureId.set('name:' + nm, c);
+    }
   } catch (e) {
     console.warn(`\n  skip ${b.name}: ${e.message}`);
   }
   await sleep(DELAY);
 }
+
+const creatures = [...byCreatureId.values()];
 const pack = {
   format: 'DSCToolkt-compendium-v1',
   edition: '5e-critterdb-bulk',
   source: 'CritterDB public catalog',
-  attribution: 'Crawled from CritterDB published bestiaries (https://critterdb.com). Respect authors\u2019 licenses.',
+  attribution: 'Crawled from CritterDB published bestiaries (https://critterdb.com). Respect authors\' licenses.',
   creatures
 };
 const outPath = path.isAbsolute(OUT) ? OUT : path.resolve(process.cwd(), OUT);
 fs.writeFileSync(outPath, JSON.stringify(pack));
-console.log(`\nWrote ${creatures.length} creatures → ${outPath}`);
+console.log(`\nWrote ${creatures.length} unique creatures (${skippedDup} duplicates skipped) → ${outPath}`);
 console.log('Import this file in DSCToolkt → Tools → CritterDB → Import CritterDB JSON file');

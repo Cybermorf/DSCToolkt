@@ -1567,12 +1567,12 @@ window.CLASS_ABILITIES = {
     {
       "lvl": 2,
       "name": "Lunar Charges",
-      "text": "Unique resource. Spend to power Moonlight Infusions and certain features. Regain on Long Rest (and via Lunar Recovery)."
+      "text": "Pool by Moon Guardian level: L2–4: 2; L5–8: 3; L9–12: 4; L13–16: 5; L17+: 6. Improved Lunar Charges (L10+) and Lunar Mastery (L17+) each add +1. Spend for Moonlight Infusion, Celestial Form, and Path features. Regain all on Long Rest. Lunar Recovery (L7): once per Long Rest, when you finish a Short Rest, regain Lunar Charges equal to half your maximum (rounded up)."
     },
     {
       "lvl": 2,
       "name": "Moonlight Infusion",
-      "text": "Spend Lunar Charges to weave moonlight into attacks, defenses, or movement (Full/Waning/New Moon options—e.g. extra radiant damage, free movement without OA, Stealth advantage in dim light)."
+      "text": "Once per turn, spend 1 Lunar Charge when you hit with a weapon attack or cast a Moon Guardian spell to apply one Lunar Aspect: Full Moon — +1d8 radiant (scales at higher levels); Waning Moon — move up to 10 ft without provoking opportunity attacks; New Moon — advantage on Stealth until the end of your next turn in dim light or darkness. You can change Aspects after a Short Rest. Some Path features alter or empower Infusions."
     },
     {
       "lvl": 3,
@@ -1597,7 +1597,7 @@ window.CLASS_ABILITIES = {
     {
       "lvl": 9,
       "name": "Celestial Form",
-      "text": "Bonus Action: manifest a Celestial Form fueled by Lunar Charges. Form features depend on Moon Path (flight, auras, damage types)."
+      "text": "Bonus Action: spend 2 Lunar Charges to enter Celestial Form for 1 minute (concentration optional per table). Gain benefits based on Moon Path (e.g. light aura, umbral stealth, flight). Ends early if you are incapacitated or have 0 Lunar Charges. You can dismiss it early (no action). Path features at 11th+ enhance the Form."
     },
     {
       "lvl": 13,

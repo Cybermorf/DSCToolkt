@@ -566,7 +566,14 @@
       };
       $('#modal-confirm').onclick = () => {
         if (onConfirm) {
-          const ok = onConfirm();
+          let ok = true;
+          try {
+            ok = onConfirm();
+          } catch (err) {
+            console.error('Save failed', err);
+            if (typeof toast === 'function') toast('Save failed: ' + (err.message || err));
+            return;
+          }
           if (ok !== false) modalResolve(true);
         } else {
           modalResolve(true);
@@ -714,7 +721,7 @@
       bodyHtml: body,
       confirmText: isEdit ? 'Update' : 'Create',
       onConfirm: () => {
-        const name = $('#m-name').value.trim();
+        const name = $('#m-name')?.value?.trim();
         if (!name) {
           toast('Name is required');
           return false;
@@ -981,7 +988,428 @@
     return 2 + Math.floor((lv - 1) / 4);
   }
 
+
+  // ─── Feats library (SRD core + imported Open5e) ─────────────────────────
+  const SRD_FEATS = [
+    { id: 'alert', name: 'Alert', prerequisite: '', text: 'You gain a +5 bonus to initiative, you can\'t be surprised while conscious, and other creatures don\'t gain advantage on attack rolls against you as a result of being unseen by you.' },
+    { id: 'athlete', name: 'Athlete', prerequisite: '', text: 'Increase STR or DEX by 1. Standing from prone costs only 5 feet of movement. Climbing doesn\'t cost extra movement. You can make a running long jump or high jump after moving only 5 feet.' },
+    { id: 'actor', name: 'Actor', prerequisite: '', text: 'Increase CHA by 1. Advantage on Deception and Performance when passing yourself off as someone else. You can mimic speech or sounds; Insight vs your Deception to detect the mimicry.' },
+    { id: 'charger', name: 'Charger', prerequisite: '', text: 'When you use Dash and move at least 10 feet in a straight line toward a target, you can make one melee attack or shove as a bonus action with +5 damage or an extra 10 feet of shove distance.' },
+    { id: 'crossbow-expert', name: 'Crossbow Expert', prerequisite: '', text: 'Ignore the loading property of crossbows you are proficient with. Being within 5 feet of a hostile creature doesn\'t impose disadvantage on your ranged attack rolls. When you use the Attack action with a one-handed weapon, you can fire a hand crossbow as a bonus action.' },
+    { id: 'defensive-duelist', name: 'Defensive Duelist', prerequisite: 'DEX 13+', text: 'When you are hit by a melee attack while wielding a finesse weapon you are proficient with, you can use your reaction to add your proficiency bonus to your AC for that attack.' },
+    { id: 'dual-wielder', name: 'Dual Wielder', prerequisite: '', text: '+1 AC while dual-wielding. You can dual-wield weapons that aren\'t light. You can draw or stow two one-handed weapons when you would normally draw or stow only one.' },
+    { id: 'dungeon-delver', name: 'Dungeon Delver', prerequisite: '', text: 'Advantage on Perception and Investigation to detect secret doors. Advantage on saves vs traps; resistance to trap damage. You can search for traps while traveling at a normal pace.' },
+    { id: 'durable', name: 'Durable', prerequisite: '', text: 'Increase CON by 1. When you roll a Hit Die to regain HP, the minimum you regain equals twice your CON modifier (minimum 2).' },
+    { id: 'elemental-adept', name: 'Elemental Adept', prerequisite: 'Spellcasting', text: 'Choose a damage type: acid, cold, fire, lightning, or thunder. Spells you cast ignore resistance to that type. Any 1 on a damage die for that type becomes a 2.' },
+    { id: 'grappler', name: 'Grappler', prerequisite: 'STR 13+', text: 'Advantage on attack rolls against a creature you are grappling. You can use your action to try to pin a creature grappled by you (another grapple check); on a success, you and the creature are both restrained.' },
+    { id: 'great-weapon-master', name: 'Great Weapon Master', prerequisite: '', text: 'On a melee critical hit or when you reduce a creature to 0 HP with a melee attack, you can make one melee weapon attack as a bonus action. Before you make a melee attack with a heavy weapon you are proficient with, you can take -5 to hit for +10 damage.' },
+    { id: 'healer', name: 'Healer', prerequisite: '', text: 'When you use a healer\'s kit to stabilize, the creature also regains 1 HP. As an action, you can spend one use of a healer\'s kit to restore 1d6 + 4 + character level HP (once per creature per short rest).' },
+    { id: 'heavily-armored', name: 'Heavily Armored', prerequisite: 'Medium armor proficiency', text: 'Increase STR by 1. You gain proficiency with heavy armor.' },
+    { id: 'heavy-armor-master', name: 'Heavy Armor Master', prerequisite: 'Heavy armor proficiency', text: 'Increase STR by 1. While wearing heavy armor, bludgeoning, piercing, and slashing damage from nonmagical attacks is reduced by 3.' },
+    { id: 'inspiring-leader', name: 'Inspiring Leader', prerequisite: 'CHA 13+', text: 'Spend 10 minutes inspiring up to six friendly creatures (including yourself) within 30 feet. Each gains temporary HP equal to your level + CHA modifier. A creature can\'t benefit again until it finishes a short or long rest.' },
+    { id: 'keen-mind', name: 'Keen Mind', prerequisite: '', text: 'Increase INT by 1. Always know which way is north and the number of hours left before the next sunrise or sunset. You can accurately recall anything you have seen or heard within the past month.' },
+    { id: 'lightly-armored', name: 'Lightly Armored', prerequisite: '', text: 'Increase STR or DEX by 1. You gain proficiency with light armor.' },
+    { id: 'linguist', name: 'Linguist', prerequisite: '', text: 'Increase INT by 1. Learn three languages. Create written ciphers; INT (Investigation) DC equals your INT score + proficiency bonus to decipher.' },
+    { id: 'lucky', name: 'Lucky', prerequisite: '', text: 'You have 3 luck points. Spend one to roll an additional d20 when you make an attack, ability check, or saving throw, or when an attack is made against you; choose which die to use. Regain expended luck points after a long rest.' },
+    { id: 'mage-slayer', name: 'Mage Slayer', prerequisite: '', text: 'When a creature within 5 feet casts a spell, you can use your reaction to make a melee weapon attack against that creature. You have advantage on saving throws against spells cast by creatures within 5 feet of you.' },
+    { id: 'magic-initiate', name: 'Magic Initiate', prerequisite: '', text: 'Choose a class: bard, cleric, druid, sorcerer, warlock, or wizard. Learn two cantrips and one 1st-level spell from that class. You can cast the 1st-level spell once per long rest. Spellcasting ability matches that class.' },
+    { id: 'martial-adept', name: 'Martial Adept', prerequisite: '', text: 'Learn two maneuvers from the Battle Master list. Gain one superiority die (d6), recovered on short or long rest.' },
+    { id: 'medium-armor-master', name: 'Medium Armor Master', prerequisite: 'Medium armor proficiency', text: 'Wearing medium armor doesn\'t impose disadvantage on Stealth. When you wear medium armor, you can add 3 (instead of 2) to AC if your DEX is 16+.' },
+    { id: 'mobile', name: 'Mobile', prerequisite: '', text: 'Your speed increases by 10 feet. When you use Dash, difficult terrain doesn\'t cost extra movement that turn. After you make a melee attack against a creature, you don\'t provoke opportunity attacks from that creature for the rest of the turn.' },
+    { id: 'moderately-armored', name: 'Moderately Armored', prerequisite: 'Light armor proficiency', text: 'Increase STR or DEX by 1. You gain proficiency with medium armor and shields.' },
+    { id: 'mounted-combatant', name: 'Mounted Combatant', prerequisite: '', text: 'Advantage on melee attacks against unmounted creatures smaller than your mount. Force an attack targeting your mount to target you instead. If your mount is subjected to an effect that allows a DEX save for half damage, it takes no damage on a success and half on a failure.' },
+    { id: 'observant', name: 'Observant', prerequisite: '', text: 'Increase INT or WIS by 1. If you can see a creature\'s mouth while it speaks a language you understand, you can read its lips. Your passive Perception and Investigation scores increase by 5.' },
+    { id: 'polearm-master', name: 'Polearm Master', prerequisite: '', text: 'When you take the Attack action with a glaive, halberd, quarterstaff, or spear, you can use a bonus action to make a melee attack with the opposite end (d4 bludgeoning). While wielding those weapons, other creatures provoke an opportunity attack when they enter your reach.' },
+    { id: 'resilient', name: 'Resilient', prerequisite: '', text: 'Increase one ability score by 1 and gain proficiency in saving throws using that ability.' },
+    { id: 'ritual-caster', name: 'Ritual Caster', prerequisite: 'INT or WIS 13+', text: 'You gain a ritual book with two 1st-level ritual spells from one class (bard, cleric, druid, sorcerer, warlock, or wizard). You can only cast these as rituals. You can add more ritual spells to the book as you find them.' },
+    { id: 'savage-attacker', name: 'Savage Attacker', prerequisite: '', text: 'Once per turn when you roll damage for a melee weapon attack, you can reroll the weapon\'s damage dice and use either total.' },
+    { id: 'sentinel', name: 'Sentinel', prerequisite: '', text: 'When you hit a creature with an opportunity attack, its speed becomes 0 for the rest of the turn. Creatures provoke opportunity attacks from you even if they take the Disengage action. When a creature within 5 feet attacks a target other than you (and that target doesn\'t have this feat), you can use your reaction to make a melee weapon attack against the attacker.' },
+    { id: 'sharpshooter', name: 'Sharpshooter', prerequisite: '', text: 'Attacking at long range doesn\'t impose disadvantage on your ranged weapon attack rolls. Your ranged weapon attacks ignore half and three-quarters cover. Before you make a ranged attack with a weapon you are proficient with, you can take -5 to hit for +10 damage.' },
+    { id: 'shield-master', name: 'Shield Master', prerequisite: '', text: 'If you take the Attack action on your turn, you can use a bonus action to shove with your shield. If you aren\'t incapacitated, you can add your shield\'s AC bonus to a DEX save that targets only you. If an effect allows a DEX save for half damage, you can use your reaction to take no damage on a success.' },
+    { id: 'skilled', name: 'Skilled', prerequisite: '', text: 'You gain proficiency in any combination of three skills or tools of your choice.' },
+    { id: 'skulker', name: 'Skulker', prerequisite: 'DEX 13+', text: 'You can try to hide when you are lightly obscured. When you are hidden and miss with a ranged weapon attack, making the attack doesn\'t reveal your position. Dim light doesn\'t impose disadvantage on your Wisdom (Perception) checks relying on sight.' },
+    { id: 'spell-sniper', name: 'Spell Sniper', prerequisite: 'Spellcasting', text: 'When you cast a spell that requires an attack roll, the spell\'s range is doubled. Your ranged spell attacks ignore half and three-quarters cover. You learn one cantrip that requires an attack roll (from bard, cleric, druid, sorcerer, warlock, or wizard).' },
+    { id: 'tavern-brawler', name: 'Tavern Brawler', prerequisite: '', text: 'Increase STR or CON by 1. You are proficient with improvised weapons and unarmed strikes. Unarmed strike uses a d4. When you hit with an unarmed strike or improvised weapon, you can use a bonus action to attempt to grapple the target.' },
+    { id: 'tough', name: 'Tough', prerequisite: '', text: 'Your hit point maximum increases by 2 × your level when you gain this feat, and by 2 whenever you gain a level thereafter.' },
+    { id: 'war-caster', name: 'War Caster', prerequisite: 'Spellcasting', text: 'Advantage on CON saves to maintain concentration. You can perform somatic components even when hands are full with weapons or a shield. When a creature\'s movement provokes an opportunity attack from you, you can use your reaction to cast a spell at it (1 action casting time, targets only that creature) instead of making an opportunity attack.' },
+    { id: 'weapon-master', name: 'Weapon Master', prerequisite: '', text: 'Increase STR or DEX by 1. You gain proficiency with four simple or martial weapons of your choice.' }
+  ];
+
+  function getFeatLibrary() {
+    const byId = new Map();
+    SRD_FEATS.forEach(f => byId.set(f.id, { ...f, source: 'SRD' }));
+    // Open5e / imported feats stored on equipment with isFeat
+    const equip = (typeof window !== 'undefined' && window.EQUIPMENT) ? window.EQUIPMENT : [];
+    equip.forEach(e => {
+      if (!e || !e.isFeat) return;
+      const name = String(e.name || '').replace(/\s*\(Feat\)\s*$/i, '').trim();
+      const id = e.id || ('feat-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
+      if (!byId.has(id) && ! [...byId.values()].some(x => x.name.toLowerCase() === name.toLowerCase())) {
+        byId.set(id, {
+          id,
+          name,
+          prerequisite: '',
+          text: e.notes || e.description || '',
+          source: e.source || 'Imported'
+        });
+      }
+    });
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function findFeat(idOrName) {
+    if (!idOrName) return null;
+    const k = String(idOrName).toLowerCase();
+    return getFeatLibrary().find(f => f.id === k || f.name.toLowerCase() === k) || null;
+  }
+
+  function featsEditorHtml(ch) {
+    const selected = Array.isArray(ch.feats) ? ch.feats : [];
+    const selIds = new Set(selected.map(f => (f.id || f.name || '').toLowerCase()));
+    const chips = selected.map((f, i) => {
+      const name = f.name || findFeat(f.id)?.name || f.id;
+      return `<span class="feat-chip" data-feat-id="${escapeAttr(f.id || name)}">${escapeHtml(name)} <button type="button" class="feat-remove" data-idx="${i}" title="Remove">×</button></span>`;
+    }).join('');
+    const asiLevels = [4, 8, 12, 16, 19];
+    const total = totalCharacterLevel(ch);
+    const classLevels = normalizeClassLevels(ch);
+    const asiNotes = [];
+    classLevels.forEach(c => {
+      asiLevels.forEach(L => {
+        if (c.level >= L) asiNotes.push(`${c.name} L${L}`);
+      });
+    });
+    return `
+      <div class="sheet-section" id="m-feats-section">
+        <label class="section-label">Feats</label>
+        <p class="muted small">Select feats from the SRD list or Open5e-imported feats (Tools → Sync Feats). ASI levels: 4 / 8 / 12 / 16 / 19 per class.</p>
+        ${asiNotes.length ? `<p class="muted small">ASI / feat slots reached: <strong>${asiNotes.join(', ')}</strong></p>` : ''}
+        <div id="m-feats-selected" class="feat-chips">${chips || '<span class="muted small">No feats selected</span>'}</div>
+        <div class="form-row">
+          <div class="field" style="flex:1">
+            <label>Add feat</label>
+            <input type="search" id="m-feat-search" placeholder="Search feats…" />
+            <select id="m-feat-pick" size="6" style="width:100%;margin-top:0.35rem">
+              ${getFeatLibrary().map(f => `<option value="${escapeAttr(f.id)}" title="${escapeAttr((f.prerequisite ? 'Prereq: ' + f.prerequisite + ' — ' : '') + f.text)}">${escapeHtml(f.name)}${f.prerequisite ? ' *' : ''}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <p class="muted small" id="m-feat-detail"></p>
+        <button type="button" class="btn secondary btn-tiny" id="m-feat-add">Add selected feat</button>
+        <input type="hidden" id="m-feats-json" value="${escapeAttr(JSON.stringify(selected))}" />
+      </div>`;
+  }
+
+  function wireFeatsEditor() {
+    const search = document.getElementById('m-feat-search');
+    const pick = document.getElementById('m-feat-pick');
+    const detail = document.getElementById('m-feat-detail');
+    const hidden = document.getElementById('m-feats-json');
+    const selectedBox = document.getElementById('m-feats-selected');
+    if (!pick || !hidden) return;
+
+    function getSelected() {
+      try { return JSON.parse(hidden.value || '[]'); } catch (e) { return []; }
+    }
+    function setSelected(list) {
+      hidden.value = JSON.stringify(list);
+      selectedBox.innerHTML = list.length
+        ? list.map((f, i) => {
+            const name = f.name || findFeat(f.id)?.name || f.id;
+            return `<span class="feat-chip" data-feat-id="${escapeAttr(f.id || name)}">${escapeHtml(name)} <button type="button" class="feat-remove" data-idx="${i}" title="Remove">×</button></span>`;
+          }).join('')
+        : '<span class="muted small">No feats selected</span>';
+      selectedBox.querySelectorAll('.feat-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const arr = getSelected();
+          arr.splice(Number(btn.dataset.idx), 1);
+          setSelected(arr);
+        });
+      });
+    }
+    setSelected(getSelected());
+
+    search?.addEventListener('input', () => {
+      const q = (search.value || '').toLowerCase();
+      [...pick.options].forEach(opt => {
+        opt.hidden = q && !opt.textContent.toLowerCase().includes(q);
+      });
+    });
+    pick.addEventListener('change', () => {
+      const f = findFeat(pick.value);
+      if (detail && f) {
+        detail.innerHTML = `<strong>${escapeHtml(f.name)}</strong>${f.prerequisite ? ' · <em>Prerequisite: ' + escapeHtml(f.prerequisite) + '</em>' : ''}<br>${escapeHtml(f.text)}`;
+      }
+    });
+    document.getElementById('m-feat-add')?.addEventListener('click', () => {
+      const f = findFeat(pick.value);
+      if (!f) { toast('Select a feat'); return; }
+      const arr = getSelected();
+      if (arr.some(x => (x.id || x.name || '').toLowerCase() === f.id || (x.name || '').toLowerCase() === f.name.toLowerCase())) {
+        toast('Feat already added');
+        return;
+      }
+      arr.push({ id: f.id, name: f.name, text: f.text, prerequisite: f.prerequisite || '' });
+      setSelected(arr);
+      // Append short line to features if not present
+      const featTa = document.getElementById('m-features');
+      if (featTa && !featTa.value.includes(f.name)) {
+        const line = `Feat — ${f.name}. ${f.text}`;
+        featTa.value = (featTa.value ? featTa.value.trim() + '\\n\\n' : '') + line;
+      }
+      toast('Added ' + f.name);
+    });
+  }
+
+  function collectFeatsFromForm() {
+    const hidden = document.getElementById('m-feats-json');
+    if (!hidden) return [];
+    try { return JSON.parse(hidden.value || '[]'); } catch (e) { return []; }
+  }
+
+  function featsSheetHtml(ch) {
+    const list = Array.isArray(ch.feats) ? ch.feats : [];
+    if (!list.length) return '';
+    return `<div class="cs-panel"><div class="cs-panel-title">Feats</div>
+      <ul class="trait-list compact">
+        ${list.map(f => {
+          const full = findFeat(f.id) || f;
+          const prereq = full.prerequisite ? ` <span class="muted small">(${escapeHtml(full.prerequisite)})</span>` : '';
+          return `<li><strong>${escapeHtml(full.name || f.name)}</strong>${prereq}. ${escapeHtml(full.text || f.text || '')}</li>`;
+        }).join('')}
+      </ul>
+    </div>`;
+  }
+
+
+
+  // ─── Class resource pools (Ki, Lunar Charges, Rage, etc.) ───────────────
+  function lunarChargesMax(mgLevel) {
+    const L = clamp(Number(mgLevel) || 0, 0, 40);
+    if (L < 2) return 0;
+    if (L < 5) return 2;
+    if (L < 9) return 3;
+    if (L < 13) return 4;
+    if (L < 17) return 5;
+    // L10+ Improved Lunar Charges: +1 from base table band
+    let n = 6;
+    if (L >= 10) n += 1;
+    if (L >= 17) n += 1; // Lunar Mastery
+    return n;
+  }
+
+  function classResourcesForCharacter(ch) {
+    const list = normalizeClassLevels(ch);
+    const resources = [];
+    list.forEach(c => {
+      const name = c.name;
+      const lvl = c.level || 1;
+      if (name === 'Monk' && lvl >= 2) {
+        resources.push({ id: 'ki', label: 'Ki Points', max: lvl, recover: 'Short Rest' });
+      }
+      if (name === 'Moon Guardian' && lvl >= 2) {
+        resources.push({
+          id: 'lunar',
+          label: 'Lunar Charges',
+          max: lunarChargesMax(lvl),
+          recover: 'Long Rest (Lunar Recovery: some on Short Rest, 1/LR)'
+        });
+      }
+      if (name === 'Barbarian' && lvl >= 1) {
+        const rage = lvl < 3 ? 2 : lvl < 6 ? 3 : lvl < 12 ? 4 : lvl < 17 ? 5 : 6;
+        resources.push({ id: 'rage', label: 'Rages', max: rage, recover: 'Long Rest' });
+      }
+      if (name === 'Sorcerer' && lvl >= 2) {
+        resources.push({ id: 'sorcery', label: 'Sorcery Points', max: lvl, recover: 'Long Rest' });
+      }
+      if (name === 'Warlock' && lvl >= 1) {
+        // pact slots tracked separately
+      }
+      if (name === 'Fighter' && /battlemaster|battle master/i.test(c.subclass || '') && lvl >= 3) {
+        const die = lvl < 7 ? 4 : lvl < 15 ? 5 : 6;
+        resources.push({ id: 'superiority', label: 'Superiority Dice', max: die, recover: 'Short Rest' });
+      }
+      if (name === 'Bloodhunter' && lvl >= 1) {
+        resources.push({ id: 'blood-maledict', label: 'Blood Maledict uses', max: Math.max(1, Math.floor(lvl / 6) + 1), recover: 'Short Rest' });
+      }
+      if (name === 'Ghostblade' && lvl >= 2) {
+        resources.push({ id: 'spirit-step', label: 'Spirit Step uses', max: Math.max(1, Math.ceil(lvl / 4)), recover: 'Short Rest' });
+      }
+      if (name === 'Shadowblade' && lvl >= 2) {
+        resources.push({ id: 'shadow-surge', label: 'Shadow Surge', max: Math.max(1, Math.ceil(lvl / 3)), recover: 'Short Rest' });
+      }
+    });
+    return resources;
+  }
+
+  function resourcesEditorHtml(ch) {
+    const res = classResourcesForCharacter(ch);
+    if (!res.length) return '';
+    const used = ch.resourceUsed && typeof ch.resourceUsed === 'object' ? ch.resourceUsed : {};
+    return `<div class="sheet-section" id="m-resources-section">
+      <label class="section-label">Class Resources / Charges</label>
+      <div class="resource-track">
+        ${res.map(r => {
+          const u = used[r.id] != null ? used[r.id] : 0;
+          return `<div class="res-stepper" data-res="${escapeAttr(r.id)}" data-max="${r.max}" title="${escapeAttr(r.recover || '')}">
+            <span class="res-label">${escapeHtml(r.label)}</span>
+            <button type="button" class="res-dec">−</button>
+            <span class="res-val">${u}</span>
+            <span class="res-max">/ ${r.max}</span>
+            <button type="button" class="res-inc">+</button>
+            <input type="hidden" class="m-resource" data-res="${escapeAttr(r.id)}" value="${u}" />
+            <span class="muted small">(${escapeHtml(r.recover || '')})</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <p class="muted small">Used / Max. Short Rest recovers Ki, Superiority, pact slots, etc. Long Rest recovers Lunar Charges, Rages, Sorcery Points.</p>
+    </div>`;
+  }
+
+  function collectResourcesFromForm() {
+    const used = {};
+    document.querySelectorAll('.m-resource').forEach(inp => {
+      used[inp.dataset.res] = clamp(parseInt(inp.value, 10) || 0, 0, 99);
+    });
+    return used;
+  }
+
+  function resourcesSheetHtml(ch) {
+    const res = classResourcesForCharacter(ch);
+    if (!res.length) return '';
+    const used = ch.resourceUsed || {};
+    return `<div class="cs-panel"><div class="cs-panel-title">Resources</div>
+      <div class="cs-body">${res.map(r => {
+        const u = used[r.id] != null ? used[r.id] : 0;
+        return `<div><strong>${escapeHtml(r.label)}:</strong> ${u} / ${r.max} <span class="muted small">(${escapeHtml(r.recover || '')})</span></div>`;
+      }).join('')}</div></div>`;
+  }
+
+  // ─── Feature / ability / feat searchable compendium ──────────────────────
+  function buildFeatureCompendiumEntries() {
+    const entries = [];
+    const abilities = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
+    Object.keys(abilities).forEach(cls => {
+      (abilities[cls] || []).forEach(a => {
+        entries.push({
+          type: 'Class Feature',
+          source: cls,
+          name: a.name || 'Feature',
+          level: a.lvl,
+          text: a.text || ''
+        });
+      });
+    });
+    getPhbClasses().forEach(cls => {
+      (cls.progression || []).forEach(([lvl, feat]) => {
+        entries.push({
+          type: 'Progression',
+          source: cls.name,
+          name: String(feat),
+          level: lvl,
+          text: `${cls.name} level ${lvl}: ${feat}`
+        });
+      });
+    });
+    getMoonPaths().forEach(p => {
+      (p.features || []).forEach(f => {
+        entries.push({
+          type: 'Moon Path',
+          source: p.name + ' (' + (p.world || '') + ')',
+          name: f.name,
+          level: f.lvl,
+          text: f.text || ''
+        });
+      });
+    });
+    getPhbRaces().forEach(r => {
+      (r.traits || []).forEach(tr => {
+        entries.push({
+          type: 'Racial Trait',
+          source: r.name,
+          name: tr.name,
+          level: null,
+          text: tr.text || ''
+        });
+      });
+    });
+    if (typeof getFeatLibrary === 'function') {
+      getFeatLibrary().forEach(f => {
+        entries.push({
+          type: 'Feat',
+          source: f.source || 'SRD',
+          name: f.name,
+          level: null,
+          text: (f.prerequisite ? 'Prerequisite: ' + f.prerequisite + '. ' : '') + (f.text || '')
+        });
+      });
+    }
+    return entries;
+  }
+
+  function renderFeatureCompendium(root) {
+    if (!root) return;
+    root.innerHTML = `
+      <div class="compendium-panel">
+        <h3>Feature, Ability &amp; Feat Compendium</h3>
+        <p class="muted small">Search class features, progression, Moon Paths, racial traits, and feats.</p>
+        <div class="form-row">
+          <div class="field" style="flex:2"><label>Search</label>
+            <input type="search" id="feat-comp-q" placeholder="e.g. Lunar Charges, Extra Attack, Alert…" />
+          </div>
+          <div class="field"><label>Type</label>
+            <select id="feat-comp-type">
+              <option value="all">All</option>
+              <option value="Class Feature">Class Features</option>
+              <option value="Progression">Progression</option>
+              <option value="Moon Path">Moon Paths</option>
+              <option value="Racial Trait">Racial Traits</option>
+              <option value="Feat">Feats</option>
+            </select>
+          </div>
+        </div>
+        <div id="feat-comp-results" class="feature-compendium-results muted small">Type to search…</div>
+      </div>`;
+    const all = buildFeatureCompendiumEntries();
+    function run() {
+      const q = ($('#feat-comp-q')?.value || '').trim().toLowerCase();
+      const ty = $('#feat-comp-type')?.value || 'all';
+      let list = all;
+      if (ty !== 'all') list = list.filter(e => e.type === ty);
+      if (q) list = list.filter(e =>
+        e.name.toLowerCase().includes(q) ||
+        e.source.toLowerCase().includes(q) ||
+        (e.text || '').toLowerCase().includes(q)
+      );
+      list = list.slice(0, 80);
+      const box = $('#feat-comp-results');
+      if (!box) return;
+      if (!list.length) { box.innerHTML = '<p class="muted">No matches.</p>'; return; }
+      box.innerHTML = list.map(e => `
+        <div class="feature-comp-item">
+          <strong>${escapeHtml(e.name)}</strong>
+          <span class="muted small"> · ${escapeHtml(e.type)} · ${escapeHtml(e.source)}${e.level != null ? ' · L' + e.level : ''}</span>
+          <div class="detail-text" style="margin-top:0.2rem">${escapeHtml(e.text)}</div>
+        </div>`).join('');
+    }
+    $('#feat-comp-q')?.addEventListener('input', run);
+    $('#feat-comp-type')?.addEventListener('change', run);
+    run();
+  }
+
+
   function normalizeCharacter(ch) {
+    // Preserve extension fields
+    const _ext = {
+      inspiration: ch.inspiration,
+      deathSaves: ch.deathSaves,
+      conditions: ch.conditions,
+      attunement: ch.attunement,
+      background: ch.background,
+      spellPrepMode: ch.spellPrepMode,
+      preparedSpells: ch.preparedSpells
+    };
+
     ch = ch || {};
     const _mc = normalizeClassLevels(ch);
     if (_mc.length && _mc[0].name) {
@@ -999,7 +1427,7 @@
       type: ch.type || (ch.player === 'NPC' ? 'ally' : 'pc'),
       class: ch.class || '',
       subclass: ch.subclass || '',
-      level: clamp(Number(ch.level) || 1, 1, 20),
+      level: clamp(Number(ch.level) || 1, 1, 40),
       race: ch.race || '',
       background: ch.background || '',
       world: ch.world || '',
@@ -1034,7 +1462,19 @@
       spellSlots: ch.spellSlots && typeof ch.spellSlots === 'object' ? ch.spellSlots : {},
       spellSlotsUsed: ch.spellSlotsUsed && typeof ch.spellSlotsUsed === 'object' ? ch.spellSlotsUsed : {},
       cantrips: ch.cantrips || '',
-      spellIds: Array.isArray(ch.spellIds) ? ch.spellIds : []
+      spells: ch.spells || '',
+      spellIds: Array.isArray(ch.spellIds) ? ch.spellIds : [],
+      notes: ch.notes || '',
+      avatar: ch.avatar || '',
+      inspiration: !!ch.inspiration,
+      deathSaves: ch.deathSaves && typeof ch.deathSaves === 'object' ? ch.deathSaves : { successes: 0, failures: 0 },
+      conditions: Array.isArray(ch.conditions) ? ch.conditions : [],
+      attunement: Array.isArray(ch.attunement) ? ch.attunement : [],
+      spellPrepMode: ch.spellPrepMode || 'known',
+      preparedSpells: ch.preparedSpells || '',
+      umbrarianLocked: !!ch.umbrarianLocked,
+      feats: Array.isArray(ch.feats) ? ch.feats : [],
+      resourceUsed: ch.resourceUsed && typeof ch.resourceUsed === 'object' ? ch.resourceUsed : {}
     };
   }
 
@@ -1171,6 +1611,20 @@
       ${abilityHtml}`;
   }
 
+
+  function multiclassProgressionHtml(ch) {
+    const list = normalizeClassLevels(ch);
+    if (!list.length) {
+      return progressionTableHtml(ch.class || '');
+    }
+    return list.map(c => {
+      const sub = c.subclass ? ` <span class="muted small">(${escapeHtml(c.subclass)})</span>` : '';
+      return `<div class="mc-prog-block" style="margin-bottom:1rem">
+        <h4 class="section-label" style="margin-bottom:0.35rem">${escapeHtml(c.name)} ${c.level}${sub}</h4>
+        ${progressionTableHtml(c.name)}
+      </div>`;
+    }).join('');
+  }
 
   function getMoonPaths() {
     return (typeof window !== 'undefined' && window.MOON_PATHS) ? window.MOON_PATHS : [];
@@ -1511,10 +1965,24 @@
       if (m) eqMap.set(m.id, m);
     });
     window.SPELLS = [...spellMap.values()].sort((a,b) => (a.level-b.level) || a.name.localeCompare(b.name));
+    try { ensureMoonGuardianSpellList(); } catch (e) {}
     window.EQUIPMENT = [...eqMap.values()];
     // Bestiary merge: DSC base + imported (imported keyed by n+source)
     const srcFilter = window.BESTIARY_SOURCE || 'all';
-    const imported = (extra.creatures || []).map(c => ({ ...c, _src: c._src || c.source || 'Imported' }));
+    const importedRaw = (extra.creatures || []).map(c => ({ ...c, _src: c._src || c.source || 'Imported' }));
+    // Dedupe imported by _key then by lowercase name
+    const seenKey = new Set();
+    const seenName = new Set();
+    const imported = [];
+    importedRaw.forEach(c => {
+      const key = String(c._key || '').trim();
+      const nm = String(c.n || c.name || '').trim().toLowerCase();
+      if (key && seenKey.has(key)) return;
+      if (nm && seenName.has(nm)) return;
+      if (key) seenKey.add(key);
+      if (nm) seenName.add(nm);
+      imported.push(c);
+    });
     let list;
     if (srcFilter === 'dsc') list = window.BESTIARY_BASE.slice();
     else if (srcFilter === 'imported') list = imported.slice();
@@ -1524,6 +1992,8 @@
   }
 
   function importCompendiumPack(obj) {
+    // exposed for extensions / VTT import
+    window.importCompendiumPack = importCompendiumPack;
     // Flexible: accepts DSCToolkt-compendium-v1, or raw {spells:[], equipment:[]},
     // or Open5e-ish / homebrew arrays
     let spellsIn = [];
@@ -1564,20 +2034,51 @@
       const m = mergeEquipmentRecord(raw);
       if (m) { eqMap.set(m.id, m); eCount++; }
     });
-    const creMap = new Map((extra.creatures || []).map(c => [c._key || c.n || c.name, c]));
+    const creMap = new Map();
+    const creByName = new Map(); // lowercase name → map key (dedupe aliases)
+    function registerExistingCreature(c) {
+      if (!c) return;
+      const key = String(c._key || c.n || c.name || '').trim();
+      if (!key) return;
+      creMap.set(key, c);
+      const nm = String(c.n || c.name || '').trim().toLowerCase();
+      if (nm) creByName.set(nm, key);
+    }
+    (extra.creatures || []).forEach(registerExistingCreature);
+    let cAdded = 0, cUpdated = 0, cSkipped = 0;
     creaturesIn.forEach(raw => {
       let c = raw;
       if (raw && raw.stats && (raw.stats.abilityScores || raw.stats.armorClass != null))
-        c = mapCritterDbCreature(raw);
+        c = mapCritterDbCreature(raw, raw._bestiaryName ? `CritterDB: ${raw._bestiaryName}` : undefined);
       else if (raw.challenge_rating != null || raw.hit_points != null || raw.ability_scores)
         c = mapOpen5eCreature(raw);
       else if (raw.name && !raw.n) c = { ...raw, n: raw.name, o: raw.o || 'Imported', _src: 'Imported' };
-      if (c && (c.n || c.name)) {
-        const key = c._key || c.n || c.name;
-        creMap.set(key, { ...c, _src: c._src || 'Imported' });
-        cCount++;
+      if (!c || !(c.n || c.name)) return;
+      c = { ...c, _src: c._src || 'Imported' };
+      const key = String(c._key || c.n || c.name).trim();
+      const nm = String(c.n || c.name || '').trim().toLowerCase();
+      // Prefer match by stable key, else by name (avoids same monster from two bestiaries)
+      const existingKey = creMap.has(key) ? key : (nm && creByName.has(nm) ? creByName.get(nm) : null);
+      if (existingKey) {
+        const prev = creMap.get(existingKey);
+        // Same content signature → skip; else update in place under existing key
+        const sig = (x) => [x.n || x.name, x.ac, x.hp, x.cr, (x.desc || '').length].join('|');
+        if (prev && sig(prev) === sig(c)) {
+          cSkipped++;
+          return;
+        }
+        creMap.set(existingKey, { ...c, _key: prev?._key || c._key || existingKey });
+        if (nm) creByName.set(nm, existingKey);
+        cUpdated++;
+      } else {
+        creMap.set(key, c);
+        if (nm) creByName.set(nm, key);
+        cAdded++;
       }
+      cCount++;
     });
+    // expose for status messages
+    importCompendiumPack._lastCreatureStats = { added: cAdded, updated: cUpdated, skipped: cSkipped };
     const next = {
       spells: [...spellMap.values()],
       equipment: [...eqMap.values()],
@@ -1586,10 +2087,14 @@
     };
     saveUserCompendium(next);
     applyCompendiumToRuntime();
+    const cStats = importCompendiumPack._lastCreatureStats || { added: cCount, updated: 0, skipped: 0 };
     return {
       spells: sCount,
       equipment: eCount,
       creatures: cCount,
+      creaturesAdded: cStats.added,
+      creaturesUpdated: cStats.updated,
+      creaturesSkipped: cStats.skipped,
       totalSpells: window.SPELLS.length,
       totalEquipment: window.EQUIPMENT.length,
       totalCreatures: (window.BESTIARY_MERGED || []).length
@@ -1798,13 +2303,16 @@
     const rarity = typeof it.rarity === 'object' ? (it.rarity.name || '') : (it.rarity || '');
     const key = it.key || it.name || '';
     const id = 'magic-' + String(key).toLowerCase().replace(/^[^_]*_/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    let category = 'gear';
-    if (it.armor) category = /shield/i.test(it.armor.name || '') ? 'shield' : 'armor';
+    let category = 'magic';
+    if (it.armor) category = /shield/i.test(String(it.armor.name || it.armor.category || '')) ? 'shield' : 'armor';
     else if (it.weapon) category = 'weapon';
+    const bonusMatch = String(it.name || '').match(/\(\+(\d+)\)/);
+    const magicBonus = bonusMatch ? parseInt(bonusMatch[1], 10) : 0;
     const notes = [
       rarity ? `Rarity: ${rarity}` : '',
+      magicBonus ? `Magic bonus: +${magicBonus}` : '',
       it.requires_attunement ? `Attunement${it.attunement_detail ? ': ' + it.attunement_detail : ''}` : '',
-      (it.desc || '').slice(0, 600)
+      (it.desc || '').slice(0, 700)
     ].filter(Boolean).join('\n');
     const rec = {
       id,
@@ -1815,16 +2323,22 @@
       notes,
       source: doc.display_name || doc.name || 'Open5e',
       magic: true,
-      rarity
+      rarity: typeof rarity === 'string' ? rarity : (rarity && rarity.name) || '',
+      attunement: !!it.requires_attunement,
+      magicBonus
     };
-    if (category === 'armor' && it.armor) {
-      rec.armorType = (it.armor.category || 'medium').toLowerCase();
-      rec.acBase = it.armor.ac_base != null ? Number(it.armor.ac_base) : 11;
+    if ((category === 'armor' || category === 'shield') && it.armor) {
+      rec.armorType = (it.armor.category || it.armor.name || 'medium').toString().toLowerCase();
+      rec.acBase = it.armor.ac_base != null ? Number(it.armor.ac_base) : (it.armor.base_ac != null ? Number(it.armor.base_ac) : 11);
       rec.acDexMax = it.armor.ac_cap_dexmod != null ? it.armor.ac_cap_dexmod : null;
     }
     if (category === 'weapon' && it.weapon) {
-      rec.damage = it.weapon.damage_dice || '';
-      rec.weaponType = it.weapon.is_simple ? 'simple melee' : 'martial melee';
+      const w = it.weapon;
+      rec.damage = w.damage_dice || w.damage || '';
+      const dtype = w.damage_type;
+      rec.damageType = typeof dtype === 'object' ? (dtype.name || '') : (dtype || '');
+      rec.weaponType = w.is_simple ? 'simple' : (w.is_martial ? 'martial' : 'weapon');
+      if (magicBonus) rec.atkBonus = magicBonus;
     }
     return mergeEquipmentRecord(rec);
   }
@@ -2097,7 +2611,7 @@
     };
     setStatus(`Merging ${mapped.length} creatures…`);
     const res = importCompendiumPack(pack);
-    setStatus(`Done — +${res.creatures} CritterDB creatures (bestiary total ${res.totalCreatures}).`);
+    setStatus(`Done — +${res.creaturesAdded ?? res.creatures} new, ${res.creaturesUpdated || 0} updated, ${res.creaturesSkipped || 0} duplicates skipped (bestiary total ${res.totalCreatures}).`);
     return res;
   }
 
@@ -2300,11 +2814,13 @@
 
       if (magicItems) {
         setStatus('Fetching magic items…');
-        const rows = await open5eFetchAll('/magicitems/', params, {
-          maxPages: 120,
+        // Full catalog (SRD filter alone misses many +1 weapons / wondrous items)
+        let magicRows = await open5eFetchAll('/magicitems/', {}, {
+          maxPages: 50,
           onPage: (p, n, total) => setStatus(`Magic items page ${p} — ${n}/${total || '?'}`)
         });
-        pack.equipment.push(...rows.map(mapOpen5eMagicItem).filter(Boolean));
+        pack.equipment.push(...magicRows.map(mapOpen5eMagicItem).filter(Boolean));
+        setStatus(`Mapped ${magicRows.length} magic items`);
       }
 
       if (feats) {
@@ -2555,7 +3071,7 @@
       try {
         const text = await file.text();
         const res = importCritterDbText(text);
-        if (cdStatus) cdStatus.textContent = `Imported +${res.creatures} creatures from file.`;
+        if (cdStatus) cdStatus.textContent = `Imported +${res.creaturesAdded ?? res.creatures} new, ${res.creaturesUpdated || 0} updated, ${res.creaturesSkipped || 0} duplicates skipped.`;
         toast('CritterDB JSON imported');
         renderCompendiumTools();
         if (typeof renderBestiary === 'function') renderBestiary();
@@ -2570,7 +3086,7 @@
       const text = document.getElementById('critterdb-paste')?.value || '';
       try {
         const res = importCritterDbText(text);
-        if (cdStatus) cdStatus.textContent = `Imported +${res.creatures} creatures from paste.`;
+        if (cdStatus) cdStatus.textContent = `Imported +${res.creaturesAdded ?? res.creatures} new, ${res.creaturesUpdated || 0} updated, ${res.creaturesSkipped || 0} duplicates skipped.`;
         toast('CritterDB JSON imported');
         renderCompendiumTools();
         if (typeof renderBestiary === 'function') renderBestiary();
@@ -2582,6 +3098,21 @@
     });
   }
 
+
+  
+  function mergeCharacterFormExtras(base) {
+    if (!window.DSCExtensions || typeof window.DSCExtensions.collectCharacterExtras !== 'function') return base;
+    try {
+      const ex = window.DSCExtensions.collectCharacterExtras();
+      let next = { ...base, ...ex };
+      if (ex && arguments[1] === 'long' || (typeof event === 'undefined' && false)) {}
+      // Apply rest if buttons set dataset
+      const rest = document.getElementById('m-char-extras')?.dataset?.rest;
+      if (rest === 'short') next = window.DSCExtensions.applyShortRest(next);
+      if (rest === 'long') next = window.DSCExtensions.applyLongRest(next);
+      return next;
+    } catch (e) { return base; }
+  }
 
   function getSpellLibrary() {
     return (typeof window !== 'undefined' && window.SPELLS) ? window.SPELLS : [];
@@ -2597,20 +3128,83 @@
     return spellsForClasses(className ? [className] : []);
   }
 
+
+
+  // Moon Guardian spell list (DSC half-caster — not in SRD class tags)
+  const MOON_GUARDIAN_SPELL_NAMES = [
+    'Guidance', 'Light', 'Resistance', 'Sacred Flame', 'Spare the Dying', 'Thaumaturgy', 'Word of Radiance',
+    'Bless', 'Ceremony', 'Command', 'Compelled Duel', 'Cure Wounds', 'Detect Evil and Good', 'Detect Magic',
+    'Detect Poison and Disease', 'Divine Favor', 'Guiding Bolt', 'Healing Word', 'Heroism',
+    'Protection from Evil and Good', 'Purify Food and Drink', 'Searing Smite', 'Shield of Faith',
+    'Thunderous Smite', 'Wrathful Smite', 'Bane', 'Faerie Fire',
+    'Aid', 'Branding Smite', 'Find Steed', 'Lesser Restoration', 'Locate Object', 'Magic Weapon',
+    'Prayer of Healing', 'Protection from Poison', 'Zone of Truth', 'Moonbeam', 'Gentle Repose',
+    'See Invisibility', 'Silence',
+    'Aura of Vitality', 'Blinding Smite', "Crusader's Mantle", 'Daylight', 'Dispel Magic', 'Magic Circle',
+    'Remove Curse', 'Revivify', 'Spirit Guardians', 'Beacon of Hope', 'Mass Healing Word', 'Clairvoyance',
+    'Aura of Life', 'Aura of Purity', 'Banishing Smite', 'Death Ward', 'Locate Creature', 'Staggering Smite',
+    'Divination', 'Guardian of Faith',
+    'Destructive Wave', 'Dispel Evil and Good', 'Flame Strike', 'Raise Dead', 'Greater Restoration',
+    'Holy Weapon', 'Dawn'
+  ];
+
+  function ensureMoonGuardianSpellList() {
+    const lib = (typeof window !== 'undefined' && Array.isArray(window.SPELLS)) ? window.SPELLS : [];
+    if (!lib.length) return 0;
+    const norm = (s) => String(s || '').toLowerCase().replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
+    const want = new Set(MOON_GUARDIAN_SPELL_NAMES.map(norm));
+    let n = 0;
+    // Index by normalized name for fast match
+    const byName = new Map();
+    lib.forEach(sp => {
+      if (sp && sp.name) byName.set(norm(sp.name), sp);
+    });
+    want.forEach(key => {
+      const sp = byName.get(key);
+      if (!sp) return;
+      if (!Array.isArray(sp.classes)) sp.classes = [];
+      // Normalize class tags to title case for matching
+      if (!sp.classes.some(c => String(c).toLowerCase() === 'moon guardian')) {
+        sp.classes.push('Moon Guardian');
+        n++;
+      }
+    });
+    return n;
+  }
+
   function spellsForClasses(classNames) {
+    // Always re-tag MG list (Open5e merge can replace SPELLS)
+    try { ensureMoonGuardianSpellList(); } catch (e) {}
     const lib = getSpellLibrary();
     const names = (Array.isArray(classNames) ? classNames : [classNames])
       .map(n => String(n || '').trim())
       .filter(Boolean);
     if (!names.length) return lib.slice();
-    const set = new Set(names);
-    // Union of spell lists for all casting classes (PHB multiclass)
-    return lib.filter(s => {
+    const setLower = new Set(names.map(n => n.toLowerCase()));
+    const isMG = setLower.has('moon guardian');
+
+    let list = lib.filter(s => {
       const sc = s.classes || [];
       if (!sc.length) return false;
-      return sc.some(c => set.has(c));
+      return sc.some(c => setLower.has(String(c).toLowerCase()));
     });
+
+    // Fallback: if MG selected and still empty, match by spell name list
+    if (isMG && !list.length) {
+      const norm = (s) => String(s || '').toLowerCase().replace(/[''`´]/g, '').replace(/\s+/g, ' ').trim();
+      const want = new Set(MOON_GUARDIAN_SPELL_NAMES.map(norm));
+      list = lib.filter(s => want.has(norm(s.name)));
+      // Tag them for next time
+      list.forEach(sp => {
+        if (!Array.isArray(sp.classes)) sp.classes = [];
+        if (!sp.classes.some(c => String(c).toLowerCase() === 'moon guardian')) {
+          sp.classes.push('Moon Guardian');
+        }
+      });
+    }
+    return list;
   }
+
 
   function castingClassNamesFromForm() {
     const list = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
@@ -2878,6 +3472,14 @@
   }
 
   function wireMulticlassEditor(existing) {
+    function refreshMcProg() {
+      const box = document.getElementById('m-class-prog');
+      if (!box) return;
+      const list = readMulticlassFromForm();
+      const fake = { class: list[0]?.name || '', classes: list, level: list.reduce((s,c)=>s+(c.level||0),0) };
+      box.innerHTML = multiclassProgressionHtml(fake);
+    }
+
     const root = $('#m-multiclass');
     if (!root) return;
     const allowEpic = true;
@@ -2924,6 +3526,7 @@
       if (typeof refreshSpellSection === 'function') refreshSpellSection();
       if (typeof refreshSpellDc === 'function') refreshSpellDc();
       if (typeof refreshAttacks === 'function') refreshAttacks(true);
+      if (typeof refreshMcProg === 'function') refreshMcProg();
     }
 
     root.addEventListener('input', (e) => {
@@ -3017,6 +3620,52 @@
     return used;
   }
 
+
+  function slotStepperHtml(level, used, max) {
+    return `<div class="slot-stepper" data-sl="${level}">
+      <span class="slot-label">L${level}</span>
+      <button type="button" class="slot-dec" aria-label="Decrease">−</button>
+      <span class="slot-val" data-sl="${level}">${used}</span>
+      <span class="slot-max">/ ${max}</span>
+      <button type="button" class="slot-inc" aria-label="Increase">+</button>
+      <input type="hidden" class="m-slot" data-sl="${level}" value="${used}" />
+    </div>`;
+  }
+
+  function wireSlotSteppers(root) {
+    const scope = root || document;
+    scope.querySelectorAll('.slot-stepper').forEach(el => {
+      if (el.dataset.wired) return;
+      el.dataset.wired = '1';
+      const maxFromData = parseInt(el.dataset.max || '0', 10);
+      const max = maxFromData || parseInt(el.querySelector('.slot-max')?.textContent.replace(/\D/g, '') || '0', 10) || 0;
+      const valEl = el.querySelector('.slot-val');
+      const hidden = el.querySelector('.m-slot') || el.querySelector('#m-slot-pact');
+      const set = (n) => {
+        n = Math.max(0, Math.min(max, n));
+        if (valEl) valEl.textContent = String(n);
+        if (hidden) hidden.value = String(n);
+      };
+      el.querySelector('.slot-dec')?.addEventListener('click', () => set((parseInt(valEl?.textContent, 10) || 0) - 1));
+      el.querySelector('.slot-inc')?.addEventListener('click', () => set((parseInt(valEl?.textContent, 10) || 0) + 1));
+    });
+    scope.querySelectorAll('.res-stepper').forEach(el => {
+      if (el.dataset.wired) return;
+      el.dataset.wired = '1';
+      const max = parseInt(el.dataset.max || '0', 10) || 0;
+      const valEl = el.querySelector('.res-val');
+      const hidden = el.querySelector('.m-resource');
+      const set = (n) => {
+        n = Math.max(0, Math.min(max, n));
+        if (valEl) valEl.textContent = String(n);
+        if (hidden) hidden.value = String(n);
+      };
+      el.querySelector('.res-dec')?.addEventListener('click', () => set((parseInt(valEl?.textContent, 10) || 0) - 1));
+      el.querySelector('.res-inc')?.addEventListener('click', () => set((parseInt(valEl?.textContent, 10) || 0) + 1));
+    });
+  }
+
+
   function spellSlotsEditorHtml(ch) {
     const list = normalizeClassLevels(ch);
     const primary = primaryClassName(ch);
@@ -3044,7 +3693,7 @@
         slotsHtml += `<div class="spell-slots-row">${levels.map(sl => {
           const max = maxes[sl];
           const u = used[sl] != null ? used[sl] : 0;
-          return `<label class="spell-slot-chip">L${sl} <input type="number" class="m-slot" data-sl="${sl}" min="0" max="${max}" value="${u}" /> / ${max}</label>`;
+          return slotStepperHtml(sl, u, max);
         }).join('')}</div>`;
       }
       if (maxes.pactLevel) {
@@ -3052,7 +3701,14 @@
         const pc = maxes.pactCount || 1;
         const u = used.pact != null ? used.pact : 0;
         slotsHtml += `<div class="spell-slots-row">
-          <label>Pact slots (L${pl}) <input type="number" id="m-slot-pact" min="0" max="${pc}" value="${u}" /> / ${pc}</label>
+          <div class="slot-stepper" data-sl="pact" data-max="${pc}">
+            <span class="slot-label">Pact L${pl}</span>
+            <button type="button" class="slot-dec">−</button>
+            <span class="slot-val">${u}</span>
+            <span class="slot-max">/ ${pc}</span>
+            <button type="button" class="slot-inc">+</button>
+            <input type="hidden" id="m-slot-pact" value="${u}" />
+          </div>
         </div>
         <p class="muted small">Warlock pact slots recover on a Short Rest. Multiclass spell slots (above) use Long Rest.</p>`;
       }
@@ -3180,7 +3836,11 @@ function getEquipmentList() {
       weaponType: it.weaponType || '',
       notes: it.notes || '',
       cost: it.cost || '',
-      weight: it.weight != null ? Number(it.weight) : 0
+      weight: it.weight != null ? Number(it.weight) : 0,
+      magic: !!it.magic,
+      magicBonus: it.magicBonus != null ? Number(it.magicBonus) : 0,
+      rarity: it.rarity || '',
+      attunement: !!it.attunement
     };
   }
 
@@ -3189,6 +3849,10 @@ function getEquipmentList() {
       id: cat.id,
       name: cat.name,
       category: cat.category,
+      magic: cat.magic,
+      magicBonus: cat.magicBonus,
+      rarity: cat.rarity,
+      attunement: cat.attunement,
       qty: 1,
       equipped: cat.category === 'armor' || cat.category === 'shield' || cat.category === 'weapon',
       armorType: cat.armorType || '',
@@ -3236,7 +3900,15 @@ function getEquipmentList() {
   function equipmentSearchHtml(query, category) {
     const q = (query || '').trim().toLowerCase();
     let list = getEquipmentList();
-    if (category && category !== 'all') list = list.filter(e => e.category === category);
+    if (category && category !== 'all') {
+      if (category === 'magic') {
+        list = list.filter(e => e.magic || e.category === 'magic' || e.magicBonus || /rarity\s*:|attunement|\(\+\d+\)/i.test((e.notes || '') + (e.name || '')));
+      } else if (category === 'weapon') {
+        list = list.filter(e => e.category === 'weapon');
+      } else {
+        list = list.filter(e => e.category === category);
+      }
+    }
     if (q) {
       list = list.filter(e =>
         e.name.toLowerCase().includes(q) ||
@@ -3244,10 +3916,12 @@ function getEquipmentList() {
         (e.weaponType || '').toLowerCase().includes(q) ||
         (e.armorType || '').toLowerCase().includes(q) ||
         (e.notes || '').toLowerCase().includes(q) ||
-        (e.props || '').toLowerCase().includes(q)
+        (e.props || '').toLowerCase().includes(q) ||
+        (e.rarity || '').toLowerCase().includes(q)
       );
     }
-    list = list.slice(0, 40);
+    // Prefer showing magic weapons when searching for +1/+2 or "magic"
+    list = list.slice(0, category === 'magic' || /\+\d|magic/i.test(q) ? 80 : 40);
     if (!list.length) return '<p class="muted small">No equipment matches.</p>';
     return `<ul class="equip-search-results">${list.map(e => {
       const detail = e.category === 'armor'
@@ -3258,7 +3932,7 @@ function getEquipmentList() {
             ? `${e.damage || ''} ${e.damageType || ''} · ${e.props || ''}`
             : (e.notes || e.cost || '');
       return `<li class="equip-result" data-equip-id="${escapeAttr(e.id)}">
-        <div class="equip-result-main"><strong>${escapeHtml(e.name)}</strong> <span class="muted small">${escapeHtml(e.category)}${e.cost ? ' · ' + escapeHtml(e.cost) : ''}</span></div>
+        <div class="equip-result-main"><strong>${escapeHtml(e.name)}</strong>${e.magic || e.category === 'magic' || e.magicBonus ? '<span class="equip-badge-magic">Magic</span>' : ''} <span class="muted small">${escapeHtml(e.category)}${e.rarity ? ' · ' + escapeHtml(e.rarity) : ''}${e.cost ? ' · ' + escapeHtml(e.cost) : ''}${e.damage ? ' · ' + escapeHtml(e.damage) : ''}</span></div>
         <div class="muted small">${escapeHtml(detail)}</div>
         <button type="button" class="btn secondary btn-tiny add-equip" data-equip-id="${escapeAttr(e.id)}">Add</button>
       </li>`;
@@ -3418,6 +4092,51 @@ const FEATURE_SECTION = {
 
   
   
+
+  function refreshPreparedSpellCheckboxes() {
+    const wrap = document.getElementById('m-prep-spells-wrap');
+    if (!wrap) return;
+    const mode = document.getElementById('m-spell-prep-mode')?.value || 'known';
+    const preparedSet = new Set(
+      String(document.getElementById('m-prepared-spells')?.value || '')
+        .split(/[\n,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+    const ids = (document.getElementById('m-spell-ids')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const names = [];
+    ids.forEach(id => {
+      const sp = typeof findSpell === 'function' ? findSpell(id) : null;
+      if (sp && sp.level > 0) names.push(sp);
+    });
+    // also from text
+    String(document.getElementById('m-spells')?.value || '').split(/[\n,;]+/).forEach(n => {
+      n = n.trim();
+      if (!n) return;
+      const sp = typeof findSpell === 'function' ? findSpell(n) : null;
+      if (sp && sp.level > 0 && !names.some(x => x.id === sp.id)) names.push(sp);
+      else if (!sp) names.push({ id: n, name: n, level: 1 });
+    });
+    const listEl = wrap.querySelector('.form-row') || wrap;
+    if (!names.length) {
+      const target = wrap.querySelector('[class*="form-row"]') || wrap;
+      // rebuild checkbox area
+    }
+    let box = document.getElementById('m-prep-checkbox-list');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'm-prep-checkbox-list';
+      box.className = 'form-row';
+      box.style.cssText = 'flex-wrap:wrap;gap:0.35rem;max-height:12rem;overflow:auto;border:1px solid rgba(255,255,255,0.08);padding:0.4rem;border-radius:6px';
+      wrap.insertBefore(box, wrap.querySelector('#m-prepared-spells') || null);
+    }
+    box.innerHTML = names.length
+      ? names.map(s => {
+          const checked = preparedSet.has(s.name.toLowerCase()) || preparedSet.has(String(s.id).toLowerCase());
+          return `<label class="checkbox-row"><input type="checkbox" class="m-prep-spell" value="${escapeAttr(s.name)}" ${checked ? 'checked' : ''} ${mode === 'known' ? 'disabled' : ''}/> <span>${escapeHtml(s.name)} <span class="muted small">(L${s.level})</span></span></label>`;
+        }).join('')
+      : '<p class="muted small">Add known spells first (Spellcasting section), then select which are prepared.</p>';
+    wrap.style.opacity = mode === 'prepared' ? '1' : '0.55';
+  }
+
   function wireSpellPicker() {
     const results = $('#m-spell-results');
     const known = $('#m-spell-known');
@@ -3439,6 +4158,7 @@ const FEATURE_SECTION = {
       if ($('#m-cantrips')) $('#m-cantrips').value = cantrips.join(', ');
       if ($('#m-spells')) $('#m-spells').value = leveled.join('\n');
       renderKnown();
+      if (typeof refreshPreparedSpellCheckboxes === 'function') refreshPreparedSpellCheckboxes();
     }
     function renderKnown() {
       const ids = getIds();
@@ -3461,13 +4181,21 @@ const FEATURE_SECTION = {
       const classNames = castingClassNamesFromForm();
       const q = (search?.value || '').trim().toLowerCase();
       const lf = levelF?.value || 'all';
+      try { ensureMoonGuardianSpellList(); } catch (e) {}
       let list = spellsForClasses(classNames);
+      if (!list.length && classNames.some(c => /moon guardian/i.test(c))) {
+        // last resort: any spell matching MG name list
+        list = spellsForClasses(['Moon Guardian']);
+      }
       if (lf !== 'all') list = list.filter(s => String(s.level) === lf);
       if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || (s.school || '').toLowerCase().includes(q) || (s.summary || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
-      list = list.slice(0, 30);
+      list = list.slice(0, 40);
       const have = new Set(getIds());
       if (!list.length) {
-        results.innerHTML = '<p class="muted small">No spells match.</p>';
+        const hint = classNames.length
+          ? `No spells for ${classNames.join(', ')}. ${/moon guardian/i.test(classNames.join(' ')) ? 'Moon Guardian list may still be loading — try clearing search or re-open the sheet.' : 'Try another class or sync spells from Tools.'}`
+          : 'No spells match.';
+        results.innerHTML = `<p class="muted small">${hint}</p>`;
         return;
       }
       results.innerHTML = `<ul class="spell-search-list">${list.map(s => {
@@ -3909,8 +4637,41 @@ function wireInventoryUI() {
       // Rebuild from full multiclass state so slots + combined lists stay correct
       const fakeCh = characterFromSpellForm();
       sec.innerHTML = `<label class="section-label">Spellcasting</label>${spellSlotsEditorHtml(fakeCh)}`;
+      if (typeof wireSlotSteppers === 'function') wireSlotSteppers(sec);
       refreshSpellDc();
       wireSpellPicker();
+        if (typeof wireFeatsEditor === 'function') wireFeatsEditor();
+        if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
+        if (typeof refreshPreparedSpellCheckboxes === 'function') {
+          setTimeout(refreshPreparedSpellCheckboxes, 50);
+          document.getElementById('m-spell-prep-mode')?.addEventListener('change', refreshPreparedSpellCheckboxes);
+        }
+      // Extensions: combat status, attunement, rests
+      const extraHost = document.getElementById('m-char-extras');
+      if (extraHost && window.DSCExtensions) {
+        /* already in body */
+      } else if (window.DSCExtensions) {
+        const sec = document.getElementById('m-spell-section');
+        if (sec && !document.getElementById('m-char-extras')) {
+          const wrap = document.createElement('div');
+          wrap.id = 'm-char-extras';
+          wrap.innerHTML = window.DSCExtensions.characterExtrasHtml(typeof ch !== 'undefined' ? ch : {});
+          sec.parentNode.insertBefore(wrap, sec.nextSibling);
+          window.DSCExtensions.wireCharacterExtras((patch) => {
+            const host = document.getElementById('m-char-extras');
+            if (host && patch?.rest) host.dataset.rest = patch.rest;
+            if (patch?.rest === 'long' && window.DSCExtensions) {
+              const fake = window.DSCExtensions.applyLongRest({
+                hpMax: parseInt(document.getElementById('m-hpmax')?.value, 10) || 1,
+                hp: parseInt(document.getElementById('m-hp')?.value, 10) || 1,
+                spellSlotsUsed: {}
+              });
+              const hp = document.getElementById('m-hp');
+              if (hp) hp.value = fake.hpMax || hp.value;
+            }
+          });
+        }
+      }
     }
     function refreshSpellDc() {
       const ab = $('#m-spell-ab')?.value || defaultSpellAbility(classSel?.value || '');
@@ -3927,7 +4688,10 @@ function wireInventoryUI() {
       const cname = classSel ? classSel.value : '';
       if (skillBox) skillBox.innerHTML = skillPickerHtml(cname, []);
       if (progBox) {
-        let html = progressionTableHtml(cname);
+        const mc = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+        let html = mc.length > 1
+          ? multiclassProgressionHtml({ classes: mc, class: cname })
+          : progressionTableHtml(cname);
         if (cname === 'Moon Guardian') {
           const path = findMoonPath(pathSel?.value);
           if (path) {
@@ -4063,7 +4827,7 @@ function wireInventoryUI() {
           <div class="field"><label>Character Name</label><input type="text" id="m-name" value="${escapeAttr(ch.name)}" placeholder="Character name" /></div>
           <div class="field"><label>Player</label><input type="text" id="m-player" value="${escapeAttr(ch.player)}" placeholder="Player name" /></div>
         </div>
-        <div class="form-row triple hidden" id="m-class-legacy-row">
+        <div class="form-row triple hidden" id="m-class-legacy-row" style="display:none!important" hidden>
           <div class="field"><label>Class</label>
             <select id="m-class">${classOptionsHtml(primaryClassName(ch))}</select>
           </div>
@@ -4083,7 +4847,13 @@ function wireInventoryUI() {
           <div class="field"><label>Ancestry / Race</label>
             <select id="m-race">${raceOptionsHtml(ch.race)}</select>
           </div>
-          <div class="field"><label>Background</label><input type="text" id="m-background" value="${escapeAttr(ch.background)}" /></div>
+          <div class="field"><label>Background</label>
+            <select id="m-background">
+              <option value="">—</option>
+              ${(window.DSCExtensions && window.DSCExtensions.BACKGROUNDS ? window.DSCExtensions.BACKGROUNDS : []).map(b => `<option value="${escapeAttr(b.name)}" ${ch.background === b.name ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+              ${ch.background && !(window.DSCExtensions && window.DSCExtensions.BACKGROUNDS || []).some(b => b.name === ch.background) ? `<option value="${escapeAttr(ch.background)}" selected>${escapeHtml(ch.background)}</option>` : ''}
+            </select>
+          </div>
           <div class="field"><label>Alignment</label><input type="text" id="m-alignment" value="${escapeAttr(ch.alignment)}" placeholder="e.g. NG" /></div>
         </div>
         <div class="form-row">
@@ -4124,7 +4894,7 @@ function wireInventoryUI() {
       </div>
       <div class="sheet-section">
         <label class="section-label">Class Progression</label>
-        <div id="m-class-prog">${progressionTableHtml(ch.class)}</div>
+        <div id="m-class-prog">${multiclassProgressionHtml(ch)}</div>
       </div>
             <div class="sheet-section">
         <label class="section-label">Ability Scores</label>
@@ -4154,6 +4924,8 @@ function wireInventoryUI() {
           ${spellSlotsEditorHtml(ch)}
         </div>
         <div class="field"><label>Features &amp; Traits</label><textarea id="m-features" rows="3" placeholder="Class features, racial traits, feats…">${escapeHtml(ch.features)}</textarea></div>
+        ${featsEditorHtml(ch)}
+        ${resourcesEditorHtml(ch)}
         <div class="field full-width">
           <label>Inventory &amp; Equipment</label>
           <div id="m-inventory-panel" class="inventory-panel">
@@ -4161,7 +4933,7 @@ function wireInventoryUI() {
             <div class="equip-browser">
               <div class="form-row">
                 <div class="field"><label>Quick Search</label>
-                  <input type="search" id="m-equip-search" placeholder="Search armor, weapons, gear…" autocomplete="off" />
+                  <input type="search" id="m-equip-search" placeholder="Search armor, weapons, +1 sword, magic…" autocomplete="off" />
                 </div>
                 <div class="field"><label>Category</label>
                   <select id="m-equip-cat">
@@ -4171,6 +4943,7 @@ function wireInventoryUI() {
                     <option value="weapon">Weapons</option>
                     <option value="gear">Adventuring Gear</option>
                     <option value="tool">Tools</option>
+                    <option value="magic">Magic Items (incl. +1 weapons)</option>
                   </select>
                 </div>
               </div>
@@ -4189,29 +4962,36 @@ function wireInventoryUI() {
       wide: true,
       xwide: true,
       onConfirm: () => {
-        const name = $('#m-name').value.trim();
+        const name = $('#m-name')?.value?.trim();
         if (!name) { toast('Name required'); return false; }
-        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 40);
-        const playerVal = $('#m-player').value.trim();
-        const checked = [...document.querySelectorAll('.m-skill-cb:checked')].map(cb => cb.value);
-        let skillsText = $('#m-skills').value.trim();
+        const mcList = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+        const level = clamp(
+          mcList.length
+            ? mcList.reduce((s, c) => s + (Number(c.level) || 0), 0)
+            : (parseInt($('#m-level')?.value, 10) || 1),
+          1, 40
+        ) || 1;
+        const playerVal = ($('#m-player')?.value || '').trim();
+        const checked = [...document.querySelectorAll('.m-skill-cb:checked, .skill-check:checked')].map(cb => cb.value);
+        let skillsText = ($('#m-skills')?.value || '').trim();
         if (checked.length) {
           skillsText = checked.join(', ');
         }
+        const primary = mcList[0] || {};
         const data = {
           name,
           player: playerVal,
           avatar: ($('#m-avatar-data')?.value || window.__draftAvatar || ''),
           type: existing?.type || (playerVal === 'NPC' ? 'ally' : 'pc'),
-          classes: readMulticlassFromForm(),
-          class: (readMulticlassFromForm()[0] || {}).name || $('#m-class').value.trim(),
-          subclass: (readMulticlassFromForm()[0] || {}).subclass || $('#m-subclass').value.trim(),
-          level: (() => { const list = readMulticlassFromForm(); return list.reduce((s, c) => s + c.level, 0) || 1; })(),
-          race: $('#m-race').value.trim(),
-          background: $('#m-background').value.trim(),
-          alignment: $('#m-alignment').value.trim(),
-          world: $('#m-world').value,
-          corruption: clamp(parseInt($('#m-corruption').value, 10) || 0, 0, 6),
+          classes: mcList.length ? mcList : [{ name: ($('#m-class')?.value || '').trim() || 'Adventurer', level, subclass: ($('#m-subclass')?.value || '').trim() }],
+          class: primary.name || ($('#m-class')?.value || '').trim() || '',
+          subclass: primary.subclass || ($('#m-subclass')?.value || '').trim() || '',
+          level,
+          race: ($('#m-race')?.value || '').trim(),
+          background: ($('#m-background')?.value || '').trim(),
+          alignment: ($('#m-alignment')?.value || '').trim(),
+          world: ($('#m-world')?.value || ''),
+          corruption: clamp(parseInt($('#m-corruption')?.value, 10) || 0, 0, 6),
           isUmbrarian: !!$('#m-umbrarian')?.checked,
           umbrarianStage: $('#m-umb-stage')?.value || '',
           shard: $('#m-umb-shard')?.value || '',
@@ -4220,33 +5000,72 @@ function wireInventoryUI() {
             wis: parseInt($('#m-total-wis')?.textContent, 10) || 10,
             cha: parseInt($('#m-total-cha')?.textContent, 10) || 10
           }),
-          str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str').value, 10) || 10,
-          dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex').value, 10) || 10,
-          con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con').value, 10) || 10,
-          int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int').value, 10) || 10,
-          wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis').value, 10) || 10,
-          cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha').value, 10) || 10,
-          hp: parseInt($('#m-hp').value, 10) || 0,
-          hpMax: parseInt($('#m-hpmax').value, 10) || 0,
-          ac: parseInt($('#m-ac').value, 10) || 10,
-          speed: $('#m-speed').value.trim() || '30 ft.',
-          profBonus: parseInt($('#m-prof').value, 10) || profBonusForLevel(level),
-          saves: $('#m-saves').value.trim(),
+          str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str')?.value, 10) || 10,
+          dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex')?.value, 10) || 10,
+          con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con')?.value, 10) || 10,
+          int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int')?.value, 10) || 10,
+          wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis')?.value, 10) || 10,
+          cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha')?.value, 10) || 10,
+          hp: parseInt($('#m-hp')?.value, 10) || 0,
+          hpMax: parseInt($('#m-hpmax')?.value, 10) || 0,
+          ac: parseInt($('#m-ac')?.value, 10) || 10,
+          speed: ($('#m-speed')?.value || '').trim() || '30 ft.',
+          profBonus: parseInt($('#m-prof')?.value, 10) || profBonusForLevel(level),
+          saves: ($('#m-saves')?.value || '').trim(),
           skills: skillsText,
-          attacks: $('#m-attacks').value.trim(),
-          features: $('#m-features').value.trim(),
+          attacks: ($('#m-attacks')?.value || '').trim(),
+          features: ($('#m-features')?.value || '').trim(),
           spellcastingAbility: $('#m-spell-ab')?.value || '',
-          cantrips: $('#m-cantrips')?.value.trim() || '',
-          spells: $('#m-spells')?.value.trim() || '',
+          cantrips: ($('#m-cantrips')?.value || '').trim() || '',
+          spells: ($('#m-spells')?.value || '').trim() || '',
           spellSlotsUsed: collectSpellSlotsUsed(),
           equipment: ($('#m-equipment')?.value || '').trim() || (window.__draftInventory || []).map(i => i.name + (i.qty > 1 ? ' ×' + i.qty : '') + (i.equipped ? ' (equipped)' : '')).join(', '),
           inventory: (window.__draftInventory || []).map(normalizeInventoryItem),
-          notes: $('#m-notes').value.trim()
+          notes: ($('#m-notes')?.value || '').trim(),
+          spellIds: ($('#m-spell-ids')?.value || '').split(',').map(s => s.trim()).filter(Boolean)
         };
+        try {
+          if (typeof mergeCharacterFormExtras === 'function') data = mergeCharacterFormExtras(data);
+          else if (window.DSCExtensions?.collectCharacterExtras) {
+            Object.assign(data, window.DSCExtensions.collectCharacterExtras());
+          }
+        } catch (e) { console.warn('extras', e); }
+        if (document.getElementById('m-spell-prep-mode')) {
+          data.spellPrepMode = document.getElementById('m-spell-prep-mode').value || 'known';
+        }
+        if (document.getElementById('m-prepared-spells')) {
+          data.preparedSpells = document.getElementById('m-prepared-spells').value || '';
+        }
+        if (document.getElementById('m-inspiration')) {
+          data.inspiration = !!document.getElementById('m-inspiration').checked;
+        }
+        if (document.getElementById('m-ds-ok')) {
+          data.deathSaves = {
+            successes: parseInt(document.getElementById('m-ds-ok').value, 10) || 0,
+            failures: parseInt(document.getElementById('m-ds-fail')?.value, 10) || 0
+          };
+        }
+        if (document.querySelector('.m-cond')) {
+          data.conditions = [...document.querySelectorAll('.m-cond:checked')].map(c => c.value);
+        }
+        const attVals = [document.getElementById('m-attune-1')?.value, document.getElementById('m-attune-2')?.value, document.getElementById('m-attune-3')?.value]
+          .map(s => (s || '').trim()).filter(Boolean).slice(0, 3);
+        if (document.getElementById('m-attune-1')) data.attunement = attVals;
+        if (typeof collectFeatsFromForm === 'function') data.feats = collectFeatsFromForm();
+        if (typeof collectResourcesFromForm === 'function') data.resourceUsed = collectResourcesFromForm();
+        // Rest application
+        const restKind = document.getElementById('m-char-extras')?.dataset?.rest;
+        if (restKind === 'short' && window.DSCExtensions?.applyShortRest) data = window.DSCExtensions.applyShortRest(data);
+        if (restKind === 'long' && window.DSCExtensions?.applyLongRest) data = window.DSCExtensions.applyLongRest(data);
         if (existing) Object.assign(existing, data);
         else c.party.push({ id: uid(), ...data });
         c.updatedAt = new Date().toISOString();
-        save();
+        try { save(); } catch (err) {
+          console.error(err);
+          toast('Storage save failed: ' + (err.message || err));
+          return false;
+        }
+        toast('Character saved');
         return true;
       },
       afterOpen: () => {
@@ -4256,9 +5075,71 @@ function wireInventoryUI() {
         if (avData) avData.value = window.__draftAvatar;
         wireCharacterFormHelpers();
         wireMulticlassEditor(existing);
+        const legacyRow = document.getElementById('m-class-legacy-row');
+        if (legacyRow) { legacyRow.hidden = true; legacyRow.style.display = 'none'; }
         wireInventoryUI();
         wireAvatarPicker();
         wireSpellPicker();
+        if (typeof wireFeatsEditor === 'function') wireFeatsEditor();
+        if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
+        if (typeof refreshPreparedSpellCheckboxes === 'function') {
+          setTimeout(refreshPreparedSpellCheckboxes, 50);
+          document.getElementById('m-spell-prep-mode')?.addEventListener('change', refreshPreparedSpellCheckboxes);
+        }
+        // Background auto-fill from main select
+        (function wireMainBackgroundSelect() {
+          const sel = document.querySelector('#modal-body select#m-background');
+          if (!sel || sel.dataset.bgWired) return;
+          sel.dataset.bgWired = '1';
+          sel.addEventListener('change', () => {
+            const name = sel.value;
+            const list = (window.DSCExtensions && window.DSCExtensions.BACKGROUNDS) || [];
+            const bg = list.find(b => b.name === name);
+            if (!bg) return;
+            const skillList = Array.isArray(bg.skills) ? bg.skills : String(bg.skills || '').split(/,\s*/);
+            skillList.forEach(sk => {
+              document.querySelectorAll('.m-skill-cb, .skill-check').forEach(cb => {
+                if (cb.value && cb.value.toLowerCase() === sk.toLowerCase()) cb.checked = true;
+              });
+            });
+            const skillsTa = document.getElementById('m-skills');
+            if (skillsTa) {
+              const existing = (skillsTa.value || '').split(/,\s*/).map(s => s.trim()).filter(Boolean);
+              skillList.forEach(sk => { if (!existing.some(e => e.toLowerCase() === sk.toLowerCase())) existing.push(sk); });
+              skillsTa.value = existing.join(', ');
+            }
+            const feat = document.getElementById('m-features');
+            if (feat && bg.feature && !feat.value.includes(bg.feature)) {
+              const line = 'Background — ' + bg.feature + '. ' + (bg.featureText || '');
+              feat.value = (feat.value ? feat.value.trim() + '\n\n' : '') + line.trim();
+            }
+          });
+        })();
+
+      // Ensure spell preparation controls exist
+      if (!document.getElementById('m-spell-prep-mode')) {
+        const sec = document.getElementById('m-spell-section');
+        if (sec) {
+          const wrap = document.createElement('div');
+          wrap.id = 'm-char-extras';
+          const prepMode = (typeof ch !== 'undefined' && ch.spellPrepMode) ? ch.spellPrepMode : 'known';
+          const prepList = (typeof ch !== 'undefined' && ch.preparedSpells) ? ch.preparedSpells : '';
+          wrap.innerHTML = (window.DSCExtensions && window.DSCExtensions.characterExtrasHtml)
+            ? window.DSCExtensions.characterExtrasHtml(typeof ch !== 'undefined' ? ch : {})
+            : `<div class="sheet-section"><label class="section-label">Spell preparation</label>
+                <select id="m-spell-prep-mode"><option value="known" ${prepMode==='known'?'selected':''}>Known</option>
+                <option value="prepared" ${prepMode==='prepared'?'selected':''}>Prepared</option></select>
+                <textarea id="m-prepared-spells" rows="2" placeholder="Prepared spells…">${prepList.replace(/</g,'&lt;')}</textarea></div>`;
+          sec.parentNode.insertBefore(wrap, sec.nextSibling);
+          if (window.DSCExtensions?.wireCharacterExtras) {
+            window.DSCExtensions.wireCharacterExtras((patch) => {
+              const host = document.getElementById('m-char-extras');
+              if (host && patch?.rest) host.dataset.rest = patch.rest;
+            });
+          }
+        }
+      }
+
         const grid = $('#ability-grid');
         if (grid) {
           grid.querySelectorAll('.ability-score').forEach(inp => {
@@ -4492,6 +5373,123 @@ function parseAttackLines(ch) {
     return lines;
   }
 
+
+  /** Structured Features & Traits HTML for View / Print */
+  function featuresStructuredHtml(ch) {
+    const raw = String(ch.features || '').trim();
+    const sections = [];
+    // Split on known markers or blank-line blocks starting with "— "
+    const markerRe = /(?:^|\n)(—\s*[^\n]+—)\s*\n/g;
+    const parts = [];
+    let last = 0;
+    let m;
+    const text = raw;
+    const markers = [];
+    while ((m = markerRe.exec(text)) !== null) {
+      markers.push({ title: m[1].trim(), index: m.index + (m[0].startsWith('\n') ? 1 : 0), end: m.index + m[0].length });
+    }
+    if (markers.length) {
+      for (let i = 0; i < markers.length; i++) {
+        const start = markers[i].end;
+        const end = i + 1 < markers.length ? markers[i + 1].index : text.length;
+        sections.push({ title: markers[i].title.replace(/^—\s*|\s*—$/g, '').trim(), body: text.slice(start, end).trim() });
+      }
+      // preamble before first marker
+      const pre = text.slice(0, markers[0].index).trim();
+      if (pre) sections.unshift({ title: 'Notes', body: pre });
+    } else if (raw) {
+      sections.push({ title: 'Features & Traits', body: raw });
+    }
+
+    // Append class features for EVERY multiclass entry (data-driven, not only free text)
+    const classBlocks = multiclassClassFeaturesHtml(ch);
+    const featsBlock = Array.isArray(ch.feats) && ch.feats.length
+      ? `<div class="cs-feat-block"><div class="cs-panel-subtitle">Feats</div><ul class="trait-list compact">${ch.feats.map(f => {
+          const full = (typeof findFeat === 'function' ? findFeat(f.id) : null) || f;
+          return `<li><strong>${escapeHtml(full.name || f.name)}</strong>. ${escapeHtml(full.text || f.text || '')}</li>`;
+        }).join('')}</ul></div>`
+      : '';
+
+    const bodyHtml = sections.length
+      ? sections.map(s => `
+          <div class="cs-feat-block">
+            <div class="cs-panel-subtitle">${escapeHtml(s.title)}</div>
+            <div class="cs-feat-body">${formatFeatureBody(s.body)}</div>
+          </div>`).join('')
+      : '<p class="muted small">No features recorded.</p>';
+
+    return `<div class="cs-features-structured">${bodyHtml}${classBlocks}${featsBlock}</div>`;
+  }
+
+  function formatFeatureBody(body) {
+    if (!body) return '';
+    // Bullet-like lines
+    const lines = String(body).split(/\n+/).map(l => l.trim()).filter(Boolean);
+    if (lines.length <= 1) return `<p class="cs-body">${escapeHtml(body)}</p>`;
+    return `<ul class="trait-list compact">${lines.map(l => {
+      const bold = l.match(/^([^.:—-]{2,40})[.:—-]\s*(.*)$/);
+      if (bold && bold[2]) return `<li><strong>${escapeHtml(bold[1])}.</strong> ${escapeHtml(bold[2])}</li>`;
+      return `<li>${escapeHtml(l)}</li>`;
+    }).join('')}</ul>`;
+  }
+
+  function multiclassClassFeaturesHtml(ch) {
+    const list = normalizeClassLevels(ch);
+    if (!list.length) return '';
+    const abilities = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
+    return list.map(c => {
+      const feats = (abilities[c.name] || []).filter(a => (a.lvl || 0) <= (c.level || 1));
+      const cls = findPhbClass(c.name);
+      const prog = (cls && cls.progression) ? cls.progression.filter(([lvl]) => lvl <= c.level) : [];
+      const sub = c.subclass ? ` · ${escapeHtml(c.subclass)}` : '';
+      let inner = '';
+      if (prog.length) {
+        inner += `<p class="muted small"><strong>Progression:</strong> ${prog.map(([lvl, f]) => `L${lvl} ${escapeHtml(f)}`).join(' · ')}</p>`;
+      }
+      if (feats.length) {
+        inner += `<ul class="trait-list compact">${feats.map(a =>
+          `<li><strong>L${a.lvl} — ${escapeHtml(a.name)}.</strong> ${escapeHtml(a.text || '')}</li>`
+        ).join('')}</ul>`;
+      }
+      // Moon Path features for this class only
+      if (c.name === 'Moon Guardian') {
+        const path = findMoonPath(c.subclass || ch.subclass);
+        if (path) {
+          const pf = (path.features || []).filter(f => f.lvl <= c.level);
+          if (pf.length) {
+            inner += `<p class="muted small"><strong>${escapeHtml(path.name)}</strong></p>`;
+            inner += `<ul class="trait-list compact">${pf.map(f =>
+              `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text || '')}</li>`
+            ).join('')}</ul>`;
+          }
+        }
+      }
+      if (!inner) inner = '<p class="muted small">No detailed features in data for this class level.</p>';
+      return `<div class="cs-feat-block">
+        <div class="cs-panel-subtitle">${escapeHtml(c.name)} ${c.level}${sub}</div>
+        ${inner}
+      </div>`;
+    }).join('');
+  }
+
+  function multiclassSavesHtml(ch) {
+    const list = normalizeClassLevels(ch);
+    const saves = new Set();
+    list.forEach(c => {
+      const cls = findPhbClass(c.name);
+      if (cls && cls.saves) {
+        String(cls.saves).split(/[,&]/).map(s => s.trim()).filter(Boolean).forEach(s => saves.add(s.toUpperCase().slice(0, 3)));
+      }
+    });
+    // Map INT -> Intelligence style for display
+    const map = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution', INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
+    if (saves.size) {
+      return [...saves].map(s => map[s] || s).join(', ');
+    }
+    return ch.saves || '—';
+  }
+
+
   function characterSheetViewHtml(ch) {
     const race = getPhbRaces().find(r => r.name === ch.race);
     const cls = findPhbClass(ch.class);
@@ -4552,6 +5550,7 @@ function parseAttackLines(ch) {
           <button type="button" class="cs-tab active" data-cs-page="1">Page 1 · Combat</button>
           <button type="button" class="cs-tab" data-cs-page="2">Page 2 · Attacks &amp; Spells</button>
           <button type="button" class="cs-tab" data-cs-page="3">Page 3 · Story</button>
+          <button type="button" class="cs-tab" data-cs-page="4">Page 4 · Class Progression</button>
         </div>
 
         <!-- PAGE 1 -->
@@ -4581,7 +5580,7 @@ function parseAttackLines(ch) {
           <div class="cs-main cs-main-classic">
             <div class="cs-col-left">
               <div class="cs-panel"><div class="cs-panel-title">Ability Scores</div><div class="cs-abilities">${abBlock}</div></div>
-              <div class="cs-panel"><div class="cs-panel-title">Saving Throws</div><div class="cs-body">${escapeHtml(ch.saves || '—')}</div></div>
+              <div class="cs-panel"><div class="cs-panel-title">Saving Throws</div><div class="cs-body">${escapeHtml(multiclassSavesHtml(ch))}${normalizeClassLevels(ch).length > 1 ? ' <span class="muted small">(all classes)</span>' : ''}</div></div>
               <div class="cs-panel cs-skills-panel"><div class="cs-panel-title">Skills</div><div class="cs-skills">${skillRows}</div></div>
             </div>
             <div class="cs-col-right">
@@ -4592,7 +5591,7 @@ function parseAttackLines(ch) {
               </div>
               <div class="cs-panel">
                 <div class="cs-panel-title">Features &amp; Traits</div>
-                <pre class="cs-pre cs-pre-scroll">${escapeHtml(ch.features || '—')}</pre>
+                ${featuresStructuredHtml(ch)}
               </div>
               <div class="cs-panel">
                 <div class="cs-panel-title">Equipment</div>
@@ -4645,17 +5644,51 @@ function parseAttackLines(ch) {
               <p class="muted small">${escapeHtml(race.tagline || race.short || '')}</p>
               <ul class="trait-list compact">${(race.traits||[]).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
             </div>` : ''}
-            ${cls ? `<div class="cs-panel"><div class="cs-panel-title">Class — ${escapeHtml(cls.name)}</div>
+            ${normalizeClassLevels(ch).map(c => {
+              const cl = findPhbClass(c.name);
+              if (!cl) return `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(c.name)} ${c.level}</div><p class="muted small">No PHB entry.</p></div>`;
+              return `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(cl.name)} ${c.level}${c.subclass ? ' · ' + escapeHtml(c.subclass) : ''}</div>
+              <p class="muted small">Hit Die ${cl.hitDie} · Primary ${escapeHtml(cl.primary)} · Saves ${escapeHtml(cl.saves)}</p>
+              <p>${escapeHtml(cl.summary || '')}</p>
+            </div>`;
+            }).join('') || (cls ? `<div class="cs-panel"><div class="cs-panel-title">Class — ${escapeHtml(cls.name)}</div>
               <p class="muted small">Hit Die ${cls.hitDie} · Primary ${escapeHtml(cls.primary)} · Saves ${escapeHtml(cls.saves)}</p>
               <p>${escapeHtml(cls.summary || '')}</p>
-            </div>` : ''}
-            ${path ? `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(path.name)}</div>
-              <p class="muted small">${escapeHtml(path.summary || '')}</p>
-              <ul class="trait-list compact">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
-            </div>` : ''}
+            </div>` : '')}
+            ${(() => {
+              const mg = normalizeClassLevels(ch).find(c => c.name === 'Moon Guardian');
+              const p = mg ? findMoonPath(mg.subclass || ch.subclass) : null;
+              if (!p) return '';
+              const lvl = mg.level || 1;
+              return `<div class="cs-panel"><div class="cs-panel-title">${escapeHtml(p.name)} (Moon Guardian ${lvl})</div>
+              <p class="muted small">${escapeHtml(p.summary || '')}</p>
+              <ul class="trait-list compact">${(p.features||[]).filter(f => f.lvl <= lvl).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
+            </div>`;
+            })()}
             ${ch.isUmbrarian ? umbrarianSheetBlock(ch) : ''}
+            ${resourcesSheetHtml(ch)}
+            ${featsSheetHtml(ch)}
+            ${ch.inspiration || (ch.deathSaves && (ch.deathSaves.successes || ch.deathSaves.failures)) || (ch.conditions && ch.conditions.length) || (ch.attunement && ch.attunement.length) ? `<div class="cs-panel"><div class="cs-panel-title">Status</div>
+              <div class="cs-body">
+                ${ch.inspiration ? '<div><strong>Inspiration:</strong> Yes</div>' : ''}
+                ${ch.deathSaves ? `<div><strong>Death saves:</strong> ${(ch.deathSaves.successes||0)} success / ${(ch.deathSaves.failures||0)} fail</div>` : ''}
+                ${ch.conditions && ch.conditions.length ? `<div><strong>Conditions:</strong> ${ch.conditions.map(c => escapeHtml(c)).join(', ')}</div>` : ''}
+                ${ch.attunement && ch.attunement.length ? `<div><strong>Attunement:</strong> ${ch.attunement.map(a => escapeHtml(a)).join(', ')}</div>` : ''}
+              </div></div>` : ''}
             ${ch.notes ? `<div class="cs-panel"><div class="cs-panel-title">Notes &amp; Backstory</div><pre class="cs-pre">${escapeHtml(ch.notes)}</pre></div>` : ''}
           </div>
+        </div>
+
+
+        <!-- PAGE 4 · Class Progression -->
+        <div class="cs-page" data-cs-page="4">
+          <div class="cs-page-title">Class Progression</div>
+          <p class="muted small">Features and progression for each of your classes (multiclass lists every class).</p>
+          <div class="cs-panel">${multiclassProgressionHtml(ch)}</div>
+          <div class="cs-panel" style="margin-top:0.75rem"><div class="cs-panel-title">Class Features (all levels)</div>${multiclassClassFeaturesHtml(ch)}</div>
+          ${featsSheetHtml(ch)}
+          ${ch.spellPrepMode === 'prepared' && ch.preparedSpells ? `<div class="cs-panel" style="margin-top:1rem"><div class="cs-panel-title">Prepared Spells</div><div class="cs-body">${escapeHtml(ch.preparedSpells)}</div></div>` : ''}
+          ${Array.isArray(ch.attunement) && ch.attunement.length ? `<div class="cs-panel" style="margin-top:1rem"><div class="cs-panel-title">Attunement</div><div class="cs-body">${ch.attunement.map(a => escapeHtml(a)).join(', ')}</div></div>` : ''}
         </div>
 
         <p class="cs-footer-brand muted small">The Dark Sun Chronicles · Character Sheet</p>
@@ -4783,7 +5816,7 @@ function parseAttackLines(ch) {
           ${portraitHtml(ch)}
           <div class="p-id">
             <div class="p-name">${escapeHtml(ch.name || 'Unnamed')}</div>
-            <div class="p-meta">${escapeHtml(ch.class || '—')}${ch.subclass ? ' · ' + escapeHtml(ch.subclass) : ''} · Level ${ch.level}</div>
+            <div class="p-meta">${escapeHtml(classLevelsSummary(ch))} · Level ${totalCharacterLevel(ch)}</div>
             <div class="p-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
           </div>
           <div class="p-head-stats">
@@ -4803,12 +5836,18 @@ function parseAttackLines(ch) {
         <div class="p-grid p-grid-fill">
           <div class="p-col">
             <section class="p-panel">
+              <h3>Class Progression</h3>
+              ${multiclassProgressionHtml(ch)}
+            </section>
+            <section class="p-panel"><h3>Features &amp; Traits</h3>${featuresStructuredHtml(ch)}</section>
+            ${Array.isArray(ch.feats) && ch.feats.length ? '' : ''}
+            <section class="p-panel">
               <h3>Ability Scores</h3>
               <div class="p-abs">${abBlock}</div>
             </section>
             <section class="p-panel">
               <h3>Saving Throws</h3>
-              <div>${escapeHtml(ch.saves || '—')}</div>
+              <div>${escapeHtml(multiclassSavesHtml(ch))}</div>
             </section>
             <section class="p-panel">
               <h3>Skills</h3>
@@ -5173,31 +6212,31 @@ function parseAttackLines(ch) {
         });
       },
       onConfirm: () => {
-        const name = $('#m-name').value.trim();
+        const name = $('#m-name')?.value?.trim();
         if (!name) { toast('Name required'); return false; }
-        const level = clamp(parseInt($('#m-level').value, 10) || 1, 1, 40);
+        const level = clamp(parseInt($('#m-level')?.value, 10) || 1, 1, 40);
         const data = {
           name,
           player: 'NPC',
           type: 'villain',
-          class: $('#m-class').value.trim(),
+          class: $('#m-class')?.value?.trim() || '',
           level,
           world: $('#m-world').value,
           corruption: clamp(parseInt($('#m-corruption').value, 10) || 0, 0, 10),
-          str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str').value, 10) || 10,
-          dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex').value, 10) || 10,
-          con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con').value, 10) || 10,
-          int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int').value, 10) || 10,
-          wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis').value, 10) || 10,
-          cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha').value, 10) || 10,
-          hp: parseInt($('#m-hp').value, 10) || 0,
-          hpMax: parseInt($('#m-hpmax').value, 10) || 0,
-          ac: parseInt($('#m-ac').value, 10) || 10,
-          speed: $('#m-speed').value.trim() || '30 ft.',
-          profBonus: parseInt($('#m-prof').value, 10) || profBonusForLevel(level),
-          attacks: $('#m-attacks').value.trim(),
-          features: $('#m-features').value.trim(),
-          notes: $('#m-notes').value.trim(),
+          str: parseInt($('#m-total-str')?.textContent, 10) || parseInt($('#m-str')?.value, 10) || 10,
+          dex: parseInt($('#m-total-dex')?.textContent, 10) || parseInt($('#m-dex')?.value, 10) || 10,
+          con: parseInt($('#m-total-con')?.textContent, 10) || parseInt($('#m-con')?.value, 10) || 10,
+          int: parseInt($('#m-total-int')?.textContent, 10) || parseInt($('#m-int')?.value, 10) || 10,
+          wis: parseInt($('#m-total-wis')?.textContent, 10) || parseInt($('#m-wis')?.value, 10) || 10,
+          cha: parseInt($('#m-total-cha')?.textContent, 10) || parseInt($('#m-cha')?.value, 10) || 10,
+          hp: parseInt($('#m-hp')?.value, 10) || 0,
+          hpMax: parseInt($('#m-hpmax')?.value, 10) || 0,
+          ac: parseInt($('#m-ac')?.value, 10) || 10,
+          speed: ($('#m-speed')?.value || '').trim() || '30 ft.',
+          profBonus: parseInt($('#m-prof')?.value, 10) || profBonusForLevel(level),
+          attacks: ($('#m-attacks')?.value || '').trim(),
+          features: ($('#m-features')?.value || '').trim(),
+          notes: ($('#m-notes')?.value || '').trim(),
           subclass: '', race: '', background: '', alignment: '', saves: '', skills: '', equipment: ''
         };
         if (existing) Object.assign(existing, data);
@@ -5252,7 +6291,7 @@ function parseAttackLines(ch) {
       title: existing ? 'Edit Faction' : 'Add Faction',
       bodyHtml: body,
       onConfirm: () => {
-        const name = $('#m-name').value.trim();
+        const name = $('#m-name')?.value?.trim();
         if (!name) {
           toast('Name required');
           return false;
@@ -5265,7 +6304,7 @@ function parseAttackLines(ch) {
           type: $('#m-type').value.trim(),
           world: $('#m-world').value,
           reputation: rep,
-          notes: $('#m-notes').value.trim(),
+          notes: ($('#m-notes')?.value || '').trim(),
         };
         if (existing) {
           Object.assign(existing, data);
@@ -5459,7 +6498,7 @@ function parseAttackLines(ch) {
       title: existing ? 'Edit Force — Dynamic Influence' : 'Add Active Force',
       bodyHtml: body,
       onConfirm: () => {
-        const name = $('#m-name').value.trim();
+        const name = $('#m-name')?.value?.trim();
         if (!name) { toast('Name required'); return false; }
         const data = {
           name,
@@ -6235,8 +7274,8 @@ function parseAttackLines(ch) {
               <div class="field"><label>Max HP</label><input type="number" id="m-hpmax" value="${cb.hpMax}" /></div>
             </div>`,
           onConfirm: () => {
-            cb.hp = parseInt($('#m-hp').value, 10) || 0;
-            cb.hpMax = parseInt($('#m-hpmax').value, 10) || cb.hpMax;
+            cb.hp = parseInt($('#m-hp')?.value, 10) || 0;
+            cb.hpMax = parseInt($('#m-hpmax')?.value, 10) || cb.hpMax;
             save();
             return true;
           }
@@ -6411,10 +7450,10 @@ function parseAttackLines(ch) {
       `,
       confirmText: 'Add',
       onConfirm: () => {
-        const name = $('#m-name').value.trim();
+        const name = $('#m-name')?.value?.trim();
         if (!name) { toast('Name required'); return false; }
         const combat = getCombat(c);
-        const hp = parseInt($('#m-hp').value, 10) || 1;
+        const hp = parseInt($('#m-hp')?.value, 10) || 1;
         combat.combatants.push({
           id: uid(),
           sourceId: null,
@@ -6422,10 +7461,10 @@ function parseAttackLines(ch) {
           init: parseInt($('#m-init').value, 10) || 0,
           hp,
           hpMax: hp,
-          ac: parseInt($('#m-ac').value, 10) || 10,
+          ac: parseInt($('#m-ac')?.value, 10) || 10,
           conditions: '',
           side: $('#m-side').value || 'enemy',
-          notes: $('#m-notes').value.trim()
+          notes: ($('#m-notes')?.value || '').trim()
         });
         save();
         return true;
@@ -6850,6 +7889,25 @@ function renderUmbrarians() {
         renderBestiary();
       });
     });
+    const refBtn = document.getElementById('bestiary-refresh-btn');
+    if (refBtn && !refBtn.dataset.wired) {
+      refBtn.dataset.wired = '1';
+      refBtn.addEventListener('click', async () => {
+        refBtn.disabled = true;
+        try {
+          if (typeof loadUserCompendiumAsync === 'function') await loadUserCompendiumAsync();
+          if (typeof applyCompendiumToRuntime === 'function') applyCompendiumToRuntime();
+          if (typeof refreshBestiaryRef === 'function') refreshBestiaryRef();
+          renderBestiary();
+          toast('Bestiary refreshed');
+        } catch (e) {
+          console.warn(e);
+          toast('Refresh failed');
+        } finally {
+          refBtn.disabled = false;
+        }
+      });
+    }
   }
 
   // ─── Dice Roller ─────────────────────────────────────────────────────────
@@ -7052,6 +8110,10 @@ function renderUmbrarians() {
     loadUserCompendiumAsync().then(() => {
       try { applyCompendiumToRuntime(); } catch (e) { console.warn(e); }
       if (typeof renderCompendiumTools === 'function' && $('#compendium-tools')) renderCompendiumTools();
+      if ($('#feature-compendium-tools') && typeof renderFeatureCompendium === 'function') renderFeatureCompendium($('#feature-compendium-tools'));
+      if (window.DSCExtensions && $('#extensions-tools')) {
+        window.DSCExtensions.renderExtensionsTools($('#extensions-tools'), { player: false });
+      }
       if (typeof renderBestiary === 'function' && $('#view-bestiary')?.classList.contains('active')) renderBestiary();
     }).catch(e => console.warn(e));
     try { applyCompendiumToRuntime(); } catch (e) { console.warn(e); }
@@ -7121,3 +8183,5 @@ function renderUmbrarians() {
     init();
   }
 })();
+
+  try { window.importCompendiumPack = importCompendiumPack; } catch (e) {}

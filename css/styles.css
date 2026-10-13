@@ -2557,3 +2557,130 @@ table, .prog-table td {
 .modal-footer button.btn.primary {
   color: #1a1208 !important;
 }
+
+/* Feats editor */
+.feat-chips { display:flex; flex-wrap:wrap; gap:0.35rem; margin:0.35rem 0 0.5rem; min-height:1.5rem; }
+.feat-chip { display:inline-flex; align-items:center; gap:0.25rem; background:rgba(201,162,39,0.15); border:1px solid rgba(201,162,39,0.45); color:#f0ebe3; padding:0.2rem 0.45rem; border-radius:999px; font-size:0.85rem; }
+.feat-chip .feat-remove { background:transparent; border:0; color:#e8c56a; cursor:pointer; font-size:1rem; line-height:1; padding:0 0.15rem; }
+.feat-chip .feat-remove:hover { color:#fff; }
+#m-feat-pick { background:#1a1208; color:#f0ebe3; border:1px solid rgba(201,162,39,0.35); border-radius:6px; }
+
+/* Spell slot chips — force readable numbers */
+.spell-slot-chip {
+  color: #f0ebe3 !important;
+}
+.spell-slot-chip input.m-slot,
+.spell-slot-chip input[type="number"],
+#m-slot-pact {
+  width: 3.2rem !important;
+  min-width: 3.2rem;
+  color: #f0ebe3 !important;
+  background: #1a1208 !important;
+  border: 1px solid rgba(201,162,39,0.55) !important;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  -moz-appearance: textfield;
+}
+.spell-slot-chip input::-webkit-outer-spin-button,
+.spell-slot-chip input::-webkit-inner-spin-button {
+  opacity: 1;
+}
+.resource-track {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.4rem 0;
+}
+.resource-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.55rem; border-radius: 8px;
+  border: 1px solid rgba(201,162,39,0.4);
+  background: rgba(26,18,8,0.85); color: #f0ebe3; font-size: 0.85rem;
+}
+.resource-chip input[type="number"] {
+  width: 3rem !important; color: #f0ebe3 !important;
+  background: #120c06 !important; border: 1px solid rgba(201,162,39,0.45) !important;
+  text-align: center; font-weight: 700;
+}
+.feature-compendium-results { max-height: 320px; overflow-y: auto; }
+.feature-comp-item {
+  padding: 0.5rem 0.4rem; border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.feature-comp-item strong { color: #e8c56a; }
+
+/* High-contrast resource / slot steppers (no native number spinner) */
+.slot-stepper, .res-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid rgba(201,162,39,0.5);
+  border-radius: 8px;
+  background: #1a1208;
+  color: #f5f0e6;
+}
+.slot-stepper .slot-label, .res-stepper .res-label {
+  font-size: 0.8rem;
+  color: #e8c56a;
+  min-width: 1.4rem;
+}
+.slot-stepper .slot-val, .res-stepper .res-val {
+  min-width: 1.6rem;
+  text-align: center;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #fffdf8 !important;
+  font-variant-numeric: tabular-nums;
+}
+.slot-stepper .slot-max, .res-stepper .res-max {
+  color: #cfc6b4;
+  font-size: 0.85rem;
+}
+.slot-stepper button, .res-stepper button {
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 4px;
+  border: 1px solid rgba(201,162,39,0.55);
+  background: #2a1f0e;
+  color: #f0e6d0 !important;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+.slot-stepper button:hover, .res-stepper button:hover {
+  background: #3d2e14;
+  color: #fff !important;
+}
+.equip-badge-magic {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(120, 80, 200, 0.35);
+  color: #e8d8ff;
+  margin-left: 0.25rem;
+  border: 1px solid rgba(180,140,255,0.4);
+}
+
+/* Structured Features & Traits (View / Print) */
+.cs-features-structured { display: flex; flex-direction: column; gap: 0.65rem; }
+.cs-feat-block {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(201,162,39,0.22);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.18);
+}
+.cs-panel-subtitle {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e8c56a;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+.cs-feat-body { color: #f0ebe3; font-size: 0.88rem; line-height: 1.45; }
+.cs-feat-body .trait-list { margin: 0.2rem 0 0; }
+.cs-features-structured .trait-list li { margin-bottom: 0.25rem; }
+@media print {
+  .cs-feat-block { break-inside: avoid; background: transparent; border-color: #ccc; }
+  .cs-panel-subtitle { color: #333; }
+}
