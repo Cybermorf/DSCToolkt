@@ -2127,9 +2127,48 @@
   }
 
   function spellsForClass(className) {
+    return spellsForClasses(className ? [className] : []);
+  }
+
+  function spellsForClasses(classNames) {
     const lib = getSpellLibrary();
-    if (!className) return lib;
-    return lib.filter(s => (s.classes || []).includes(className));
+    const names = (Array.isArray(classNames) ? classNames : [classNames])
+      .map(n => String(n || '').trim())
+      .filter(Boolean);
+    if (!names.length) return lib.slice();
+    const set = new Set(names);
+    // Union of spell lists for all casting classes (PHB multiclass)
+    return lib.filter(s => {
+      const sc = s.classes || [];
+      if (!sc.length) return false;
+      return sc.some(c => set.has(c));
+    });
+  }
+
+  function castingClassNamesFromForm() {
+    const list = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+    if (list.length) return list.map(c => c.name).filter(Boolean);
+    const one = $('#m-class')?.value?.trim();
+    return one ? [one] : [];
+  }
+
+  function characterFromSpellForm() {
+    const list = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+    const primary = list[0]?.name || $('#m-class')?.value || '';
+    const total = list.length
+      ? list.reduce((s, c) => s + (c.level || 0), 0)
+      : clamp(parseInt($('#m-level')?.value, 10) || 1, 1, 40);
+    return {
+      class: primary,
+      subclass: list[0]?.subclass || $('#m-subclass')?.value || '',
+      level: total || 1,
+      classes: list.length ? list : (primary ? [{ name: primary, level: total || 1, subclass: $('#m-subclass')?.value || '' }] : []),
+      spellcastingAbility: $('#m-spell-ab')?.value || defaultSpellAbility(primary),
+      spellSlotsUsed: collectSpellSlotsUsed(),
+      cantrips: $('#m-cantrips')?.value || '',
+      spells: $('#m-spells')?.value || '',
+      spellIds: ($('#m-spell-ids')?.value || '').split(',').map(s => s.trim()).filter(Boolean)
+    };
   }
 
   function parseKnownSpellIds(ch) {
@@ -2513,14 +2552,23 @@
 
   function spellSlotsEditorHtml(ch) {
     const list = normalizeClassLevels(ch);
-    const multi = list.length > 1 || multiclassCasterLevel(ch) > 0 || warlockLevels(ch) > 0;
     const primary = primaryClassName(ch);
-    const type = multi ? (multiclassCasterLevel(ch) > 0 ? 'full' : (warlockLevels(ch) > 0 ? 'pact' : getCasterType(primary))) : getCasterType(primary);
-    if (type === 'none' && warlockLevels(ch) === 0) {
-      return `<p class="muted small" id="m-spell-none">This class has no spell slots. (Subclass casting can be tracked in Features.)</p>
+    const casterLvl = multiclassCasterLevel(ch);
+    const wl = warlockLevels(ch);
+    const castingClasses = list.filter(c => {
+      const t = getCasterType(c.name);
+      return t === 'full' || t === 'half' || t === 'pact' ||
+        (['Fighter', 'Rogue'].includes(c.name) && /eldritch|arcane trickster|trickster/i.test(c.subclass || ''));
+    });
+    const multiCaster = castingClasses.length > 1 || (list.length > 1 && casterLvl > 0);
+    if (casterLvl <= 0 && wl <= 0 && getCasterType(primary) === 'none') {
+      return `<p class="muted small" id="m-spell-none">No spell slots for the current class mix. (Subclass casting can be tracked in Features.)</p>
         <div id="m-spell-body" class="hidden"></div>`;
     }
-    const maxes = multi || list.length > 1 ? getMulticlassSpellSlotMaxes(ch) : getSpellSlotMaxes(primary, totalCharacterLevel(ch));
+    // Multiclass: PHB combined slot table from all caster levels. Single class: that class table.
+    const maxes = (multiCaster || (list.length > 1 && (casterLvl > 0 || wl > 0)))
+      ? getMulticlassSpellSlotMaxes(ch)
+      : getSpellSlotMaxes(primary, (list.find(c => c.name === primary) || {}).level || totalCharacterLevel(ch));
     const used = ch.spellSlotsUsed || {};
     let slotsHtml = '';
     {
@@ -2542,6 +2590,10 @@
         <p class="muted small">Warlock pact slots recover on a Short Rest. Multiclass spell slots (above) use Long Rest.</p>`;
       }
       if (!slotsHtml) slotsHtml = `<p class="muted small">No spell slots at this level.</p>`;
+      if (list.length > 1 && (casterLvl > 0 || wl > 0)) {
+        const bits = castingClasses.map(c => `${c.name} ${c.level}`).join(' + ');
+        slotsHtml = `<p class="muted small">Multiclass slots from: <strong>${escapeHtml(bits || 'casters')}</strong> (caster level ${casterLvl}${wl ? ', Warlock ' + wl : ''})</p>` + slotsHtml;
+      }
     }
     const ab = ch.spellcastingAbility || defaultSpellAbility(ch.class);
     return `
@@ -2596,22 +2648,32 @@
   }
 
   function spellSheetBlock(ch) {
-    const type = getCasterType(ch.class);
-    if (type === 'none' && !(ch.spells || ch.cantrips)) return '';
-    const ab = ch.spellcastingAbility || defaultSpellAbility(ch.class) || 'WIS';
-    const pb = ch.profBonus || 2;
+    const list = normalizeClassLevels(ch);
+    const casterLvl = multiclassCasterLevel(ch);
+    const wl = warlockLevels(ch);
+    const type = getCasterType(primaryClassName(ch));
+    if (type === 'none' && casterLvl <= 0 && wl <= 0 && !(ch.spells || ch.cantrips || (ch.spellIds || []).length)) return '';
+    const ab = ch.spellcastingAbility || defaultSpellAbility(primaryClassName(ch)) || 'WIS';
+    const pb = ch.profBonus || profBonusForTotalLevel(totalCharacterLevel(ch));
     const info = computeSpellDcAtk(ab, ch, pb);
-    const maxes = getSpellSlotMaxes(ch.class, ch.level);
+    const multiCaster = list.length > 1 && (casterLvl > 0 || wl > 0);
+    const maxes = multiCaster || (casterLvl > 0 && list.length > 1)
+      ? getMulticlassSpellSlotMaxes(ch)
+      : (type !== 'none'
+          ? getSpellSlotMaxes(primaryClassName(ch), (list.find(c => c.name === primaryClassName(ch)) || {}).level || ch.level || 1)
+          : getMulticlassSpellSlotMaxes(ch));
     const used = ch.spellSlotsUsed || {};
     let slotsLine = '';
-    if (type === 'pact') {
-      const u = used.pact != null ? used.pact : 0;
-      slotsLine = `Pact L${maxes.pactLevel}: ${u}/${maxes.pactCount}`;
-    } else if (type !== 'none') {
-      slotsLine = Object.keys(maxes).map(Number).sort((a,b)=>a-b).map(sl => {
+    const levelKeys = Object.keys(maxes).map(Number).filter(n => !isNaN(n)).sort((a,b)=>a-b);
+    if (levelKeys.length) {
+      slotsLine = levelKeys.map(sl => {
         const u = used[sl] != null ? used[sl] : 0;
         return `L${sl} ${u}/${maxes[sl]}`;
       }).join(' · ');
+    }
+    if (maxes.pactLevel) {
+      const u = used.pact != null ? used.pact : 0;
+      slotsLine = (slotsLine ? slotsLine + ' · ' : '') + `Pact L${maxes.pactLevel}: ${u}/${maxes.pactCount}`;
     }
     const cantrips = (ch.cantrips || '').trim();
     const spells = (ch.spells || '').trim();
@@ -2929,10 +2991,10 @@ const FEATURE_SECTION = {
     }
     function refreshResults() {
       if (!results) return;
-      const cname = $('#m-class')?.value || '';
+      const classNames = castingClassNamesFromForm();
       const q = (search?.value || '').trim().toLowerCase();
       const lf = levelF?.value || 'all';
-      let list = spellsForClass(cname);
+      let list = spellsForClasses(classNames);
       if (lf !== 'all') list = list.filter(s => String(s.level) === lf);
       if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || (s.school || '').toLowerCase().includes(q) || (s.summary || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
       list = list.slice(0, 30);
@@ -3377,18 +3439,8 @@ function wireInventoryUI() {
     function refreshSpellSection() {
       const sec = $('#m-spell-section');
       if (!sec) return;
-      const cname = classSel?.value || '';
-      const lvl = clamp(parseInt(levelInp?.value, 10) || 1, 1, 20);
-      const type = getCasterType(cname);
-      // Rebuild editor when class/level changes
-      const fakeCh = {
-        class: cname,
-        level: lvl,
-        spellcastingAbility: $('#m-spell-ab')?.value || defaultSpellAbility(cname),
-        spellSlotsUsed: collectSpellSlotsUsed(),
-        cantrips: $('#m-cantrips')?.value || '',
-        spells: $('#m-spells')?.value || ''
-      };
+      // Rebuild from full multiclass state so slots + combined lists stay correct
+      const fakeCh = characterFromSpellForm();
       sec.innerHTML = `<label class="section-label">Spellcasting</label>${spellSlotsEditorHtml(fakeCh)}`;
       refreshSpellDc();
       wireSpellPicker();

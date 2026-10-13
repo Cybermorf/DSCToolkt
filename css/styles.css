@@ -1511,8 +1511,9 @@ label.small {
 }
 .detail-text {
   font-size: 0.88rem;
-  color: var(--text-dim);
+  color: #f0ebe3;
   line-height: 1.45;
+  white-space: pre-wrap;
 }
 .combatant-row.selected {
   border-color: var(--accent-dim);
@@ -2428,28 +2429,6 @@ label.small {
 }
 
 
-/* Print-matched sheet text (parchment cream) */
-.cs-sheet, .cs-sheet .cs-body, .cs-sheet .cs-pre, .cs-sheet .trait-list,
-.cs-sheet .detail-text, .modal-body, .view, .card, .creature-card {
-  color: var(--text);
-}
-.cs-sheet .muted, .muted, .cs-char-meta, .cs-stat-label, .cs-panel-title {
-  color: var(--text-muted);
-}
-.cs-char-name, .cs-stat-val, .cs-mini-val, .spell-card-name, .cs-page-title {
-  color: #f0e6d0;
-}
-.cs-panel-title, .section-label, h1, h2, h3 {
-  color: var(--accent);
-}
-input, select, textarea {
-  color: var(--text);
-}
-input::placeholder, textarea::placeholder {
-  color: var(--text-dim);
-}
-
-
 /* Multiclass editor */
 .multiclass-editor {
   border: 1px solid rgba(196,163,90,0.3);
@@ -2479,4 +2458,102 @@ input::placeholder, textarea::placeholder {
 }
 .mc-row select, .mc-row input[type="number"], .mc-row input[type="text"] {
   width: 100%;
+}
+
+/* Print-matched sheet text (parchment cream) */
+.cs-sheet, .cs-sheet .cs-body, .cs-sheet .cs-pre, .cs-sheet .trait-list,
+.cs-sheet .detail-text, .modal-body, .view, .card, .creature-card {
+  color: #e8dcc8;
+}
+.cs-sheet .muted, .cs-char-meta, .cs-stat-label {
+  color: #a89880;
+}
+.cs-char-name, .cs-stat-val, .cs-mini-val, .spell-card-name, .cs-page-title {
+  color: #f0e6d0;
+}
+.cs-panel-title, .section-label, h1, h2, h3 {
+  color: #c4a35a;
+}
+input, select, textarea {
+  color: #e8dcc8;
+}
+input::placeholder, textarea::placeholder {
+  color: #7a6c5c;
+}
+
+/* Global readable text — cream/white body, not dim gold-on-gold */
+body, #app, .main-content, .view, .card, .modal-content, .modal-body,
+.detail-text, .cs-body, .cs-pre, pre, .trait-list, .generator-output,
+.creature-card, .combat-detail, .force-turn-list, .spell-card-desc {
+  color: #f0ebe3 !important;
+}
+/* Markdown-ish body in modals / bestiary (Alignment, Traits, Actions…) */
+.modal-body p, .modal-body li, .modal-body td, .modal-body span,
+.detail-block .detail-text, .detail-block p, .detail-block li,
+#bestiary-list, .bestiary-grid, .npc-block, .gen-result {
+  color: #f0ebe3 !important;
+}
+.detail-text, .cs-pre, pre.cs-pre {
+  color: #f5f0e8 !important;
+  opacity: 1;
+}
+strong, b {
+  color: #fff8ee !important;
+  font-weight: 700;
+}
+/* Labels / secondary stay softer but still readable */
+.muted, .muted.small, .text-muted, .view-desc, .brand-sub,
+.cs-stat-label, .cs-char-meta, .detail-label, label {
+  color: #b5a690 !important;
+}
+h1, h2, h3, h4, .brand-title, .section-label, .cs-panel-title,
+.view-header h1, .card h3, .detail-label {
+  color: #c4a35a !important;
+}
+.nav-item {
+  color: #b5a690 !important;
+}
+.nav-item.active {
+  color: #f0e6d0 !important;
+}
+/* Form controls */
+input, select, textarea {
+  color: #f0ebe3 !important;
+  background-color: var(--bg-elevated);
+}
+input::placeholder, textarea::placeholder {
+  color: #7a6c5c !important;
+}
+table, .prog-table td {
+  color: #f0ebe3 !important;
+}
+.prog-table th {
+  color: #c4a35a !important;
+}
+
+/* Buttons — never force gold text on gold fill */
+.btn {
+  color: #f0ebe3 !important;
+}
+.btn.primary {
+  background: #c4a35a !important;
+  color: #1a1208 !important;
+  border-color: #c4a35a !important;
+}
+.btn.primary:hover {
+  background: #d4b56a !important;
+  color: #1a1208 !important;
+}
+.btn.secondary {
+  color: #f0ebe3 !important;
+}
+.btn.danger {
+  color: #e8a090 !important;
+}
+.btn.ghost, .text-btn {
+  color: #c4a35a !important;
+}
+.modal-footer .btn.primary,
+.modal-footer button.btn.primary {
+  color: #1a1208 !important;
 }
