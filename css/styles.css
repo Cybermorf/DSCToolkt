@@ -2684,3 +2684,42 @@ table, .prog-table td {
   .cs-feat-block { break-inside: avoid; background: transparent; border-color: #ccc; }
   .cs-panel-subtitle { color: #333; }
 }
+
+/* Class resources bar (View / Print) */
+.cs-resources-panel { margin-top: 0.65rem; }
+.cs-resource-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.cs-resource-pill {
+  min-width: 7.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(201,162,39,0.5);
+  background: linear-gradient(145deg, rgba(42,30,12,0.95), rgba(20,14,6,0.98));
+  text-align: center;
+}
+.cs-res-name {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #e8c56a;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+.cs-res-val {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #fffdf8;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.cs-res-sep { color: #a89878; font-weight: 500; margin: 0 0.1rem; }
+.cs-res-max { color: #cfc6b4; font-weight: 600; font-size: 1.05rem; }
+.cs-res-sub { font-size: 0.68rem; margin-top: 0.15rem; max-width: 11rem; }
+@media print {
+  .cs-resource-pill { border-color: #999; background: #f8f4ea; }
+  .cs-res-name { color: #664; }
+  .cs-res-val { color: #111; }
+}

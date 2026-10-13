@@ -1183,7 +1183,8 @@
 
 
 
-  // ─── Class resource pools (Ki, Lunar Charges, Rage, etc.) ───────────────
+
+  // ─── Class resource pools (Ki, Lunar Charges, Rage, Channel Divinity, etc.) ─
   function lunarChargesMax(mgLevel) {
     const L = clamp(Number(mgLevel) || 0, 0, 40);
     if (L < 2) return 0;
@@ -1191,55 +1192,143 @@
     if (L < 9) return 3;
     if (L < 13) return 4;
     if (L < 17) return 5;
-    // L10+ Improved Lunar Charges: +1 from base table band
     let n = 6;
     if (L >= 10) n += 1;
-    if (L >= 17) n += 1; // Lunar Mastery
+    if (L >= 17) n += 1;
     return n;
   }
 
   function classResourcesForCharacter(ch) {
     const list = normalizeClassLevels(ch);
     const resources = [];
+    const push = (id, label, max, recover, className) => {
+      if (max <= 0) return;
+      resources.push({
+        id,
+        label,
+        max,
+        recover: recover || '',
+        className: className || ''
+      });
+    };
+
     list.forEach(c => {
       const name = c.name;
-      const lvl = c.level || 1;
+      const lvl = clamp(Number(c.level) || 1, 1, 40);
+      const sub = (c.subclass || '').toLowerCase();
+
+      // Monk
       if (name === 'Monk' && lvl >= 2) {
-        resources.push({ id: 'ki', label: 'Ki Points', max: lvl, recover: 'Short Rest' });
+        push('ki', 'Ki Points', lvl, 'Short Rest', 'Monk');
       }
+      // Moon Guardian
       if (name === 'Moon Guardian' && lvl >= 2) {
-        resources.push({
-          id: 'lunar',
-          label: 'Lunar Charges',
-          max: lunarChargesMax(lvl),
-          recover: 'Long Rest (Lunar Recovery: some on Short Rest, 1/LR)'
-        });
+        push('lunar', 'Lunar Charges', lunarChargesMax(lvl), 'Long Rest; Lunar Recovery (half on Short Rest, 1/LR)', 'Moon Guardian');
       }
-      if (name === 'Barbarian' && lvl >= 1) {
-        const rage = lvl < 3 ? 2 : lvl < 6 ? 3 : lvl < 12 ? 4 : lvl < 17 ? 5 : 6;
-        resources.push({ id: 'rage', label: 'Rages', max: rage, recover: 'Long Rest' });
+      // Barbarian
+      if (name === 'Barbarian') {
+        const rage = lvl < 3 ? 2 : lvl < 6 ? 3 : lvl < 12 ? 4 : lvl < 17 ? 5 : lvl < 20 ? 6 : 99;
+        push('rage', 'Rages', rage === 99 ? 99 : rage, 'Long Rest (unlimited at 20)', 'Barbarian');
       }
-      if (name === 'Sorcerer' && lvl >= 2) {
-        resources.push({ id: 'sorcery', label: 'Sorcery Points', max: lvl, recover: 'Long Rest' });
+      // Sorcerer
+      if (name === 'Sorcerer' && lvl >= 1) {
+        push('sorcery', 'Sorcery Points', lvl, 'Long Rest', 'Sorcerer');
       }
-      if (name === 'Warlock' && lvl >= 1) {
-        // pact slots tracked separately
+      // Warlock — pact slots tracked in spell slots; Arcane Focus uses separate
+      if (name === 'Warlock' && lvl >= 11) {
+        // Mystic Arcanum not a pool
       }
-      if (name === 'Fighter' && /battlemaster|battle master/i.test(c.subclass || '') && lvl >= 3) {
-        const die = lvl < 7 ? 4 : lvl < 15 ? 5 : 6;
-        resources.push({ id: 'superiority', label: 'Superiority Dice', max: die, recover: 'Short Rest' });
+      // Fighter — Action Surge / Second Wind / Superiority
+      if (name === 'Fighter') {
+        if (lvl >= 1) push('second-wind', 'Second Wind', 1, 'Short Rest', 'Fighter');
+        if (lvl >= 2) push('action-surge', 'Action Surge', lvl >= 17 ? 2 : 1, 'Short Rest', 'Fighter');
+        if (lvl >= 9) push('indomitable', 'Indomitable', lvl >= 17 ? 3 : lvl >= 13 ? 2 : 1, 'Long Rest', 'Fighter');
+        if (/battle.?master|battlemaster/i.test(sub) && lvl >= 3) {
+          const die = lvl < 7 ? 4 : lvl < 15 ? 5 : 6;
+          push('superiority', 'Superiority Dice', die, 'Short Rest', 'Fighter');
+        }
       }
-      if (name === 'Bloodhunter' && lvl >= 1) {
-        resources.push({ id: 'blood-maledict', label: 'Blood Maledict uses', max: Math.max(1, Math.floor(lvl / 6) + 1), recover: 'Short Rest' });
+      // Rogue — no major pool (Sneak Attack is dice)
+      // Cleric / Paladin Channel Divinity
+      if (name === 'Cleric' && lvl >= 2) {
+        const chd = lvl >= 18 ? 3 : lvl >= 6 ? 2 : 1;
+        push('channel-divinity', 'Channel Divinity', chd, 'Short Rest', 'Cleric');
       }
+      if (name === 'Paladin' && lvl >= 3) {
+        push('channel-divinity', 'Channel Divinity', 1, 'Short Rest', 'Paladin');
+        // Lay on Hands
+        push('lay-on-hands', 'Lay on Hands (HP pool)', lvl * 5, 'Long Rest', 'Paladin');
+      }
+      // Druid Wild Shape
+      if (name === 'Druid' && lvl >= 2) {
+        push('wild-shape', 'Wild Shape', 2, 'Short Rest', 'Druid');
+      }
+      // Bard Bardic Inspiration
+      if (name === 'Bard' && lvl >= 1) {
+        const cha = Number(ch.cha) || 10;
+        const uses = Math.max(1, Math.floor((cha - 10) / 2));
+        push('bardic', 'Bardic Inspiration', uses, lvl >= 5 ? 'Short Rest' : 'Long Rest', 'Bard');
+      }
+      // Ranger — Favored Foe optional; skip
+      // Bloodhunter
+      if (name === 'Bloodhunter') {
+        push('blood-maledict', 'Blood Maledict', Math.max(1, Math.floor((lvl - 1) / 6) + 1), 'Short Rest', 'Bloodhunter');
+        if (lvl >= 2) {
+          // Rite - often at-will after unlock; track crimson rite as optional
+        }
+      }
+      // Ghostblade
       if (name === 'Ghostblade' && lvl >= 2) {
-        resources.push({ id: 'spirit-step', label: 'Spirit Step uses', max: Math.max(1, Math.ceil(lvl / 4)), recover: 'Short Rest' });
+        push('spirit-step', 'Spirit Step', Math.max(1, Math.ceil(lvl / 4)), 'Short Rest', 'Ghostblade');
       }
+      // Shadowblade
       if (name === 'Shadowblade' && lvl >= 2) {
-        resources.push({ id: 'shadow-surge', label: 'Shadow Surge', max: Math.max(1, Math.ceil(lvl / 3)), recover: 'Short Rest' });
+        push('shadow-surge', 'Shadow Surge', Math.max(1, Math.ceil(lvl / 3)), 'Short Rest', 'Shadowblade');
+      }
+      // Wizard Arcane Recovery (special - slots not points)
+      if (name === 'Wizard' && lvl >= 1) {
+        push('arcane-recovery', 'Arcane Recovery (used)', 1, 'Long Rest (recover slots ≤ half wizard level on Short Rest once)', 'Wizard');
       }
     });
-    return resources;
+
+    // Deduplicate ids (e.g. two Channel Divinity sources) — keep highest max
+    const byId = new Map();
+    resources.forEach(r => {
+      const prev = byId.get(r.id);
+      if (!prev || prev.max < r.max) byId.set(r.id, r);
+      else if (prev && prev.className !== r.className) {
+        byId.set(r.id, { ...prev, label: prev.label, className: prev.className + ' + ' + r.className });
+      }
+    });
+    return [...byId.values()];
+  }
+
+  function resourcesSheetHtml(ch, opts = {}) {
+    const res = classResourcesForCharacter(ch);
+    if (!res.length) return '';
+    const used = ch.resourceUsed && typeof ch.resourceUsed === 'object' ? ch.resourceUsed : {};
+    const compact = !!opts.compact;
+    const pills = res.map(r => {
+      const u = used[r.id] != null ? Number(used[r.id]) : 0;
+      const remaining = Math.max(0, (r.max >= 99 ? r.max : r.max) - u);
+      const showMax = r.max >= 99 ? '∞' : String(r.max);
+      const showRem = r.max >= 99 ? (u ? String(Math.max(0, 99 - u)) : '∞') : String(Math.max(0, r.max - u));
+      // Display remaining / max (more intuitive than used/max for combat)
+      const left = r.max >= 99 ? '∞' : Math.max(0, r.max - u);
+      return `<div class="cs-resource-pill" title="${escapeAttr((r.className ? r.className + ' · ' : '') + (r.recover || ''))}">
+        <div class="cs-res-name">${escapeHtml(r.label)}</div>
+        <div class="cs-res-val"><span class="cs-res-left">${left}</span><span class="cs-res-sep">/</span><span class="cs-res-max">${showMax}</span></div>
+        <div class="cs-res-sub muted small">${escapeHtml(r.className || '')}${r.recover ? ' · ' + escapeHtml(r.recover) : ''}</div>
+      </div>`;
+    }).join('');
+    if (compact) {
+      return `<div class="cs-resource-bar cs-resource-bar-compact">${pills}</div>`;
+    }
+    return `<div class="cs-panel cs-resources-panel">
+      <div class="cs-panel-title">Class Resources</div>
+      <p class="muted small" style="margin:0 0 0.35rem">Remaining / Max (tracked from Edit sheet). Short Rest: Ki, Channel Divinity, Wild Shape, Superiority, Second Wind… · Long Rest: Rage, Sorcery, Lunar, Lay on Hands…</p>
+      <div class="cs-resource-bar">${pills}</div>
+    </div>`;
   }
 
   function resourcesEditorHtml(ch) {
@@ -1248,21 +1337,22 @@
     const used = ch.resourceUsed && typeof ch.resourceUsed === 'object' ? ch.resourceUsed : {};
     return `<div class="sheet-section" id="m-resources-section">
       <label class="section-label">Class Resources / Charges</label>
+      <p class="muted small">Track <strong>used</strong> points. View sheet shows remaining. Multiclass lists every pool (Ki, Lunar Charges, Rage, Blood Maledict, etc.).</p>
       <div class="resource-track">
         ${res.map(r => {
           const u = used[r.id] != null ? used[r.id] : 0;
-          return `<div class="res-stepper" data-res="${escapeAttr(r.id)}" data-max="${r.max}" title="${escapeAttr(r.recover || '')}">
-            <span class="res-label">${escapeHtml(r.label)}</span>
+          const maxLabel = r.max >= 99 ? '∞' : r.max;
+          return `<div class="res-stepper" data-res="${escapeAttr(r.id)}" data-max="${r.max >= 99 ? 99 : r.max}" title="${escapeAttr((r.className || '') + ' · ' + (r.recover || ''))}">
+            <span class="res-label">${escapeHtml(r.label)}${r.className ? ' <span class="muted">(' + escapeHtml(r.className) + ')</span>' : ''}</span>
             <button type="button" class="res-dec">−</button>
             <span class="res-val">${u}</span>
-            <span class="res-max">/ ${r.max}</span>
+            <span class="res-max">used / ${maxLabel}</span>
             <button type="button" class="res-inc">+</button>
             <input type="hidden" class="m-resource" data-res="${escapeAttr(r.id)}" value="${u}" />
-            <span class="muted small">(${escapeHtml(r.recover || '')})</span>
+            <span class="muted small">${escapeHtml(r.recover || '')}</span>
           </div>`;
         }).join('')}
       </div>
-      <p class="muted small">Used / Max. Short Rest recovers Ki, Superiority, pact slots, etc. Long Rest recovers Lunar Charges, Rages, Sorcery Points.</p>
     </div>`;
   }
 
@@ -1274,16 +1364,6 @@
     return used;
   }
 
-  function resourcesSheetHtml(ch) {
-    const res = classResourcesForCharacter(ch);
-    if (!res.length) return '';
-    const used = ch.resourceUsed || {};
-    return `<div class="cs-panel"><div class="cs-panel-title">Resources</div>
-      <div class="cs-body">${res.map(r => {
-        const u = used[r.id] != null ? used[r.id] : 0;
-        return `<div><strong>${escapeHtml(r.label)}:</strong> ${u} / ${r.max} <span class="muted small">(${escapeHtml(r.recover || '')})</span></div>`;
-      }).join('')}</div></div>`;
-  }
 
   // ─── Feature / ability / feat searchable compendium ──────────────────────
   function buildFeatureCompendiumEntries() {
@@ -5576,6 +5656,7 @@ function parseAttackLines(ch) {
               <div class="cs-stat-box"><div class="cs-stat-val">${passivePer}</div><div class="cs-stat-label">Passive Perception</div></div>
               ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="cs-stat-box cs-corrupt"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>` : ''}
             </div>
+            ${resourcesSheetHtml(ch)}
           </div>
           <div class="cs-main cs-main-classic">
             <div class="cs-col-left">
@@ -5825,6 +5906,7 @@ function parseAttackLines(ch) {
           </div>
         </header>
 
+        ${resourcesSheetHtml(ch)}
         <div class="p-combat">
           <div class="p-box"><div class="p-val">${ch.ac}</div><div class="p-lbl">Armor Class</div><div class="p-sub">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''}</div></div>
           <div class="p-box"><div class="p-val">${ch.hp}<span class="p-dim">/${ch.hpMax}</span></div><div class="p-lbl">Hit Points</div></div>
