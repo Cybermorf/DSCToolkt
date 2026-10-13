@@ -2025,43 +2025,29 @@
   }
 
   /**
-   * Fetch CritterDB JSON, with CORS-proxy fallbacks for GitHub Pages / browser use.
-   * Tries direct first, then public proxies.
+   * Fetch CritterDB JSON (direct only — no third-party proxies).
+   * Browsers usually block this via CORS; use tools/critterdb-bulk-crawl.mjs or JSON export.
    */
   async function critterDbFetchJson(targetUrl) {
-    const attempts = [
-      { label: 'direct', url: targetUrl },
-      { label: 'corsproxy.io', url: 'https://corsproxy.io/?' + encodeURIComponent(targetUrl) },
-      { label: 'allorigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl) },
-      { label: 'codetabs', url: 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(targetUrl) },
-      { label: 'corsproxy.org', url: 'https://corsproxy.org/?' + encodeURIComponent(targetUrl) }
-    ];
-    let lastErr = null;
-    for (const a of attempts) {
-      try {
-        const res = await fetch(a.url, {
-          headers: a.label === 'direct' ? { 'Accept': 'application/json' } : { 'Accept': 'application/json, text/plain, */*' },
-          mode: 'cors'
-        });
-        if (!res.ok) {
-          lastErr = new Error(`HTTP ${res.status} (${a.label})`);
-          continue;
-        }
-        const text = await res.text();
-        const trimmed = (text || '').trim();
-        if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-          lastErr = new Error(`Non-JSON response (${a.label})`);
-          continue;
-        }
-        return JSON.parse(trimmed);
-      } catch (err) {
-        lastErr = err;
-        continue;
-      }
+    let res;
+    try {
+      res = await fetch(targetUrl, {
+        headers: { 'Accept': 'application/json' },
+        mode: 'cors'
+      });
+    } catch (err) {
+      throw new Error(
+        'CritterDB blocked by browser CORS (no proxies used). ' +
+        'Run: node tools/critterdb-bulk-crawl.mjs — then import the JSON file here.'
+      );
     }
-    throw new Error(
-      (lastErr && lastErr.message) || 'CritterDB blocked by browser CORS. Use the local crawl script (tools/critterdb-bulk-crawl.mjs) or JSON export.'
-    );
+    if (!res.ok) throw new Error(`CritterDB HTTP ${res.status}`);
+    const text = await res.text();
+    const trimmed = (text || '').trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      throw new Error('CritterDB returned non-JSON');
+    }
+    return JSON.parse(trimmed);
   }
 
   async function fetchCritterDbPublishedBestiary(bestiaryId, { onPage, maxPages = 40 } = {}) {
@@ -2408,7 +2394,27 @@
           <button type="button" class="btn secondary" id="critterdb-json-btn">Import CritterDB JSON file</button>
           <input type="file" id="critterdb-json-file" accept=".json,application/json" hidden />
         </div>
-        <p class="muted small">Bulk crawl walks <code>recent</code> + <code>popular</code> published lists. Browsers often block CritterDB (CORS). If bulk fails, run <code>node tools/critterdb-bulk-crawl.mjs</code> locally, then import the generated JSON file here.</p>
+        <p class="muted small">In-browser bulk uses a <strong>direct</strong> request only (no third-party proxies). CritterDB usually blocks it via CORS.</p>
+        <details class="compendium-sample" style="margin:0.5rem 0 0.75rem">
+          <summary><strong>How to bulk-import CritterDB (recommended)</strong></summary>
+          <div class="muted small" style="margin-top:0.5rem;line-height:1.45;color:inherit">
+            <p style="margin:0 0 0.5rem"><strong>Why a local script?</strong> The site does not allow browser apps to read its API (CORS). A small Node script on your PC can call CritterDB directly and save a JSON pack for this toolkit.</p>
+            <ol style="margin:0 0 0.5rem 1.2rem;padding:0">
+              <li>Install <strong>Node.js 18+</strong> if needed (<a href="https://nodejs.org/" target="_blank" rel="noopener">nodejs.org</a>).</li>
+              <li>Open a terminal in the app folder (the folder that contains <code>tools/</code>).</li>
+              <li>Run:
+                <pre class="sample-pre" style="margin:0.35rem 0">node tools/critterdb-bulk-crawl.mjs</pre>
+              </li>
+              <li>Optional flags:
+                <pre class="sample-pre" style="margin:0.35rem 0">node tools/critterdb-bulk-crawl.mjs --max-bestiaries 200 --out critterdb-bulk.json --delay 150</pre>
+              </li>
+              <li>When it finishes, use <strong>Import CritterDB JSON file</strong> above and choose <code>critterdb-bulk.json</code> (or your <code>--out</code> name).</li>
+              <li>Open <strong>Bestiary</strong> and set the source filter to <strong>Imported</strong> (or All).</li>
+            </ol>
+            <p style="margin:0 0 0.35rem"><strong>What the script does:</strong> pages the public <em>recent</em> and <em>popular</em> bestiary lists, downloads every creature in those bestiaries, and writes one JSON file. Private “My Critters” are not included.</p>
+            <p style="margin:0"><strong>Single bestiary:</strong> paste a published URL/id and use <em>Fetch from CritterDB</em>, or export JSON from CritterDB and import/paste it here.</p>
+          </div>
+        </details>
         <div class="field">
           <label>Or paste CritterDB JSON</label>
           <textarea id="critterdb-paste" rows="4" placeholder='{ "name": "…", "creatures": [ … ] } or a single creature object'></textarea>
@@ -2416,7 +2422,7 @@
         <div class="form-row">
           <button type="button" class="btn secondary" id="critterdb-paste-btn">Import pasted JSON</button>
         </div>
-        <p class="muted small" id="critterdb-status">Ready. Live fetch uses CORS proxies if the browser blocks CritterDB directly.</p>
+        <p class="muted small" id="critterdb-status">Ready. Prefer the local Node crawl script if in-browser fetch fails (CORS).</p>
       </div>
       <details class="compendium-sample">
         <summary>Sample JSON pack format</summary>
@@ -2514,7 +2520,7 @@
         if (typeof renderBestiary === 'function') renderBestiary();
       } catch (err) {
         console.warn(err);
-        if (cdStatus) cdStatus.textContent = 'Error: ' + (err.message || err) + ' — try JSON export from CritterDB instead.';
+        if (cdStatus) cdStatus.textContent = 'Error: ' + (err.message || err) + ' — use node tools/critterdb-bulk-crawl.mjs or CritterDB JSON export.';
         toast('CritterDB fetch failed');
       } finally {
         if (btn) btn.disabled = false;
@@ -2533,7 +2539,7 @@
         if (typeof renderBestiary === 'function') renderBestiary();
       } catch (err) {
         console.warn(err);
-        if (cdStatus) cdStatus.textContent = 'Bulk error: ' + (err.message || err) + ' — CORS or network may block browser fetch.';
+        if (cdStatus) cdStatus.textContent = 'Bulk error: ' + (err.message || err) + ' — browser CORS blocks CritterDB; use the local crawl script.';
         toast('CritterDB bulk crawl failed');
       } finally {
         if (btn) btn.disabled = false;

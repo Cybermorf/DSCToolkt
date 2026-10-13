@@ -8,8 +8,8 @@
  *
  * Then in DSCToolkt → Tools → CritterDB → Import CritterDB JSON file
  */
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const args = process.argv.slice(2);
 function arg(name, def) {
@@ -85,37 +85,32 @@ async function fetchCreatures(bestiaryId) {
   return all;
 }
 
-(async () => {
-  console.log('CritterDB bulk crawl →', OUT);
-  const index = await listBestiaries();
-  const slice = index.slice(0, MAX_BESTIARIES);
-  const creatures = [];
-  for (let i = 0; i < slice.length; i++) {
-    const b = slice[i];
-    process.stdout.write(`\rBestiary ${i + 1}/${slice.length}: ${b.name}          `);
-    try {
-      const rows = await fetchCreatures(b.id);
-      rows.forEach((c) => {
-        // Tag source for our importer
-        if (c && typeof c === 'object') c._bestiaryName = b.name;
-        creatures.push(c);
-      });
-    } catch (e) {
-      console.warn(`\n  skip ${b.name}: ${e.message}`);
-    }
-    await sleep(DELAY);
+console.log('CritterDB bulk crawl →', OUT);
+const index = await listBestiaries();
+const slice = index.slice(0, MAX_BESTIARIES);
+const creatures = [];
+for (let i = 0; i < slice.length; i++) {
+  const b = slice[i];
+  process.stdout.write(`\rBestiary ${i + 1}/${slice.length}: ${b.name}          `);
+  try {
+    const rows = await fetchCreatures(b.id);
+    rows.forEach((c) => {
+      if (c && typeof c === 'object') c._bestiaryName = b.name;
+      creatures.push(c);
+    });
+  } catch (e) {
+    console.warn(`\n  skip ${b.name}: ${e.message}`);
   }
-  const pack = {
-    format: 'DSCToolkt-compendium-v1',
-    edition: '5e-critterdb-bulk',
-    source: 'CritterDB public catalog',
-    attribution: 'Crawled from CritterDB published bestiaries (https://critterdb.com). Respect authors’ licenses.',
-    creatures
-  };
-  fs.writeFileSync(path.resolve(OUT), JSON.stringify(pack));
-  console.log(`\nWrote ${creatures.length} creatures → ${OUT}`);
-  console.log('Import this file in DSCToolkt → Tools → CritterDB → Import CritterDB JSON file');
-})().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+  await sleep(DELAY);
+}
+const pack = {
+  format: 'DSCToolkt-compendium-v1',
+  edition: '5e-critterdb-bulk',
+  source: 'CritterDB public catalog',
+  attribution: 'Crawled from CritterDB published bestiaries (https://critterdb.com). Respect authors\u2019 licenses.',
+  creatures
+};
+const outPath = path.isAbsolute(OUT) ? OUT : path.resolve(process.cwd(), OUT);
+fs.writeFileSync(outPath, JSON.stringify(pack));
+console.log(`\nWrote ${creatures.length} creatures → ${outPath}`);
+console.log('Import this file in DSCToolkt → Tools → CritterDB → Import CritterDB JSON file');
