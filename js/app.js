@@ -2036,62 +2036,101 @@
   // ─── Feature / ability / feat searchable compendium ──────────────────────
   function buildFeatureCompendiumEntries() {
     const entries = [];
-    const abilities = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
-    Object.keys(abilities).forEach(cls => {
-      (abilities[cls] || []).forEach(a => {
-        entries.push({
-          type: 'Class Feature',
-          source: cls,
-          name: a.name || 'Feature',
-          level: a.lvl,
-          text: (typeof resolveFeaturePlaceholders === 'function' ? resolveFeaturePlaceholders(a.text || '', ch) : (a.text || ''))
+    try {
+      const abilities = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
+      Object.keys(abilities).forEach(cls => {
+        (abilities[cls] || []).forEach(a => {
+          let text = a.text || '';
+          try {
+            if (typeof resolveFeaturePlaceholders === 'function') {
+              text = resolveFeaturePlaceholders(text, {});
+            }
+          } catch (e) {}
+          entries.push({
+            type: 'Class Feature',
+            source: cls,
+            name: a.name || 'Feature',
+            level: a.lvl != null ? a.lvl : null,
+            text
+          });
         });
       });
-    });
-    getPhbClasses().forEach(cls => {
-      (cls.progression || []).forEach(([lvl, feat]) => {
-        entries.push({
-          type: 'Progression',
-          source: cls.name,
-          name: String(feat),
-          level: lvl,
-          text: `${cls.name} level ${lvl}: ${feat}`
+    } catch (e) { console.warn('compendium class features', e); }
+
+    try {
+      (typeof getPhbClasses === 'function' ? getPhbClasses() : []).forEach(cls => {
+        (cls.progression || []).forEach(row => {
+          const lvl = Array.isArray(row) ? row[0] : row.lvl;
+          const feat = Array.isArray(row) ? row[1] : (row.name || row.feature || '');
+          entries.push({
+            type: 'Progression',
+            source: cls.name,
+            name: String(feat),
+            level: lvl,
+            text: `${cls.name} level ${lvl}: ${feat}`
+          });
         });
       });
-    });
-    getMoonPaths().forEach(p => {
-      (p.features || []).forEach(f => {
-        entries.push({
-          type: 'Moon Path',
-          source: p.name + ' (' + (p.world || '') + ')',
-          name: f.name,
-          level: f.lvl,
-          text: f.text || ''
+    } catch (e) { console.warn('compendium progression', e); }
+
+    try {
+      (typeof getMoonPaths === 'function' ? getMoonPaths() : []).forEach(p => {
+        (p.features || []).forEach(f => {
+          entries.push({
+            type: 'Moon Path',
+            source: (p.name || '') + (p.world ? ' (' + p.world + ')' : ''),
+            name: f.name || 'Feature',
+            level: f.lvl != null ? f.lvl : null,
+            text: f.text || ''
+          });
         });
       });
-    });
-    getPhbRaces().forEach(r => {
-      (r.traits || []).forEach(tr => {
-        entries.push({
-          type: 'Racial Trait',
-          source: r.name,
-          name: tr.name,
-          level: null,
-          text: tr.text || ''
+    } catch (e) { console.warn('compendium moon paths', e); }
+
+    try {
+      (typeof getPhbRaces === 'function' ? getPhbRaces() : []).forEach(r => {
+        (r.traits || []).forEach(tr => {
+          entries.push({
+            type: 'Racial Trait',
+            source: r.name,
+            name: tr.name || 'Trait',
+            level: null,
+            text: tr.text || ''
+          });
         });
       });
-    });
-    if (typeof getFeatLibrary === 'function') {
-      getFeatLibrary().forEach(f => {
-        entries.push({
-          type: 'Feat',
-          source: f.source || 'SRD',
-          name: f.name,
-          level: null,
-          text: (f.prerequisite ? 'Prerequisite: ' + f.prerequisite + '. ' : '') + (f.text || '')
+    } catch (e) { console.warn('compendium races', e); }
+
+    try {
+      if (typeof getFeatLibrary === 'function') {
+        getFeatLibrary().forEach(f => {
+          entries.push({
+            type: 'Feat',
+            source: f.source || 'SRD',
+            name: f.name,
+            level: null,
+            text: (f.prerequisite ? 'Prerequisite: ' + f.prerequisite + '. ' : '') + (f.text || '')
+          });
+        });
+      }
+    } catch (e) { console.warn('compendium feats', e); }
+
+    // Imported / custom subclasses (AGP etc.)
+    try {
+      const customSubs = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_SUBCLASSES)) ? window.CUSTOM_SUBCLASSES : [];
+      customSubs.forEach(s => {
+        (s.features || []).forEach(f => {
+          entries.push({
+            type: 'Class Feature',
+            source: (s.parentClass || 'Subclass') + ' · ' + (s.name || ''),
+            name: f.name || 'Feature',
+            level: f.lvl != null ? f.lvl : null,
+            text: f.text || ''
+          });
         });
       });
-    }
+    } catch (e) { console.warn('compendium custom subclasses', e); }
+
     return entries;
   }
 
@@ -2118,30 +2157,45 @@
         </div>
         <div id="feat-comp-results" class="feature-compendium-results muted small">Type to search…</div>
       </div>`;
-    const all = buildFeatureCompendiumEntries();
+    let all = [];
+    try { all = buildFeatureCompendiumEntries() || []; } catch (e) {
+      console.warn(e);
+      all = [];
+    }
     function run() {
-      const q = ($('#feat-comp-q')?.value || '').trim().toLowerCase();
-      const ty = $('#feat-comp-type')?.value || 'all';
+      const q = (document.getElementById('feat-comp-q')?.value || '').trim().toLowerCase();
+      const ty = document.getElementById('feat-comp-type')?.value || 'all';
       let list = all;
-      if (ty !== 'all') list = list.filter(e => e.type === ty);
-      if (q) list = list.filter(e =>
-        e.name.toLowerCase().includes(q) ||
-        e.source.toLowerCase().includes(q) ||
-        (e.text || '').toLowerCase().includes(q)
-      );
-      list = list.slice(0, 80);
-      const box = $('#feat-comp-results');
+      if (ty && ty !== 'all') list = list.filter(e => e.type === ty);
+      if (q) {
+        list = list.filter(e =>
+          (e.name || '').toLowerCase().includes(q) ||
+          (e.source || '').toLowerCase().includes(q) ||
+          (e.text || '').toLowerCase().includes(q)
+        );
+      }
+      const total = list.length;
+      list = list.slice(0, 100);
+      const box = document.getElementById('feat-comp-results');
       if (!box) return;
-      if (!list.length) { box.innerHTML = '<p class="muted">No matches.</p>'; return; }
-      box.innerHTML = list.map(e => `
+      if (!all.length) {
+        box.innerHTML = '<p class="muted">No features loaded. Ensure PHB / class data scripts are present, then hard-refresh.</p>';
+        return;
+      }
+      if (!list.length) {
+        box.innerHTML = '<p class="muted">No matches' + (q ? ' for "' + escapeHtml(q) + '"' : '') + '.</p>';
+        return;
+      }
+      box.innerHTML = '<p class="muted small" style="margin-bottom:0.35rem">Showing ' + list.length + (total > list.length ? ' of ' + total : '') + ' · ' + all.length + ' entries indexed</p>' +
+        list.map(e => `
         <div class="feature-comp-item">
           <strong>${escapeHtml(e.name)}</strong>
           <span class="muted small"> · ${escapeHtml(e.type)} · ${escapeHtml(e.source)}${e.level != null ? ' · L' + e.level : ''}</span>
-          <div class="detail-text" style="margin-top:0.2rem">${escapeHtml(e.text)}</div>
+          <div class="detail-text" style="margin-top:0.2rem">${escapeHtml(e.text || '')}</div>
         </div>`).join('');
     }
-    $('#feat-comp-q')?.addEventListener('input', run);
-    $('#feat-comp-type')?.addEventListener('change', run);
+    document.getElementById('feat-comp-q')?.addEventListener('input', run);
+    document.getElementById('feat-comp-type')?.addEventListener('change', run);
     run();
   }
 

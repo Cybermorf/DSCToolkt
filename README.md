@@ -40,7 +40,7 @@ Date, title, summary, worlds visited — living table chronicle.
 Full **5e-style** PC/NPC sheets:
 
 | Area | Details |
-|------|--------|
+|------|---------|
 | **Races** | DSC · Official 5e · Homebrew/Imported (separate groups) |
 | **Classes** | PHB + DSC (Moon Guardian paths) + imported subclasses |
 | **Multiclass** | Official rules; total level sums class levels; epic levels allowed (DM) |
@@ -80,7 +80,7 @@ Free-form campaign notes (auto-save).
 
 ### Tools
 | Tool | Purpose |
-|------|--------|
+|------|---------|
 | **Dice roller** | Always available |
 | **Open5e v2 sync** | Spells, equipment, creatures (SRD filter optional) |
 | **JSON pack import** | Flexible packs (spells, equipment, races, classes, subclasses, feats) |
