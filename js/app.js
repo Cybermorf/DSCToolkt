@@ -1037,31 +1037,583 @@
 
   function getFeatLibrary() {
     const byId = new Map();
-    SRD_FEATS.forEach(f => byId.set(f.id, { ...f, source: 'SRD' }));
-    // Open5e / imported feats stored on equipment with isFeat
+    const add = (f, source) => {
+      if (!f || !f.name) return;
+      const id = String(f.id || f.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const key = id || f.name.toLowerCase();
+      if (byId.has(key)) return;
+      if ([...byId.values()].some(x => x.name.toLowerCase() === String(f.name).toLowerCase())) return;
+      byId.set(key, {
+        id: key,
+        name: f.name,
+        prerequisite: f.prerequisite || '',
+        text: f.text || f.description || f.notes || '',
+        source: source || f.source || ''
+      });
+    };
+    if (typeof SRD_FEATS !== 'undefined') SRD_FEATS.forEach(f => add(f, 'SRD'));
+    const custom = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_FEATS)) ? window.CUSTOM_FEATS : [];
+    custom.forEach(f => add(f, f.source || 'Custom'));
+    const extra = (typeof window !== 'undefined' && Array.isArray(window.FEATS)) ? window.FEATS : [];
+    extra.forEach(f => add(f, f.source || 'Imported'));
     const equip = (typeof window !== 'undefined' && window.EQUIPMENT) ? window.EQUIPMENT : [];
     equip.forEach(e => {
       if (!e || !e.isFeat) return;
-      const name = String(e.name || '').replace(/\s*\(Feat\)\s*$/i, '').trim();
-      const id = e.id || ('feat-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'));
-      if (!byId.has(id) && ! [...byId.values()].some(x => x.name.toLowerCase() === name.toLowerCase())) {
-        byId.set(id, {
-          id,
-          name,
-          prerequisite: '',
-          text: e.notes || e.description || '',
-          source: e.source || 'Imported'
-        });
-      }
+      add({
+        id: e.id,
+        name: String(e.name || '').replace(/\s*\(Feat\)\s*$/i, '').trim(),
+        text: e.notes || e.description || '',
+        prerequisite: ''
+      }, e.source || 'Imported');
     });
     return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   function findFeat(idOrName) {
     if (!idOrName) return null;
-    const k = String(idOrName).toLowerCase();
-    return getFeatLibrary().find(f => f.id === k || f.name.toLowerCase() === k) || null;
+    const k = String(idOrName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const name = String(idOrName).toLowerCase();
+    return getFeatLibrary().find(f => f.id === k || f.id === name || f.name.toLowerCase() === name) || null;
   }
+
+
+  // ─── Ability Score Improvements (ASI) / Feat choices ─────────────────────
+  // Best practice: track each slot; allow limited player re-picks; DM unlimited.
+  const ASI_PLAYER_MAX_EDITS = 3; // initial choice + 2 mind-changes
+
+  function isPlayerApp() {
+    if (typeof window !== 'undefined' && window.DSC_APP_MODE === 'player') return true;
+    try {
+      return /player companion/i.test(document.title || '');
+    } catch (e) { return false; }
+  }
+
+  function asiLevelsForClass(className) {
+    const n = String(className || '');
+    if (n === 'Fighter') return [4, 6, 8, 12, 14, 16, 19];
+    if (n === 'Rogue') return [4, 8, 10, 12, 16, 19];
+    // Epic optional: every 4 levels above 20 for that class
+    const base = [4, 8, 12, 16, 19];
+    return base;
+  }
+
+  function asiBudgetSummary(ch) {
+    const slots = getAsiSlots(ch);
+    const choices = getAsiChoices(ch);
+    const claimed = choices.filter(c => {
+      if (!c || !c.id) return false;
+      if (c.type === 'feat') return !!(c.featId || c.featName);
+      if (c.type === 'asi') {
+        const sum = Object.values(c.scores || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+        return sum === 2;
+      }
+      return false;
+    });
+    const feats = claimed.filter(c => c.type === 'feat').length;
+    const asis = claimed.filter(c => c.type === 'asi').length;
+    return {
+      total: slots.length,
+      claimed: claimed.length,
+      open: Math.max(0, slots.length - claimed.length),
+      feats,
+      asis
+    };
+  }
+
+  function getAsiSlots(ch) {
+    const list = normalizeClassLevels(ch);
+    const slots = [];
+    list.forEach(c => {
+      const levels = asiLevelsForClass(c.name);
+      levels.forEach(L => {
+        if ((c.level || 0) >= L) {
+          slots.push({
+            id: `${c.name}|${L}`,
+            className: c.name,
+            level: L,
+            label: `${c.name} L${L}`
+          });
+        }
+      });
+      // Epic: class levels > 20 → ASI every 4 class levels after 20
+      if ((c.level || 0) > 20) {
+        for (let L = 24; L <= c.level; L += 4) {
+          slots.push({
+            id: `${c.name}|${L}`,
+            className: c.name,
+            level: L,
+            label: `${c.name} L${L} (epic)`
+          });
+        }
+      }
+    });
+    return slots;
+  }
+
+  function getAsiChoices(ch) {
+    return Array.isArray(ch.asiChoices) ? ch.asiChoices.map(c => ({ ...c })) : [];
+  }
+
+  function findAsiChoice(choices, slotId) {
+    return (choices || []).find(c => c.id === slotId) || null;
+  }
+
+  function asiSlotLocked(choice) {
+    if (!choice) return false;
+    if (choice.locked) return true;
+    if (isPlayerApp() && (choice.editCount || 0) >= ASI_PLAYER_MAX_EDITS) return true;
+    return false;
+  }
+
+
+  function openLevelUpDialog(ch, existing) {
+    const list = normalizeClassLevels(ch);
+    if (!list.length) {
+      toast('Add a class before leveling up');
+      return;
+    }
+    const options = list.map((c, i) =>
+      `<option value="${i}">${escapeHtml(c.name)} ${c.level}${c.subclass ? ' (' + escapeHtml(c.subclass) + ')' : ''}</option>`
+    ).join('');
+    const body = `
+      <div class="sheet-section">
+        <p class="muted small">Choose which class gains a level. New ASI / feat slots unlock automatically when that class hits 4, 8, 12, 16, 19 (and Fighter/Rogue extras).</p>
+        <div class="field"><label>Class to level up</label>
+          <select id="lu-class-idx">${options}</select>
+        </div>
+        <div class="field"><label>Levels to gain</label>
+          <input type="number" id="lu-amount" min="1" max="5" value="1" />
+        </div>
+        <p class="muted small" id="lu-preview"></p>
+      </div>`;
+    openModal({
+      title: `Level Up — ${ch.name || 'Character'}`,
+      bodyHtml: body,
+      confirmText: 'Apply Level Up',
+      wide: false,
+      onConfirm: () => {
+        const idx = parseInt(document.getElementById('lu-class-idx')?.value, 10) || 0;
+        const amt = clamp(parseInt(document.getElementById('lu-amount')?.value, 10) || 1, 1, 5);
+        const classes = normalizeClassLevels(ch);
+        if (!classes[idx]) return false;
+        const beforeSlots = getAsiSlots(ch).map(s => s.id);
+        classes[idx].level = clamp((classes[idx].level || 1) + amt, 1, 40);
+        ch.classes = classes;
+        ch.class = classes[0].name;
+        ch.level = totalCharacterLevel(ch);
+        ch.subclass = classes[0].subclass || ch.subclass;
+        ch.profBonus = profBonusForTotalLevel(ch.level);
+        const afterSlots = getAsiSlots(ch).filter(s => !beforeSlots.includes(s.id));
+        // Rough HP gain: avg hit die + CON mod per level
+        const cls = findPhbClass(classes[idx].name);
+        const hd = parseInt(String(cls?.hitDie || 'd8').replace(/\D/g, ''), 10) || 8;
+        const conMod = abilityModNum(ch.con || 10);
+        const gain = amt * (Math.floor(hd / 2) + 1 + conMod);
+        ch.hpMax = (Number(ch.hpMax) || 0) + Math.max(amt, gain);
+        ch.hp = (Number(ch.hp) || 0) + Math.max(amt, gain);
+        if (existing) Object.assign(existing, ch);
+        try { save(); } catch (e) {}
+        const newAsi = afterSlots.length
+          ? ` New ASI slots: ${afterSlots.map(s => s.label).join(', ')}.`
+          : '';
+        toast(`Leveled ${classes[idx].name} +${amt} (total L${ch.level}).${newAsi}`);
+        renderParty();
+        // Re-open edit so ASI UI refreshes
+        setTimeout(() => {
+          if (typeof promptCharacter === 'function') promptCharacter(existing || ch);
+          else if (typeof promptVillain === 'function' && (existing || ch).type === 'villain') promptVillain(existing || ch);
+        }, 150);
+        return true;
+      },
+      afterOpen: () => {
+        const prev = document.getElementById('lu-preview');
+        const sel = document.getElementById('lu-class-idx');
+        const amt = document.getElementById('lu-amount');
+        function update() {
+          const i = parseInt(sel?.value, 10) || 0;
+          const a = clamp(parseInt(amt?.value, 10) || 1, 1, 5);
+          const c = list[i];
+          if (!c || !prev) return;
+          const next = c.level + a;
+          const newSlots = asiLevelsForClass(c.name).filter(L => c.level < L && next >= L);
+          prev.textContent = `${c.name} ${c.level} → ${next}.` +
+            (newSlots.length ? ` Unlocks ASI at: ${newSlots.join(', ')}.` : ' No new ASI this step.');
+        }
+        sel?.addEventListener('change', update);
+        amt?.addEventListener('input', update);
+        update();
+      }
+    });
+  }
+
+
+  function asiEditorHtml(ch) {
+    const slots = getAsiSlots(ch);
+    const choices = getAsiChoices(ch);
+    const player = isPlayerApp();
+    if (!slots.length) {
+      return `<div class="sheet-section" id="m-asi-section">
+        <label class="section-label">ASI / Feat Choices</label>
+        <p class="muted small">No Ability Score Improvement levels reached yet. Standard classes gain ASI/feat at class levels 4, 8, 12, 16, and 19 (Fighter and Rogue gain extra slots).</p>
+      </div>`;
+    }
+    const rows = slots.map(slot => {
+      const choice = findAsiChoice(choices, slot.id);
+      const locked = asiSlotLocked(choice);
+      const edits = choice ? (choice.editCount || 0) : 0;
+      const editsLeft = player ? Math.max(0, ASI_PLAYER_MAX_EDITS - edits) : null;
+      const type = choice?.type || '';
+      const scores = choice?.scores || {};
+      const featId = choice?.featId || '';
+      const featName = choice?.featName || '';
+      let status = 'Unclaimed';
+      if (choice) {
+        if (type === 'feat') status = `Feat: ${featName || featId}`;
+        else if (type === 'asi') {
+          const parts = ABS.filter(a => scores[a]).map(a => `${a.toUpperCase()} +${scores[a]}`);
+          status = parts.length ? parts.join(', ') : 'ASI (empty)';
+        }
+      }
+      const lockNote = locked
+        ? (player ? ' <span class="muted small">(locked — ask DM to unlock)</span>' : ' <span class="muted small">(locked)</span>')
+        : (player && choice ? ` <span class="muted small">(${editsLeft} re-pick${editsLeft === 1 ? '' : 's'} left)</span>` : '');
+      return `<div class="asi-slot-row" data-asi-id="${escapeAttr(slot.id)}">
+        <div class="asi-slot-head">
+          <strong>${escapeHtml(slot.label)}</strong>
+          <span class="asi-status">${escapeHtml(status)}</span>${lockNote}
+        </div>
+        <div class="asi-slot-body ${locked ? 'asi-locked' : ''}">
+          <div class="form-row">
+            <label class="checkbox-row"><input type="radio" name="asi-type-${escapeAttr(slot.id)}" class="asi-type" value="asi" data-asi-id="${escapeAttr(slot.id)}" ${type === 'asi' || !type ? 'checked' : ''} ${locked ? 'disabled' : ''}/> Ability scores (+2 total)</label>
+            <label class="checkbox-row"><input type="radio" name="asi-type-${escapeAttr(slot.id)}" class="asi-type" value="feat" data-asi-id="${escapeAttr(slot.id)}" ${type === 'feat' ? 'checked' : ''} ${locked ? 'disabled' : ''}/> Feat</label>
+          </div>
+          <div class="asi-score-picks form-row" data-asi-id="${escapeAttr(slot.id)}" style="${type === 'feat' ? 'display:none' : ''}">
+            ${ABS.map(a => `
+              <div class="field" style="min-width:4rem">
+                <label>${a.toUpperCase()} +</label>
+                <select class="asi-score-sel" data-asi-id="${escapeAttr(slot.id)}" data-ab="${a}" ${locked ? 'disabled' : ''}>
+                  <option value="0" ${(scores[a] || 0) === 0 ? 'selected' : ''}>0</option>
+                  <option value="1" ${(scores[a] || 0) === 1 ? 'selected' : ''}>1</option>
+                  <option value="2" ${(scores[a] || 0) === 2 ? 'selected' : ''}>2</option>
+                </select>
+              </div>`).join('')}
+            <p class="muted small asi-score-hint" data-asi-id="${escapeAttr(slot.id)}">Assign exactly +2 total (one +2 or two +1s).</p>
+          </div>
+          <div class="asi-feat-pick form-row" data-asi-id="${escapeAttr(slot.id)}" style="${type === 'feat' ? '' : 'display:none'}">
+            <div class="field" style="flex:1">
+              <label>Feat</label>
+              <select class="asi-feat-sel" data-asi-id="${escapeAttr(slot.id)}" ${locked ? 'disabled' : ''}>
+                <option value="">— Choose feat —</option>
+                ${getFeatLibrary().map(f => `<option value="${escapeAttr(f.id)}" ${featId === f.id || featName === f.name ? 'selected' : ''}>${escapeHtml(f.name)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          ${!player && choice ? `<button type="button" class="btn secondary btn-tiny asi-unlock" data-asi-id="${escapeAttr(slot.id)}">Unlock slot</button>` : ''}
+          ${!player && choice && !choice.locked ? `<button type="button" class="btn secondary btn-tiny asi-clear" data-asi-id="${escapeAttr(slot.id)}">Clear choice</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    const budget = typeof asiBudgetSummary === 'function' ? asiBudgetSummary(ch) : { total: slots.length, open: slots.length, claimed: 0 };
+    return `<div class="sheet-section" id="m-asi-section">
+      <label class="section-label">ASI / Feat Choices <span class="muted small">(${budget.claimed}/${budget.total} used · ${budget.open} open)</span></label>
+      <p class="muted small">Each class grants ASI/feat slots at its own levels (4/8/12/16/19; Fighter &amp; Rogue gain extras). Multiclass totals <strong>stack</strong> (e.g. three classes at 20 ≈ 15 slots). Choose <strong>+2 ability points</strong> or a <strong>feat</strong> per slot.
+      ${player
+        ? ` Player: each slot can be changed up to <strong>${ASI_PLAYER_MAX_EDITS - 1}</strong> times after the first save, then locks (DM can unlock).`
+        : ' DM: unlimited changes; use Unlock if a player slot was locked.'}</p>
+      <div id="m-asi-slots">${rows}</div>
+      <input type="hidden" id="m-asi-json" value="${escapeAttr(JSON.stringify(choices))}" />
+    </div>`;
+  }
+
+  function wireAsiEditor(ch) {
+    const root = document.getElementById('m-asi-section');
+    const hidden = document.getElementById('m-asi-json');
+    if (!root || !hidden) return;
+
+    function readChoices() {
+      try { return JSON.parse(hidden.value || '[]'); } catch (e) { return []; }
+    }
+    function writeChoices(list) {
+      hidden.value = JSON.stringify(list);
+      const label = root.querySelector('.section-label');
+      if (label && typeof getAsiSlots === 'function') {
+        const slots = getAsiSlots(ch);
+        const claimed = (list || []).filter(c => {
+          if (!c || !c.id) return false;
+          if (c.type === 'feat') return !!(c.featId || c.featName);
+          if (c.type === 'asi') {
+            const sum = Object.values(c.scores || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+            return sum === 2;
+          }
+          return false;
+        });
+        const open = Math.max(0, slots.length - claimed.length);
+        label.innerHTML = `ASI / Feat Choices <span class="muted small">(${claimed.length}/${slots.length} used · ${open} open)</span>`;
+      }
+    }
+    function validateScores(row) {
+      let sum = 0;
+      row.querySelectorAll('.asi-score-sel').forEach(sel => {
+        sum += parseInt(sel.value, 10) || 0;
+      });
+      const hint = row.querySelector('.asi-score-hint');
+      if (hint) {
+        hint.textContent = sum === 2 ? 'OK — +2 assigned.' : `Assign exactly +2 total (currently +${sum}).`;
+        hint.style.color = sum === 2 ? '#8d8' : '';
+      }
+      return sum === 2;
+    }
+    function showType(row, type) {
+      const scores = row.querySelector('.asi-score-picks');
+      const feat = row.querySelector('.asi-feat-pick');
+      if (scores) scores.style.display = type === 'feat' ? 'none' : '';
+      if (feat) {
+        feat.style.display = type === 'feat' ? 'flex' : 'none';
+        feat.style.visibility = type === 'feat' ? 'visible' : '';
+        feat.querySelectorAll('select').forEach(s => { s.disabled = false; });
+      }
+      if (type === 'asi' && scores) {
+        scores.querySelectorAll('select').forEach(s => { s.disabled = false; });
+      }
+    }
+    function commitRow(row) {
+      if (!row || row.querySelector('.asi-slot-body.asi-locked')) return;
+      const slotId = row.getAttribute('data-asi-id');
+      if (!slotId) return;
+      const type = row.querySelector('.asi-type[value="feat"]')?.checked ? 'feat' : 'asi';
+      let list = readChoices();
+      let prev = findAsiChoice(list, slotId);
+      if (asiSlotLocked(prev)) return;
+
+      const next = {
+        id: slotId,
+        className: slotId.split('|')[0],
+        level: parseInt(slotId.split('|')[1], 10) || 0,
+        type,
+        scores: {},
+        featId: '',
+        featName: '',
+        editCount: prev ? (prev.editCount || 0) : 0,
+        locked: prev ? !!prev.locked : false
+      };
+      if (type === 'asi') {
+        if (!validateScores(row)) return;
+        row.querySelectorAll('.asi-score-sel').forEach(sel => {
+          const v = parseInt(sel.value, 10) || 0;
+          if (v) next.scores[sel.getAttribute('data-ab')] = v;
+        });
+      } else {
+        const fs = row.querySelector('.asi-feat-sel');
+        next.featId = fs?.value || '';
+        const feat = findFeat(next.featId);
+        next.featName = feat?.name || fs?.selectedOptions?.[0]?.textContent || '';
+        if (!next.featId) return;
+      }
+      if (prev && (prev.type !== next.type || JSON.stringify(prev.scores) !== JSON.stringify(next.scores) || prev.featId !== next.featId)) {
+        next.editCount = (prev.editCount || 0) + 1;
+        if (isPlayerApp() && next.editCount >= ASI_PLAYER_MAX_EDITS) next.locked = true;
+      } else if (!prev) {
+        next.editCount = 1;
+      }
+      list = list.filter(c => c.id !== slotId);
+      list.push(next);
+      writeChoices(list);
+      const status = row.querySelector('.asi-status');
+      if (status) {
+        if (type === 'feat') status.textContent = `Feat: ${next.featName}`;
+        else {
+          const parts = (typeof ABS !== 'undefined' ? ABS : []).filter(a => next.scores[a]).map(a => `${a.toUpperCase()} +${next.scores[a]}`);
+          status.textContent = parts.join(', ') || 'ASI';
+        }
+      }
+      if (typeof applyAsiToAbilityInputs === 'function') applyAsiToAbilityInputs(list, ch);
+      if (type === 'feat' && typeof mergeAsiFeatsIntoFeats === 'function') {
+        // Reflect on free feat chips if present
+        const featHidden = document.getElementById('m-feats-json');
+        if (featHidden) {
+          try {
+            const existing = JSON.parse(featHidden.value || '[]');
+            const merged = mergeAsiFeatsIntoFeats(list, existing);
+            featHidden.value = JSON.stringify(merged);
+            const box = document.getElementById('m-feats-selected');
+            if (box) {
+              box.innerHTML = merged.length
+                ? merged.map((f, i) => `<span class="feat-chip">${escapeHtml(f.name || f.id)}</span>`).join('')
+                : '<span class="muted small">No feats selected</span>';
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    // Init visibility for already-selected feat slots
+    root.querySelectorAll('.asi-slot-row').forEach(row => {
+      const type = row.querySelector('.asi-type[value="feat"]')?.checked ? 'feat' : 'asi';
+      showType(row, type);
+    });
+
+    // Event delegation — avoids broken selectors when slot id contains "|"
+    root.addEventListener('change', (e) => {
+      const tEl = e.target;
+      const row = tEl.closest('.asi-slot-row');
+      if (!row) return;
+      if (tEl.classList.contains('asi-type')) {
+        showType(row, tEl.value);
+        if (tEl.value === 'feat') {
+          // Focus feat select so user sees it
+          const sel = row.querySelector('.asi-feat-sel');
+          if (sel) {
+            sel.disabled = false;
+            sel.focus();
+          }
+        }
+        return;
+      }
+      if (tEl.classList.contains('asi-score-sel')) {
+        let sum = 0;
+        row.querySelectorAll('.asi-score-sel').forEach(s => { sum += parseInt(s.value, 10) || 0; });
+        if (sum > 2) {
+          tEl.value = '0';
+          if (typeof toast === 'function') toast('Each ASI slot is only +2 total (one +2 or two +1s)');
+          validateScores(row);
+          return;
+        }
+        validateScores(row);
+        if (sum === 2) commitRow(row);
+        else {
+          const slotId = row.getAttribute('data-asi-id');
+          writeChoices(readChoices().filter(c => c.id !== slotId));
+        }
+        return;
+      }
+      if (tEl.classList.contains('asi-feat-sel')) {
+        commitRow(row);
+      }
+    });
+
+    root.querySelectorAll('.asi-unlock').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.asi-slot-row');
+        const slotId = row?.getAttribute('data-asi-id');
+        let list = readChoices();
+        const c = findAsiChoice(list, slotId);
+        if (c) {
+          c.locked = false;
+          c.editCount = 0;
+          writeChoices(list);
+          row?.querySelectorAll('input,select').forEach(el => { el.disabled = false; });
+          row?.querySelector('.asi-slot-body')?.classList.remove('asi-locked');
+          if (typeof toast === 'function') toast('ASI slot unlocked');
+        }
+      });
+    });
+    root.querySelectorAll('.asi-clear').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.asi-slot-row');
+        const slotId = row?.getAttribute('data-asi-id');
+        writeChoices(readChoices().filter(c => c.id !== slotId));
+        if (row) {
+          row.querySelectorAll('.asi-score-sel').forEach(s => { s.value = '0'; });
+          const fs = row.querySelector('.asi-feat-sel');
+          if (fs) fs.value = '';
+          const st = row.querySelector('.asi-status');
+          if (st) st.textContent = 'Unclaimed';
+          row.querySelector('.asi-type[value="asi"]')?.click();
+        }
+        if (typeof applyAsiToAbilityInputs === 'function') applyAsiToAbilityInputs(readChoices(), ch);
+        if (typeof toast === 'function') toast('ASI choice cleared');
+      });
+    });
+  }
+
+  function applyAsiToAbilityInputs(choices, ch) {
+    // Store baseline once (scores without ASI) on the form
+    let base = window.__asiBaseline;
+    if (!base) {
+      base = {};
+      ABS.forEach(a => {
+        const el = document.getElementById('m-' + a);
+        const cur = el ? (parseInt(el.value, 10) || 10) : (Number(ch?.[a]) || 10);
+        // Subtract any existing ASI from current to recover baseline
+        let asiSum = 0;
+        (choices || getAsiChoices(ch) || []).forEach(c => {
+          if (c.type === 'asi' && c.scores) asiSum += Number(c.scores[a]) || 0;
+        });
+        // When baseline first captured from ch that already includes ASI, strip them
+        base[a] = cur;
+      });
+      // Recompute baseline from ch if we have stored baseline on character
+      if (ch && ch.abilityBase) {
+        ABS.forEach(a => { base[a] = Number(ch.abilityBase[a]) || base[a]; });
+      } else if (ch) {
+        // Strip current ASI from displayed totals to form baseline
+        const strip = { ...base };
+        (ch.asiChoices || []).forEach(c => {
+          if (c.type === 'asi' && c.scores) {
+            ABS.forEach(a => { strip[a] = (strip[a] || 10) - (Number(c.scores[a]) || 0); });
+          }
+        });
+        base = strip;
+      }
+      window.__asiBaseline = base;
+    }
+    const totals = { ...base };
+    (choices || []).forEach(c => {
+      if (c.type === 'asi' && c.scores) {
+        ABS.forEach(a => { totals[a] = (totals[a] || 10) + (Number(c.scores[a]) || 0); });
+      }
+    });
+    ABS.forEach(a => {
+      const el = document.getElementById('m-' + a);
+      if (el) el.value = String(Math.max(1, Math.min(30, totals[a] || 10)));
+    });
+    // Sync feats from ASI feat picks into feats json (add only; removals of ASI-feats handled on collect)
+  }
+
+  function collectAsiFromForm() {
+    const hidden = document.getElementById('m-asi-json');
+    if (!hidden) return [];
+    try {
+      const list = JSON.parse(hidden.value || '[]');
+      return list.filter(c => c && c.id && (c.type === 'feat' || c.type === 'asi'));
+    } catch (e) { return []; }
+  }
+
+  function mergeAsiFeatsIntoFeats(asiChoices, existingFeats) {
+    const feats = Array.isArray(existingFeats) ? existingFeats.slice() : [];
+    const asiFeatIds = new Set(
+      (asiChoices || []).filter(c => c.type === 'feat' && c.featId).map(c => c.featId)
+    );
+    // Keep non-ASI feats + current ASI feats
+    const kept = feats.filter(f => !f.fromAsi);
+    asiFeatIds.forEach(id => {
+      const feat = findFeat(id);
+      if (!feat) return;
+      if (kept.some(f => f.id === feat.id || f.name === feat.name)) return;
+      kept.push({
+        id: feat.id,
+        name: feat.name,
+        text: feat.text || '',
+        prerequisite: feat.prerequisite || '',
+        fromAsi: true
+      });
+    });
+    return kept;
+  }
+
+  function abilityBaseFromCharacter(ch) {
+    const base = {};
+    const choices = getAsiChoices(ch);
+    ABS.forEach(a => {
+      let v = Number(ch[a]) || 10;
+      choices.forEach(c => {
+        if (c.type === 'asi' && c.scores) v -= Number(c.scores[a]) || 0;
+      });
+      base[a] = v;
+    });
+    return base;
+  }
+
 
   function featsEditorHtml(ch) {
     const selected = Array.isArray(ch.feats) ? ch.feats : [];
@@ -1082,7 +1634,7 @@
     return `
       <div class="sheet-section" id="m-feats-section">
         <label class="section-label">Feats</label>
-        <p class="muted small">Select feats from the SRD list or Open5e-imported feats (Tools → Sync Feats). ASI levels: 4 / 8 / 12 / 16 / 19 per class.</p>
+        <p class="muted small">Pick a feat below and click <strong>Add selected feat</strong> — it consumes the next open <strong>ASI / Feat</strong> slot. You can also choose Feat inside each ASI slot. Removing a feat frees its slot.</p>
         ${asiNotes.length ? `<p class="muted small">ASI / feat slots reached: <strong>${asiNotes.join(', ')}</strong></p>` : ''}
         <div id="m-feats-selected" class="feat-chips">${chips || '<span class="muted small">No feats selected</span>'}</div>
         <div class="form-row">
@@ -1113,6 +1665,7 @@
     }
     function setSelected(list) {
       hidden.value = JSON.stringify(list);
+      if (!selectedBox) return;
       selectedBox.innerHTML = list.length
         ? list.map((f, i) => {
             const name = f.name || findFeat(f.id)?.name || f.id;
@@ -1122,8 +1675,12 @@
       selectedBox.querySelectorAll('.feat-remove').forEach(btn => {
         btn.addEventListener('click', () => {
           const arr = getSelected();
-          arr.splice(Number(btn.dataset.idx), 1);
+          const idx = Number(btn.dataset.idx);
+          const removed = arr[idx];
+          arr.splice(idx, 1);
           setSelected(arr);
+          // Also free the ASI slot that held this feat
+          if (removed && typeof releaseAsiFeatSlot === 'function') releaseAsiFeatSlot(removed.id || removed.name);
         });
       });
     }
@@ -1141,30 +1698,141 @@
         detail.innerHTML = `<strong>${escapeHtml(f.name)}</strong>${f.prerequisite ? ' · <em>Prerequisite: ' + escapeHtml(f.prerequisite) + '</em>' : ''}<br>${escapeHtml(f.text)}`;
       }
     });
+    // Double-click option also adds
+    pick.addEventListener('dblclick', () => {
+      document.getElementById('m-feat-add')?.click();
+    });
+
     document.getElementById('m-feat-add')?.addEventListener('click', () => {
       const f = findFeat(pick.value);
-      if (!f) { toast('Select a feat'); return; }
+      if (!f) { toast('Select a feat from the list first'); return; }
       const arr = getSelected();
-      if (arr.some(x => (x.id || x.name || '').toLowerCase() === f.id || (x.name || '').toLowerCase() === f.name.toLowerCase())) {
+      if (arr.some(x => (x.id || '').toLowerCase() === f.id || (x.name || '').toLowerCase() === f.name.toLowerCase())) {
         toast('Feat already added');
         return;
       }
-      arr.push({ id: f.id, name: f.name, text: f.text, prerequisite: f.prerequisite || '' });
+      // Prefer assigning into an open ASI slot (required when locked / player)
+      const ch = window.__editingCharacter || {};
+      const slots = (typeof getAsiSlots === 'function') ? getAsiSlots(ch) : [];
+      let asiList = [];
+      const asiHidden = document.getElementById('m-asi-json');
+      if (asiHidden) {
+        try { asiList = JSON.parse(asiHidden.value || '[]'); } catch (e) { asiList = []; }
+      } else {
+        asiList = Array.isArray(ch.asiChoices) ? ch.asiChoices.slice() : [];
+      }
+      const claimedIds = new Set((asiList || []).filter(c => {
+        if (!c || !c.id) return false;
+        if (c.type === 'feat') return !!(c.featId || c.featName);
+        if (c.type === 'asi') {
+          const sum = Object.values(c.scores || {}).reduce((a, b) => a + (Number(b) || 0), 0);
+          return sum === 2;
+        }
+        return false;
+      }).map(c => c.id));
+      const openSlot = slots.find(s => !claimedIds.has(s.id));
+      const mustUseAsi = isPlayerApp() || slots.length > 0;
+      if (mustUseAsi && !openSlot) {
+        toast('No open ASI / Feat slots left. Clear a slot or level up for more.');
+        return;
+      }
+      if (openSlot) {
+        // Remove any incomplete claim for this slot
+        asiList = (asiList || []).filter(c => c.id !== openSlot.id);
+        asiList.push({
+          id: openSlot.id,
+          className: openSlot.className,
+          level: openSlot.level,
+          type: 'feat',
+          scores: {},
+          featId: f.id,
+          featName: f.name,
+          editCount: 1,
+          locked: false
+        });
+        if (asiHidden) asiHidden.value = JSON.stringify(asiList);
+        // Update ASI section UI if present
+        const row = document.querySelector(`.asi-slot-row[data-asi-id="${CSS.escape ? CSS.escape(openSlot.id) : openSlot.id}"]`);
+        if (row) {
+          const featRadio = row.querySelector('.asi-type[value="feat"]');
+          if (featRadio) { featRadio.checked = true; featRadio.dispatchEvent(new Event('change', { bubbles: true })); }
+          const fs = row.querySelector('.asi-feat-sel');
+          if (fs) {
+            if (![...fs.options].some(o => o.value === f.id)) {
+              fs.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(f.id)}">${escapeHtml(f.name)}</option>`);
+            }
+            fs.value = f.id;
+          }
+          const st = row.querySelector('.asi-status');
+          if (st) st.textContent = 'Feat: ' + f.name;
+          const featPick = row.querySelector('.asi-feat-pick');
+          if (featPick) featPick.style.display = 'flex';
+          const scorePick = row.querySelector('.asi-score-picks');
+          if (scorePick) scorePick.style.display = 'none';
+        }
+        // Refresh ASI counter label
+        const asiRoot = document.getElementById('m-asi-section');
+        const label = asiRoot?.querySelector('.section-label');
+        if (label) {
+          const claimed = asiList.filter(c => c.type === 'feat' || (c.type === 'asi' && Object.values(c.scores||{}).reduce((a,b)=>a+(Number(b)||0),0)===2));
+          label.innerHTML = `ASI / Feat Choices <span class="muted small">(${claimed.length}/${slots.length} used · ${Math.max(0, slots.length - claimed.length)} open)</span>`;
+        }
+        toast(`Added ${f.name} → ${openSlot.label}`);
+      } else {
+        toast('Added ' + f.name);
+      }
+      arr.push({ id: f.id, name: f.name, text: f.text, prerequisite: f.prerequisite || '', fromAsi: !!openSlot });
       setSelected(arr);
-      // Append short line to features if not present
       const featTa = document.getElementById('m-features');
       if (featTa && !featTa.value.includes(f.name)) {
         const line = `Feat — ${f.name}. ${f.text}`;
-        featTa.value = (featTa.value ? featTa.value.trim() + '\\n\\n' : '') + line;
+        featTa.value = (featTa.value ? featTa.value.trim() + '\n\n' : '') + line;
       }
-      toast('Added ' + f.name);
     });
   }
+
+  function releaseAsiFeatSlot(featIdOrName) {
+    const asiHidden = document.getElementById('m-asi-json');
+    if (!asiHidden) return;
+    let list = [];
+    try { list = JSON.parse(asiHidden.value || '[]'); } catch (e) { return; }
+    const k = String(featIdOrName || '').toLowerCase();
+    list = list.filter(c => {
+      if (c.type !== 'feat') return true;
+      const id = String(c.featId || '').toLowerCase();
+      const name = String(c.featName || '').toLowerCase();
+      return id !== k && name !== k;
+    });
+    asiHidden.value = JSON.stringify(list);
+    const ch = window.__editingCharacter || {};
+    const slots = (typeof getAsiSlots === 'function') ? getAsiSlots(ch) : [];
+    const label = document.querySelector('#m-asi-section .section-label');
+    if (label) {
+      const claimed = list.filter(c => c.type === 'feat' || (c.type === 'asi' && Object.values(c.scores||{}).reduce((a,b)=>a+(Number(b)||0),0)===2));
+      label.innerHTML = `ASI / Feat Choices <span class="muted small">(${claimed.length}/${slots.length} used · ${Math.max(0, slots.length - claimed.length)} open)</span>`;
+    }
+  }
+
 
   function collectFeatsFromForm() {
     const hidden = document.getElementById('m-feats-json');
     if (!hidden) return [];
     try { return JSON.parse(hidden.value || '[]'); } catch (e) { return []; }
+  }
+
+
+  function asiSheetHtml(ch) {
+    const slots = getAsiSlots(ch);
+    const choices = getAsiChoices(ch);
+    if (!slots.length) return '';
+    const lines = slots.map(s => {
+      const c = findAsiChoice(choices, s.id);
+      if (!c) return `<div><strong>${escapeHtml(s.label)}:</strong> <span class="muted">Unclaimed</span></div>`;
+      if (c.type === 'feat') return `<div><strong>${escapeHtml(s.label)}:</strong> Feat — ${escapeHtml(c.featName || c.featId || '—')}</div>`;
+      const parts = ABS.filter(a => c.scores && c.scores[a]).map(a => `${a.toUpperCase()} +${c.scores[a]}`);
+      return `<div><strong>${escapeHtml(s.label)}:</strong> ${escapeHtml(parts.join(', ') || 'ASI')}</div>`;
+    }).join('');
+    return `<div class="cs-panel"><div class="cs-panel-title">ASI / Feat Choices</div><div class="cs-body">${lines}</div></div>`;
   }
 
   function featsSheetHtml(ch) {
@@ -1554,6 +2222,10 @@
       preparedSpells: ch.preparedSpells || '',
       umbrarianLocked: !!ch.umbrarianLocked,
       feats: Array.isArray(ch.feats) ? ch.feats : [],
+      asiChoices: Array.isArray(ch.asiChoices) ? ch.asiChoices : [],
+      playerSheetLocked: !!ch.playerSheetLocked,
+      sheetLocked: !!ch.sheetLocked,
+      abilityBase: ch.abilityBase && typeof ch.abilityBase === 'object' ? ch.abilityBase : null,
       resourceUsed: ch.resourceUsed && typeof ch.resourceUsed === 'object' ? ch.resourceUsed : {}
     };
   }
@@ -1612,53 +2284,236 @@
     return html;
   }
 
+
+  // ─── Subclass unlock levels, skill/feat limits, player sheet lock ─────────
+  function subclassUnlockLevel(className) {
+    const n = String(className || '');
+    const map = {
+      'Barbarian': 3, 'Bard': 3, 'Cleric': 1, 'Druid': 2, 'Fighter': 3,
+      'Monk': 3, 'Paladin': 3, 'Ranger': 3, 'Rogue': 3, 'Sorcerer': 1,
+      'Warlock': 3,  // 2024 PHB: subclass at 3 (was 1 in 2014) 'Wizard': 2, 'Artificer': 3, 'Bloodhunter': 3,
+      'Moon Guardian': 3, 'Ghostblade': 3, 'Shadowblade': 3
+    };
+    return map[n] != null ? map[n] : 3;
+  }
+
+  function isOriginal5eRace(r) {
+    if (!r || isDscRace(r)) return false;
+    const src = String(r.source || '').toLowerCase();
+    const name = String(r.name || '').toLowerCase();
+    const core = ['human','elf','dwarf','halfling','dragonborn','gnome','half-elf','half-orc','tiefling','orc','aasimar','goliath','firbolg','tabaxi','kenku','lizardfolk','yuan-ti','triton','bugbear','hobgoblin','goblin','kobold','genasi','changeling','shifter','warforged','kalashtar','centaur','minotaur','satyr','harengon','fairy','owlin','leonin','vedalken','loxodon','simic hybrid','verdan'];
+    if (core.some(c => name === c || name.startsWith(c + ' ('))) return true;
+    if (/phb|player.?s handbook|basic rules|srd|volo|mordenkainen|tasha|monsters of the multiverse|elemental evil|sword coast|guildmasters|eberron|mythic odysseys|van richten|fizban|spelljammer|dragonlance|planescape|bigby|book of many things/i.test(src)) {
+      if (/custom|agp|imported|aurora|homebrew/i.test(src)) return false;
+      return true;
+    }
+    return false;
+  }
+
+  function raceCategory(r) {
+    if (isDscRaceStrict(r)) return 'dsc';
+    if (isOriginal5eRace(r)) return 'original';
+    const src = String(r.source || '').toLowerCase();
+    const world = String(r.world || '').toLowerCase();
+    if (r.group === 'Imported' || r.dsc === false) return 'imported';
+    if (/custom|agp|imported|aurora|homebrew/i.test(src)) return 'imported';
+    // Unmarked built-in races without Eldoria world → Original 5e
+    if (!world && (!src || /phb|srd|basic/i.test(src))) return 'original';
+    return 'imported';
+  }
+
+  function isDscRaceStrict(r) {
+    if (!r) return false;
+    if (r.dsc === true || r.group === 'DSC') return true;
+    const world = String(r.world || '').toLowerCase();
+    const src = String(r.source || '').toLowerCase();
+    const dscWorlds = ['luminaris','umbraria','eternum','solara','aetheria','harmonia','celestia','eldoria'];
+    if (dscWorlds.includes(world)) return true;
+    if (/dark sun chronicles|dsc\b/.test(src) && !/imported|custom|agp/.test(src)) return true;
+    // Built-in PHB_RACES with Eldoria world field
+    if (r.world && dscWorlds.includes(world)) return true;
+    return false;
+  }
+
+  function isPlayerSheetLocked(ch) {
+    if (!isPlayerApp()) return false;
+    return !!(ch && (ch.playerSheetLocked || ch.sheetLocked));
+  }
+
+  function canPlayerEditField(ch, field) {
+    // Always allowed after lock on player app
+    if (!isPlayerSheetLocked(ch)) return true;
+    const allowed = new Set([
+      'equipment', 'inventory', 'hp', 'hpMax', 'deathSaves', 'conditions',
+      'inspiration', 'resourceUsed', 'spellSlotsUsed', 'levelup', 'multiclass',
+      'asi', 'skills' // skills only when unlocking new class skill slots via multiclass/level
+    ]);
+    return allowed.has(field);
+  }
+
+  function validateCharacterForLock(ch, formData) {
+    const missing = [];
+    const d = formData || ch || {};
+    if (!(d.name || '').trim()) missing.push('Character Name');
+    if (!(d.race || '').trim()) missing.push('Race / Origin');
+    const classes = Array.isArray(d.classes) ? d.classes : (typeof normalizeClassLevels === 'function' ? normalizeClassLevels(d) : []);
+    if (!classes.length || !(classes[0]?.name || '').trim()) missing.push('Class');
+    // Ability scores present (not soft-lock on ASI)
+    let scoresOk = true;
+    (typeof ABS !== 'undefined' ? ABS : ['str','dex','con','int','wis','cha']).forEach(a => {
+      const v = Number(d[a]);
+      if (!v || v < 3) scoresOk = false;
+    });
+    if (!scoresOk) missing.push('Ability Scores (all six)');
+    return missing;
+  }
+
+
+
+  function isDscRace(r) {
+    if (!r) return false;
+    if (r.dsc === true || r.group === 'DSC') return true;
+    const src = String(r.source || '').toLowerCase();
+    const world = String(r.world || '').toLowerCase();
+    const dscWorlds = ['luminaris','umbraria','eternum','solara','aetheria','harmonia','celestia','eldoria'];
+    if (dscWorlds.includes(world)) return true;
+    if (/custom|agp|imported|aurora|unearthed|reddit|kobold/i.test(src)) return false;
+    if (/phb|player|dsc|dark sun|basic rules|srd/i.test(src)) return true;
+    // Core list entries without import source
+    if (!src || src === '—') return true;
+    return false;
+  }
+
   function raceOptionsHtml(selected) {
     const races = getPhbRaces();
-    const dsc = races.filter(r => r.source === 'DSC' || (r.world && r.source !== 'PHB'));
-    const official = races.filter(r => r.source === 'PHB');
-    const other = races.filter(r => !dsc.includes(r) && !official.includes(r));
-    const opt = (r) => {
-      const sel = r.name === selected ? 'selected' : '';
-      const bon = r.bonuses ? ' (' + ABS.filter(a => r.bonuses[a]).map(a => `${a.toUpperCase()}+${r.bonuses[a]}`).join(', ') + ')' : '';
-      return `<option value="${escapeAttr(r.name)}" ${sel}>${escapeHtml(r.name)}${bon}</option>`;
-    };
-    let html = `<option value="">— Select race —</option>`;
-    if (dsc.length) {
-      html += `<optgroup label="Eldoria Peoples">` + dsc.map(opt).join('') + `</optgroup>`;
-    }
-    if (official.length) {
-      html += `<optgroup label="Official D&D Races">` + official.map(opt).join('') + `</optgroup>`;
-    }
-    if (other.length) {
-      html += `<optgroup label="Other">` + other.map(opt).join('') + `</optgroup>`;
+    const dsc = [], original = [], imported = [];
+    races.forEach(r => {
+      const cat = (typeof raceCategory === 'function') ? raceCategory(r) : (isDscRace(r) ? 'dsc' : 'imported');
+      if (cat === 'dsc') dsc.push(r);
+      else if (cat === 'original') original.push(r);
+      else imported.push(r);
+    });
+    const mk = (r) => `<option value="${escapeAttr(r.name)}" ${r.name === selected ? 'selected' : ''}>${escapeHtml(r.name)}${r.world ? ' (' + escapeHtml(r.world) + ')' : ''}</option>`;
+    let html = `<option value="">— Choose race —</option>`;
+    if (dsc.length) html += `<optgroup label="DSC Races">${dsc.map(mk).join('')}</optgroup>`;
+    if (original.length) html += `<optgroup label="Original 5e Races">${original.map(mk).join('')}</optgroup>`;
+    if (imported.length) html += `<optgroup label="Homebrew / Imported">${imported.map(mk).join('')}</optgroup>`;
+    if (selected && !races.some(r => r.name === selected)) {
+      html += `<option value="${escapeAttr(selected)}" selected>${escapeHtml(selected)}</option>`;
     }
     return html;
   }
 
 
-  function skillPickerHtml(className, selectedSkills) {
-    const cls = findPhbClass(className);
-    const all = getPhbSkills();
-    const selected = new Set((selectedSkills || []).map(s => s.toLowerCase()));
-    let allowed = all;
-    if (cls && cls.skills !== 'Any') {
-      const set = new Set(cls.skills.map(s => s.toLowerCase()));
-      allowed = all.filter(s => set.has(s.name.toLowerCase()));
+
+
+  function skillPickerHtml(className, selectedSkills, opts) {
+    opts = opts || {};
+    const locked = !!opts.locked;
+    // Multiclass: pass classNames array or read from form
+    let classNames = opts.classNames;
+    if (!classNames || !classNames.length) {
+      if (typeof readMulticlassFromForm === 'function') {
+        try {
+          const list = readMulticlassFromForm();
+          if (list && list.length) classNames = list.map(c => c.name).filter(Boolean);
+        } catch (e) {}
+      }
     }
-    const choose = cls ? cls.skillsChoose : 2;
+    if (!classNames || !classNames.length) {
+      classNames = className ? [className] : [];
+    }
+    const all = getPhbSkills();
+    const selected = new Set((selectedSkills || []).map(s => String(s).toLowerCase()));
+    let choose = 0;
+    let allowedSet = null; // null = any
+    const notes = [];
+    classNames.forEach((cn, i) => {
+      const cls = findPhbClass(cn);
+      if (!cls) return;
+      const n = cls.skillsChoose || 2;
+      choose += n;
+      notes.push(`${cn}: ${n}`);
+      if (cls.skills === 'Any') {
+        /* keep any */
+      } else if (Array.isArray(cls.skills)) {
+        if (allowedSet === null) allowedSet = new Set();
+        // If previous was Any (allowedSet still null from only Any classes), handle:
+        cls.skills.forEach(s => allowedSet.add(String(s).toLowerCase()));
+      }
+    });
+    // If any class is Any, allow all skills
+    const anyClass = classNames.some(cn => {
+      const cls = findPhbClass(cn);
+      return cls && cls.skills === 'Any';
+    });
+    if (anyClass) allowedSet = null;
+    if (!choose) choose = 2;
+    let allowed = all;
+    if (allowedSet) {
+      allowed = all.filter(s => allowedSet.has(s.name.toLowerCase()));
+    }
     return `
-      <div class="skill-picker" data-choose="${choose}">
-        <p class="muted small">Choose ${choose} skill${choose > 1 ? 's' : ''}${cls && cls.skills !== 'Any' ? ' from the class list' : ''}. Hover a skill for its description.</p>
+      <div class="skill-picker" data-choose="${choose}" data-locked="${locked ? '1' : '0'}">
+        <p class="muted small">Choose <strong>${choose}</strong> skill${choose > 1 ? 's' : ''} total${notes.length > 1 ? ' <span class="muted">(' + escapeHtml(notes.join(' + ')) + ')</span>' : ''}. Selected: <span class="skill-count">0</span>/${choose}</p>
         <div class="skill-grid">
           ${allowed.map(s => `
-            <label class="skill-chip" title="${escapeAttr(s.desc)} (${s.ability})">
-              <input type="checkbox" class="m-skill-cb" value="${escapeAttr(s.name)}" ${selected.has(s.name.toLowerCase()) ? 'checked' : ''} />
-              <span>${escapeHtml(s.name)} <span class="muted">(${s.ability})</span></span>
-            </label>
-          `).join('')}
+            <label class="skill-chip" title="${escapeAttr((s.desc || '') + ' (' + (s.ability || '') + ')')}">
+              <input type="checkbox" class="m-skill-cb" value="${escapeAttr(s.name)}" ${selected.has(s.name.toLowerCase()) ? 'checked' : ''} ${locked ? 'disabled' : ''} />
+              <span>${escapeHtml(s.name)}</span>
+            </label>`).join('')}
         </div>
       </div>`;
   }
+
+  function refreshSkillsForPrimaryClass(className) {
+    const skillBox = document.getElementById('m-skill-picker');
+    if (!skillBox) return;
+    const names = (typeof readMulticlassFromForm === 'function')
+      ? readMulticlassFromForm().map(c => c.name).filter(Boolean)
+      : (className ? [className] : []);
+    const prevSkills = [...document.querySelectorAll('.m-skill-cb:checked')].map(cb => cb.value);
+    skillBox.innerHTML = skillPickerHtml(names[0] || className || '', prevSkills, { classNames: names });
+    if (typeof wireSkillPickerLimits === 'function') wireSkillPickerLimits();
+  }
+
+  function wireSkillPickerLimits() {
+    document.querySelectorAll('.skill-picker').forEach(picker => {
+      const max = parseInt(picker.dataset.choose, 10) || 2;
+      const locked = picker.dataset.locked === '1';
+      const boxes = [...picker.querySelectorAll('.m-skill-cb')];
+      // Clone to drop old listeners by replacing nodes
+      boxes.forEach(b => {
+        const n = b.cloneNode(true);
+        b.parentNode.replaceChild(n, b);
+      });
+      const fresh = [...picker.querySelectorAll('.m-skill-cb')];
+      function sync() {
+        if (locked) {
+          fresh.forEach(b => { b.disabled = true; });
+          const countEl = picker.querySelector('.skill-count');
+          if (countEl) countEl.textContent = String(fresh.filter(b => b.checked).length);
+          return;
+        }
+        let checked = fresh.filter(b => b.checked);
+        // If over limit (e.g. after class change), uncheck from the end
+        if (checked.length > max) {
+          checked.slice(max).forEach(b => { b.checked = false; });
+          checked = fresh.filter(b => b.checked);
+        }
+        const now = checked.length;
+        const countEl = picker.querySelector('.skill-count');
+        if (countEl) countEl.textContent = String(now);
+        fresh.forEach(b => {
+          b.disabled = !b.checked && now >= max;
+        });
+      }
+      fresh.forEach(b => b.addEventListener('change', sync));
+      sync();
+    });
+  }
+
+
 
   function getClassAbilities(className) {
     const all = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
@@ -3722,15 +4577,33 @@
       getAllSubclasses().find(s => s.name.toLowerCase() === q) || null;
   }
 
-  function subclassOptionsHtml(className, selected) {
-    const opts = subclassesForClass(className);
-    const sel = String(selected || '');
-    let html = `<option value="">— Subclass —</option>`;
-    opts.forEach(s => {
-      html += `<option value="${escapeAttr(s.name)}" ${s.name === sel ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
+  function subclassOptionsHtml(className, selected, classLevel) {
+    const unlockAt = subclassUnlockLevel(className);
+    const lvl = classLevel != null && classLevel !== '' ? Number(classLevel) : 1;
+    const locked = lvl < unlockAt;
+    const subs = (typeof getAllSubclasses === 'function' ? getAllSubclasses() : [])
+      .filter(s => (s.parentClass || '').toLowerCase() === String(className || '').toLowerCase());
+    // Also moon paths for Moon Guardian
+    if (String(className) === 'Moon Guardian' && typeof getMoonPaths === 'function') {
+      (getMoonPaths() || []).forEach(p => {
+        if (!subs.some(s => s.name === p.name)) {
+          subs.push({ name: p.name, parentClass: 'Moon Guardian', summary: p.summary || '' });
+        }
+      });
+    }
+    let html = '';
+    if (locked) {
+      html += `<option value="">— Subclass at class level ${unlockAt} —</option>`;
+    } else {
+      html += `<option value="">— Choose subclass —</option>`;
+    }
+    subs.forEach(s => {
+      const dis = locked ? 'disabled' : '';
+      const sel = (!locked && selected && selected === s.name) ? 'selected' : '';
+      html += `<option value="${escapeAttr(s.name)}" ${sel} ${dis}>${escapeHtml(s.name)}</option>`;
     });
-    if (sel && !opts.some(s => s.name === sel)) {
-      html += `<option value="${escapeAttr(sel)}" selected>${escapeHtml(sel)} (custom)</option>`;
+    if (!locked && selected && !subs.some(s => s.name === selected)) {
+      html += `<option value="${escapeAttr(selected)}" selected>${escapeHtml(selected)}</option>`;
     }
     return html;
   }
@@ -3758,13 +4631,15 @@
         if (!n || have.has(n)) return;
         window.PHB_RACES.push({
           name: r.name,
-          world: r.source || '',
+          world: '',
           tagline: r.summary || '',
           short: r.summary || '',
           size: r.size || 'Medium',
           speed: r.speed || '30 ft.',
           traits: (r.traits || []).map(t => ({ name: t.name, text: t.text || '' })),
-          source: r.source || 'Custom'
+          source: r.source || 'Imported',
+          group: 'Imported',
+          dsc: false
         });
         have.add(n);
       });
@@ -4024,7 +4899,7 @@
           ${classOptionsHtml(c.name)}
         </select>
         <input type="number" class="mc-level" data-idx="${idx}" min="1" max="${maxLvl}" value="${c.level}" title="Levels in this class" />
-        <select class="mc-subclass" data-idx="${idx}">${subclassOptionsHtml(c.name, c.subclass)}</select>
+        <select class="mc-subclass" data-idx="${idx}">${subclassOptionsHtml(c.name, c.subclass, c.level)}</select>
         <button type="button" class="btn ghost btn-tiny mc-remove" data-idx="${idx}" title="Remove">✕</button>
       </div>`).join('');
     const total = list.reduce((s, c) => s + (c.level || 0), 0);
@@ -4032,6 +4907,9 @@
       <div class="multiclass-editor" id="m-multiclass">
         <div class="mc-head">
           <span>Class</span><span>Lvl</span><span>Subclass</span><span></span>
+        </div>
+        <div class="form-row" style="margin-bottom:0.35rem">
+          <button type="button" class="btn primary btn-tiny" id="m-level-up">Level Up</button>
         </div>
         <div id="m-mc-rows">${rows}</div>
         <div class="mc-footer">
@@ -4109,7 +4987,11 @@
         const cs = $('#m-class');
         const sc = $('#m-subclass');
         if (cs) cs.value = primary.name;
-        if (sc) sc.value = primary.subclass || '';
+        if (sc) {
+          sc.innerHTML = subclassOptionsHtml(primary.name, primary.subclass || '', primary.level || 1);
+          if ((primary.level || 1) >= subclassUnlockLevel(primary.name) && primary.subclass) sc.value = primary.subclass;
+        }
+        if (typeof refreshSkillsForPrimaryClass === 'function') refreshSkillsForPrimaryClass(primary.name);
       }
       if (typeof refreshSpellSection === 'function') refreshSpellSection();
       if (typeof refreshSpellDc === 'function') refreshSpellDc();
@@ -4123,10 +5005,28 @@
         const sc = row?.querySelector('.mc-subclass');
         if (sc) {
           const prev = sc.value;
-          sc.innerHTML = subclassOptionsHtml(e.target.value, prev);
+          const lvl = parseInt(row?.querySelector('.mc-level')?.value, 10) || 1;
+          sc.innerHTML = subclassOptionsHtml(e.target.value, prev, lvl);
+          // Primary class change → refresh skill picker limits
+          const idx = parseInt(e.target.dataset.idx || row?.dataset.idx || '0', 10) || 0;
+          if (typeof refreshSkillsForPrimaryClass === 'function') {
+            refreshSkillsForPrimaryClass(e.target.value);
+          }
         }
       }
-      if (e.target.classList.contains('mc-level') || e.target.classList.contains('mc-subclass') || e.target.classList.contains('mc-class')) updateTotal();
+      if (e.target.classList.contains('mc-level')) {
+        const row = e.target.closest('.mc-row');
+        const sc = row?.querySelector('.mc-subclass');
+        const cls = row?.querySelector('.mc-class')?.value || '';
+        const prev = sc?.value || '';
+        const lvl = parseInt(e.target.value, 10) || 1;
+        if (sc) {
+          sc.innerHTML = subclassOptionsHtml(cls, prev, lvl);
+          // Clear subclass if still locked
+          if (lvl < subclassUnlockLevel(cls)) sc.value = '';
+        }
+        updateTotal();
+      } else if (e.target.classList.contains('mc-subclass') || e.target.classList.contains('mc-class')) updateTotal();
     });
     root.addEventListener('change', (e) => {
       if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-level')) updateTotal();
@@ -5230,95 +6130,13 @@ function wireInventoryUI() {
     function refreshSpellSection() {
       const sec = $('#m-spell-section');
       if (!sec) return;
-      // Rebuild from full multiclass state so slots + combined lists stay correct
       const fakeCh = characterFromSpellForm();
       sec.innerHTML = `<label class="section-label">Spellcasting</label>${spellSlotsEditorHtml(fakeCh)}`;
       if (typeof wireSlotSteppers === 'function') wireSlotSteppers(sec);
       refreshSpellDc();
       wireSpellPicker();
-        if (typeof wireFeatsEditor === 'function') wireFeatsEditor();
-        
-      // moon-path-subclass-sync: Path select <-> Subclass field
-      function syncMoonPathFromSubclass() {
-        const sc = ($('#m-subclass')?.value || '').trim();
-        const pathSel = $('#m-moon-path');
-        const pathWrap = $('#m-moon-path-wrap');
-        const isMG = (typeof readMulticlassFromForm === 'function' ? readMulticlassFromForm() : [])
-          .some(c => c.name === 'Moon Guardian') || $('#m-class')?.value === 'Moon Guardian';
-        if (pathWrap) pathWrap.classList.toggle('hidden', !isMG);
-        if (!pathSel) return;
-        if (sc && [...pathSel.options].some(o => o.value === sc)) {
-          pathSel.value = sc;
-        }
-      }
-      function syncSubclassFromMoonPath() {
-        const pathSel = $('#m-moon-path');
-        const path = pathSel?.value || '';
-        const sc = $('#m-subclass');
-        if (path && sc) {
-          if (![...sc.options].some(o => o.value === path)) {
-            sc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
-          }
-          sc.value = path;
-          // Primary multiclass row + any Moon Guardian row
-          document.querySelectorAll('.mc-row').forEach(row => {
-            const cls = row.querySelector('.mc-class')?.value;
-            if (cls && cls !== 'Moon Guardian') return;
-            const mcSc = row.querySelector('.mc-subclass');
-            if (!mcSc) return;
-            if (![...mcSc.options].some(o => o.value === path)) {
-              mcSc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
-            }
-            mcSc.value = path;
-          });
-        }
-        if (typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
-      }
-      $('#m-moon-path')?.addEventListener('change', syncSubclassFromMoonPath);
-      $('#m-subclass')?.addEventListener('change', () => {
-        syncMoonPathFromSubclass();
-        const sc = $('#m-subclass')?.value || '';
-        if (/path of/i.test(sc) && typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
-      });
-      document.getElementById('m-mc-rows')?.addEventListener('change', (e) => {
-        if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-subclass')) {
-          syncMoonPathFromSubclass();
-        }
-      });
-      syncMoonPathFromSubclass();
-
-        if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
-        if (typeof refreshPreparedSpellCheckboxes === 'function') {
-          setTimeout(refreshPreparedSpellCheckboxes, 50);
-          document.getElementById('m-spell-prep-mode')?.addEventListener('change', refreshPreparedSpellCheckboxes);
-        }
-      // Extensions: combat status, attunement, rests
-      const extraHost = document.getElementById('m-char-extras');
-      if (extraHost && window.DSCExtensions) {
-        /* already in body */
-      } else if (window.DSCExtensions) {
-        const sec = document.getElementById('m-spell-section');
-        if (sec && !document.getElementById('m-char-extras')) {
-          const wrap = document.createElement('div');
-          wrap.id = 'm-char-extras';
-          wrap.innerHTML = window.DSCExtensions.characterExtrasHtml(typeof ch !== 'undefined' ? ch : {});
-          sec.parentNode.insertBefore(wrap, sec.nextSibling);
-          window.DSCExtensions.wireCharacterExtras((patch) => {
-            const host = document.getElementById('m-char-extras');
-            if (host && patch?.rest) host.dataset.rest = patch.rest;
-            if (patch?.rest === 'long' && window.DSCExtensions) {
-              const fake = window.DSCExtensions.applyLongRest({
-                hpMax: parseInt(document.getElementById('m-hpmax')?.value, 10) || 1,
-                hp: parseInt(document.getElementById('m-hp')?.value, 10) || 1,
-                spellSlotsUsed: {}
-              });
-              const hp = document.getElementById('m-hp');
-              if (hp) hp.value = fake.hpMax || hp.value;
-            }
-          });
-        }
-      }
     }
+
     function refreshSpellDc() {
       const ab = $('#m-spell-ab')?.value || defaultSpellAbility(classSel?.value || '');
       const totals = scoresFromForm();
@@ -5332,7 +6150,11 @@ function wireInventoryUI() {
 
     function refreshClassUI() {
       const cname = classSel ? classSel.value : '';
-      if (skillBox) skillBox.innerHTML = skillPickerHtml(cname, []);
+      if (skillBox) {
+        const prevSkills = [...document.querySelectorAll('.m-skill-cb:checked')].map(cb => cb.value);
+        skillBox.innerHTML = skillPickerHtml(cname, prevSkills);
+        if (typeof wireSkillPickerLimits === 'function') wireSkillPickerLimits();
+      }
       if (progBox) {
         const mc = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
         let html = mc.length > 1
@@ -5477,14 +6299,14 @@ function wireInventoryUI() {
           <div class="field"><label>Class</label>
             <select id="m-class">${classOptionsHtml(primaryClassName(ch))}</select>
           </div>
-          <div class="field"><label>Subclass</label><select id="m-subclass">${subclassOptionsHtml((normalizeClassLevels(ch)[0]||{}).name || ch.class, (normalizeClassLevels(ch)[0]||{}).subclass || ch.subclass || '')}</select></div>
+          <div class="field"><label>Subclass</label><select id="m-subclass">${subclassOptionsHtml((normalizeClassLevels(ch)[0]||{}).name || ch.class, (normalizeClassLevels(ch)[0]||{}).subclass || ch.subclass || '', (normalizeClassLevels(ch)[0]||{}).level || ch.level || 1)}</select></div>
           <div class="field"><label>Level</label><input type="number" id="m-level" min="1" max="40" value="${totalCharacterLevel(ch)}" /></div>
         </div>
         <div class="sheet-section">
           <label class="section-label">Classes &amp; Multiclass</label>
           ${multiclassEditorHtml(ch, { allowEpic: true })}
         </div>
-        <div class="form-row ${ch.class === 'Moon Guardian' || (ch.subclass||'').includes('Path of') ? '' : 'hidden'}" id="m-moon-path-wrap">
+        <div class="form-row ${(normalizeClassLevels(ch).some(c => c.name === 'Moon Guardian') || ch.class === 'Moon Guardian' || (ch.subclass||'').includes('Path of')) ? '' : 'hidden'}" id="m-moon-path-wrap">
           <div class="field"><label>Moon Guardian Path</label>
             <select id="m-moon-path">${moonPathOptionsHtml(ch.subclass)}</select>
           </div>
@@ -5570,6 +6392,7 @@ function wireInventoryUI() {
           ${spellSlotsEditorHtml(ch)}
         </div>
         <div class="field"><label>Features &amp; Traits</label><textarea id="m-features" rows="3" placeholder="Class features, racial traits, feats…">${escapeHtml(ch.features)}</textarea></div>
+        ${asiEditorHtml(ch)}
         ${featsEditorHtml(ch)}
         ${resourcesEditorHtml(ch)}
         <div class="field full-width">
@@ -5634,6 +6457,7 @@ function wireInventoryUI() {
           subclass: primary.subclass || ($('#m-subclass')?.value || '').trim() || '',
           level,
           race: ($('#m-race')?.value || '').trim(),
+          // race required — validated below,
           background: ($('#m-background')?.value || '').trim(),
           alignment: ($('#m-alignment')?.value || '').trim(),
           world: ($('#m-world')?.value || ''),
@@ -5697,12 +6521,67 @@ function wireInventoryUI() {
         const attVals = [document.getElementById('m-attune-1')?.value, document.getElementById('m-attune-2')?.value, document.getElementById('m-attune-3')?.value]
           .map(s => (s || '').trim()).filter(Boolean).slice(0, 3);
         if (document.getElementById('m-attune-1')) data.attunement = attVals;
-        if (typeof collectFeatsFromForm === 'function') data.feats = collectFeatsFromForm();
+        if (typeof collectAsiFromForm === 'function') {
+          data.asiChoices = collectAsiFromForm();
+          data.abilityBase = (typeof abilityBaseFromCharacter === 'function')
+            ? abilityBaseFromCharacter({ ...data, asiChoices: data.asiChoices, str: data.str, dex: data.dex, con: data.con, int: data.int, wis: data.wis, cha: data.cha })
+            : (data.abilityBase || null);
+          // abilityBase should be scores without ASI — capture from baseline if available
+          if (window.__asiBaseline) data.abilityBase = { ...window.__asiBaseline };
+        }
+        if (typeof collectFeatsFromForm === 'function') {
+          const rawFeats = collectFeatsFromForm();
+          data.feats = (typeof mergeAsiFeatsIntoFeats === 'function')
+            ? mergeAsiFeatsIntoFeats(data.asiChoices || [], rawFeats)
+            : rawFeats;
+        }
         if (typeof collectResourcesFromForm === 'function') data.resourceUsed = collectResourcesFromForm();
         // Rest application
         const restKind = document.getElementById('m-char-extras')?.dataset?.rest;
         if (restKind === 'short' && window.DSCExtensions?.applyShortRest) data = window.DSCExtensions.applyShortRest(data);
         if (restKind === 'long' && window.DSCExtensions?.applyLongRest) data = window.DSCExtensions.applyLongRest(data);
+
+        // Validation before permanent lock / save
+        {
+          const missing = (typeof validateCharacterForLock === 'function')
+            ? validateCharacterForLock(ch, data)
+            : [];
+          if (missing.length) {
+            toast('Cannot save — complete: ' + missing.join('; '));
+            const box = document.getElementById('modal-body');
+            let warn = document.getElementById('cs-missing-warn');
+            if (!warn && box) {
+              warn = document.createElement('div');
+              warn.id = 'cs-missing-warn';
+              warn.className = 'cs-missing-warn';
+              box.prepend(warn);
+            }
+            if (warn) warn.innerHTML = '<strong>Missing required fields:</strong><ul>' +
+              missing.map(m => '<li>' + escapeHtml(m) + '</li>').join('') + '</ul>';
+            // Highlight empty required controls
+            ['m-name','m-race'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el && !(el.value || '').trim()) {
+                el.style.outline = '2px solid #c45';
+                el.addEventListener('change', () => { el.style.outline = ''; }, { once: true });
+              }
+            });
+            document.querySelectorAll('.mc-class').forEach(el => {
+              if (!(el.value || '').trim()) el.style.outline = '2px solid #c45';
+            });
+            return false;
+          }
+        }
+        // Player app: first complete save locks the sheet (DM-only identity edits after)
+        if (isPlayerApp() && !data.playerSheetLocked && !ch.playerSheetLocked) {
+          const ok = window.confirm(
+            'Lock this character sheet?\n\nAfter you confirm, the Player app can only change:\n• Equipment & inventory\n• HP / conditions\n• Level Up & multiclass levels\n• Unclaimed ASI / Feat slots\n\nRace, base ability scores, background, and free feat picks become DM-only.\n\nOK = Save & lock\nCancel = Go back and keep editing'
+          );
+          if (!ok) return false;
+          data.playerSheetLocked = true;
+          data.sheetLocked = true;
+        }
+
         if (existing) Object.assign(existing, data);
         else c.party.push({ id: uid(), ...data });
         c.updatedAt = new Date().toISOString();
@@ -5726,7 +6605,140 @@ function wireInventoryUI() {
         wireInventoryUI();
         wireAvatarPicker();
         wireSpellPicker();
+
+        window.__asiBaseline = null;
+        window.__editingCharacter = ch;
+        window.__allowFreeFeats = !isPlayerApp();
+        if (typeof wireSkillPickerLimits === 'function') wireSkillPickerLimits();
+        if (typeof wireAsiEditor === 'function') wireAsiEditor(ch);
         if (typeof wireFeatsEditor === 'function') wireFeatsEditor();
+        if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
+        // Moon path <-> subclass sync
+        function syncMoonPathFromSubclass() {
+          // Prefer multiclass Moon Guardian row subclass, else legacy
+          const list = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+          const mg = list.find(c => c.name === 'Moon Guardian');
+          const sc = (mg?.subclass || $('#m-subclass')?.value || '').trim();
+          const pathSel = $('#m-moon-path');
+          const pathWrap = $('#m-moon-path-wrap');
+          const isMG = !!mg || $('#m-class')?.value === 'Moon Guardian' || list.some(c => c.name === 'Moon Guardian');
+          if (pathWrap) pathWrap.classList.toggle('hidden', !isMG);
+          if (!pathSel || !isMG) return;
+          if (sc && [...pathSel.options].some(o => o.value === sc)) {
+            pathSel.value = sc;
+          } else if (sc) {
+            const opt = [...pathSel.options].find(o => o.value && (sc === o.value || sc.includes(o.value) || o.value.includes(sc)));
+            if (opt) pathSel.value = opt.value;
+          }
+        }
+        function syncSubclassFromMoonPath() {
+          const pathSel = $('#m-moon-path');
+          const path = pathSel?.value || '';
+          if (!path) return;
+          // Always keep path section visible while any MG row exists
+          const pathWrap = $('#m-moon-path-wrap');
+          const list = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+          const hasMG = list.some(c => c.name === 'Moon Guardian') || $('#m-class')?.value === 'Moon Guardian';
+          if (pathWrap) pathWrap.classList.toggle('hidden', !hasMG);
+          // Update every Moon Guardian multiclass row (not only primary / legacy)
+          document.querySelectorAll('.mc-row').forEach(row => {
+            const cls = row.querySelector('.mc-class')?.value;
+            if (cls !== 'Moon Guardian') return;
+            const mcSc = row.querySelector('.mc-subclass');
+            if (!mcSc) return;
+            if (![...mcSc.options].some(o => o.value === path)) {
+              mcSc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
+            }
+            mcSc.value = path;
+          });
+          // Legacy field only if primary is Moon Guardian
+          const sc = $('#m-subclass');
+          if (sc && (list[0]?.name === 'Moon Guardian' || $('#m-class')?.value === 'Moon Guardian')) {
+            if (![...sc.options].some(o => o.value === path)) {
+              sc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
+            }
+            sc.value = path;
+          }
+          if (typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+        }
+        $('#m-moon-path')?.addEventListener('change', syncSubclassFromMoonPath);
+        $('#m-subclass')?.addEventListener('change', () => {
+          syncMoonPathFromSubclass();
+          const sc = $('#m-subclass')?.value || '';
+          if (/path of/i.test(sc) && typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+        });
+        document.getElementById('m-mc-rows')?.addEventListener('change', (e) => {
+          if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-subclass') || e.target.classList.contains('mc-level')) {
+            syncMoonPathFromSubclass();
+            if (e.target.classList.contains('mc-subclass')) {
+              const row = e.target.closest('.mc-row');
+              const cls = row?.querySelector('.mc-class')?.value;
+              if (cls === 'Moon Guardian') {
+                const pathWrap = $('#m-moon-path-wrap');
+                if (pathWrap) pathWrap.classList.remove('hidden');
+                const pathSel = $('#m-moon-path');
+                if (pathSel && e.target.value) {
+                  if ([...pathSel.options].some(o => o.value === e.target.value)) pathSel.value = e.target.value;
+                  else {
+                    pathSel.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(e.target.value)}">${escapeHtml(e.target.value)}</option>`);
+                    pathSel.value = e.target.value;
+                  }
+                  if (typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+                }
+              }
+            }
+            // Keep path visible whenever MG present
+            const list2 = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
+            const pw = $('#m-moon-path-wrap');
+            if (pw) pw.classList.toggle('hidden', !list2.some(c => c.name === 'Moon Guardian'));
+          }
+        });
+        syncMoonPathFromSubclass();
+        // Level Up button
+        document.getElementById('m-level-up')?.addEventListener('click', () => {
+          if (typeof openLevelUpDialog === 'function') openLevelUpDialog(ch, existing);
+        });
+
+        // Player sheet lock — disable identity/build fields
+        if (typeof isPlayerSheetLocked === 'function' && isPlayerSheetLocked(ch)) {
+          const allowIds = new Set(['m-hp','m-hpmax','m-inventory','m-equipment','m-notes','m-corruption','m-umb-stage','m-inspiration','m-ds-ok','m-ds-fail']);
+          document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea').forEach(el => {
+            const id = el.id || '';
+            if (allowIds.has(id)) return;
+            if (el.classList.contains('mc-level') || el.classList.contains('mc-class') || el.classList.contains('mc-subclass')) return;
+            if (el.closest('#m-asi-section')) return;
+            if (el.closest('.inventory-ui') || el.closest('#m-inv-section')) return;
+            if (el.closest('#m-spell-section') || el.closest('#m-char-extras') || el.closest('#m-feats-section') || el.closest('#m-asi-section')) return;
+            if (el.classList.contains('m-cond') || el.classList.contains('cs-view-cond')) return;
+            if (el.type === 'hidden') return;
+            el.disabled = true;
+          });
+          // Unlock unclaimed ASI slots only
+          document.querySelectorAll('.asi-slot-row').forEach(row => {
+            const id = row.dataset.asiId;
+            const choices = (typeof collectAsiFromForm === 'function') ? collectAsiFromForm() : (ch.asiChoices || []);
+            const claimed = (choices || []).some(c => c.id === id);
+            if (!claimed) {
+              row.querySelectorAll('input,select').forEach(el => { el.disabled = false; });
+            }
+          });
+          // Keep Level Up enabled
+          const lu = document.getElementById('m-level-up');
+          if (lu) lu.disabled = false;
+          // Feats list stays usable — assigns into open ASI slots
+          const featAdd = document.getElementById('m-feat-add');
+          if (featAdd) { featAdd.style.display = ''; featAdd.disabled = false; }
+          const featPick = document.getElementById('m-feat-pick');
+          if (featPick) featPick.disabled = false;
+          const featSearch = document.getElementById('m-feat-search');
+          if (featSearch) featSearch.disabled = false;
+          const banner = document.createElement('div');
+          banner.className = 'cs-lock-banner';
+          banner.innerHTML = '<strong>Sheet locked.</strong> On the Player app you may edit equipment, HP, Level Up / multiclass levels, and unclaimed ASI slots only. Ask the DM to change race, ability base scores, or background.';
+          document.getElementById('modal-body')?.prepend(banner);
+        }
+
+
         
       // moon-path-subclass-sync: Path select <-> Subclass field
       function syncMoonPathFromSubclass() {
@@ -5931,6 +6943,7 @@ function wireInventoryUI() {
       <div class="sheet-card-actions">
         <button class="btn primary view-sheet">View Sheet</button>
         <button class="btn secondary edit-char">Edit</button>
+        <button class="btn primary level-up-char">Level Up</button>
         <button class="btn danger delete-char">Remove</button>
       </div>`;
   }
@@ -6250,8 +7263,8 @@ function parseAttackLines(ch) {
         <div class="cs-tabs">
           <button type="button" class="cs-tab active" data-cs-page="1">Page 1 · Combat</button>
           <button type="button" class="cs-tab" data-cs-page="2">Page 2 · Attacks &amp; Spells</button>
-          <button type="button" class="cs-tab" data-cs-page="3">Page 3 · Story</button>
-          <button type="button" class="cs-tab" data-cs-page="4">Page 4 · Class Progression</button>
+          <button type="button" class="cs-tab" data-cs-page="3">Page 3 · Class Progression</button>
+          <button type="button" class="cs-tab" data-cs-page="4">Page 4 · Story</button>
         </div>
 
         <!-- PAGE 1 -->
@@ -6270,9 +7283,27 @@ function parseAttackLines(ch) {
                 <div class="cs-mini-stat"><span class="cs-mini-lbl">Proficiency</span><span class="cs-mini-val">+${ch.profBonus || 2}</span></div>
               </div>
             </div>
+            <div class="cs-view-conditions" id="cs-view-conditions">
+              <span class="muted small">Combat status:</span>
+              ${((window.DSCExtensions && window.DSCExtensions.CONDITIONS) ? window.DSCExtensions.CONDITIONS : [
+                {id:'blinded',name:'Blinded'},{id:'charmed',name:'Charmed'},{id:'frightened',name:'Frightened'},
+                {id:'grappled',name:'Grappled'},{id:'incapacitated',name:'Incapacitated'},{id:'invisible',name:'Invisible'},
+                {id:'paralyzed',name:'Paralyzed'},{id:'petrified',name:'Petrified'},{id:'poisoned',name:'Poisoned'},
+                {id:'prone',name:'Prone'},{id:'restrained',name:'Restrained'},{id:'stunned',name:'Stunned'},
+                {id:'unconscious',name:'Unconscious'},{id:'exhaustion',name:'Exhaustion'},{id:'concentrating',name:'Concentrating'}
+              ]).map(cond => {
+                const name = typeof cond === 'string' ? cond : (cond.name || cond.id || '');
+                const val = typeof cond === 'string' ? cond : (cond.name || cond.id || '');
+                const active = (ch.conditions || []).some(c => {
+                  if (typeof c === 'string') return c === val || c === name || c.toLowerCase() === String(val).toLowerCase();
+                  return (c.name || c.id) === val || (c.name || c.id) === name;
+                });
+                return `<label class="cs-cond-chip" title="${escapeAttr(typeof cond === 'object' && cond.text ? cond.text : name)}"><input type="checkbox" class="cs-view-cond" value="${escapeAttr(val)}" ${active ? 'checked' : ''}/> ${escapeHtml(name)}</label>`;
+              }).join('')}
+            </div>
             <div class="cs-combat-row">
               <div class="cs-stat-box"><div class="cs-stat-val">${ch.ac}</div><div class="cs-stat-label">Armor Class</div><div class="cs-stat-sub muted small">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''}</div></div>
-              <div class="cs-stat-box"><div class="cs-stat-val">${ch.hp}<span class="cs-hp-max">/${ch.hpMax}</span></div><div class="cs-stat-label">Hit Points</div></div>
+              <div class="cs-stat-box cs-hp-edit"><div class="cs-stat-val"><input type="number" class="cs-inline-input cs-hp-cur" data-char-id="${escapeAttr(ch.id || '')}" value="${ch.hp}" min="0" title="Current HP" /> <span class="cs-hp-max">/ <input type="number" class="cs-inline-input cs-hp-max-inp" data-char-id="${escapeAttr(ch.id || '')}" value="${ch.hpMax}" min="1" title="Max HP" /></span></div><div class="cs-stat-label">Hit Points</div></div>
               <div class="cs-stat-box"><div class="cs-stat-val">${escapeHtml((ch.speed || '30 ft.').replace(' ft.',''))}</div><div class="cs-stat-label">Speed</div></div>
               <div class="cs-stat-box"><div class="cs-stat-val">${passivePer}</div><div class="cs-stat-label">Passive Perception</div></div>
               ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="cs-stat-box cs-corrupt"><div class="cs-stat-val">${ch.corruption}/6</div><div class="cs-stat-label">Corruption</div></div>` : ''}
@@ -6342,7 +7373,7 @@ function parseAttackLines(ch) {
         </div>
 
         <!-- PAGE 3 STORY -->
-        <div class="cs-page" data-cs-page="3">
+        <div class="cs-page" data-cs-page="4">
           <div class="cs-page-title">Character Details</div>
           <div class="cs-footer-panels">
             ${race ? `<div class="cs-panel"><div class="cs-panel-title">Race — ${escapeHtml(race.name)}</div>
@@ -6372,6 +7403,7 @@ function parseAttackLines(ch) {
             })()}
             ${ch.isUmbrarian ? umbrarianSheetBlock(ch) : ''}
             ${resourcesSheetHtml(ch)}
+            ${asiSheetHtml(ch)}
             ${featsSheetHtml(ch)}
             ${ch.inspiration || (ch.deathSaves && (ch.deathSaves.successes || ch.deathSaves.failures)) || (ch.conditions && ch.conditions.length) || (ch.attunement && ch.attunement.length) ? `<div class="cs-panel"><div class="cs-panel-title">Status</div>
               <div class="cs-body">
@@ -6386,7 +7418,7 @@ function parseAttackLines(ch) {
 
 
         <!-- PAGE 4 · Class Progression -->
-        <div class="cs-page" data-cs-page="4">
+        <div class="cs-page" data-cs-page="3">
           <div class="cs-page-title">Class Progression</div>
           <p class="muted small">Features and progression for each of your classes (multiclass lists every class).</p>
           <div class="cs-panel">${multiclassProgressionHtml(ch)}</div>
@@ -6592,6 +7624,7 @@ setTimeout(function(){window.focus();window.print();},280);
         card.innerHTML = characterCardHtml(ch, isAlly ? 'Ally' : 'PC', isAlly ? 'ally' : 'pc');
         card.querySelector('.view-sheet')?.addEventListener('click', () => viewCharacterSheet(ch));
         card.querySelector('.edit-char').addEventListener('click', () => promptCharacter(raw));
+        card.querySelector('.level-up-char')?.addEventListener('click', () => openLevelUpDialog(raw, raw));
         card.querySelector('.delete-char').addEventListener('click', async () => {
           const ok = await openModal({
             title: 'Remove Character?',
@@ -6622,6 +7655,7 @@ setTimeout(function(){window.focus();window.print();},280);
         card.innerHTML = characterCardHtml(ch, 'Villain', 'villain');
         card.querySelector('.view-sheet')?.addEventListener('click', () => viewCharacterSheet(ch));
         card.querySelector('.edit-char').addEventListener('click', () => promptVillain(raw));
+        card.querySelector('.level-up-char')?.addEventListener('click', () => openLevelUpDialog(raw, raw));
         card.querySelector('.delete-char').addEventListener('click', async () => {
           const ok = await openModal({
             title: 'Remove Villain?',

@@ -2727,3 +2727,82 @@ table, .prog-table td {
 /* Ability cards (share spell-card chrome) */
 .ability-card-grid { margin-top: 0.35rem; }
 .ability-card .spell-card-banner { border-bottom-color: rgba(180,140,80,0.35); }
+
+/* ASI / Feat choice slots */
+.asi-slot-row {
+  border: 1px solid rgba(201,162,39,0.28);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.5rem;
+  background: rgba(0,0,0,0.15);
+}
+.asi-slot-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+}
+.asi-status { color: #e8c56a; font-size: 0.9rem; }
+.asi-slot-body.asi-locked { opacity: 0.75; }
+.asi-score-picks { flex-wrap: wrap; gap: 0.35rem; }
+
+.cs-lock-banner, .cs-missing-warn {
+  border: 1px solid rgba(201,162,39,0.5);
+  background: rgba(80,40,20,0.45);
+  color: #f0ebe3;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  margin-bottom: 0.65rem;
+  font-size: 0.9rem;
+}
+.cs-missing-warn { border-color: #c45; background: rgba(80,20,20,0.5); }
+.cs-missing-warn ul { margin: 0.35rem 0 0 1.1rem; }
+.skill-picker .skill-chip input:disabled + span { opacity: 0.45; }
+
+.cs-inline-input {
+  width: 3.2rem;
+  background: #2a2118;
+  border: 1px solid rgba(196,163,90,0.45);
+  color: #f0ebe3;
+  border-radius: 4px;
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  padding: 0.15rem;
+}
+.cs-view-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  margin: 0.35rem 0 0.5rem;
+  align-items: center;
+}
+.cs-cond-chip {
+  font-size: 0.75rem;
+  color: #e8dcc8;
+  display: inline-flex;
+  gap: 0.2rem;
+  align-items: center;
+}
+
+.asi-feat-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+  width: 100%;
+}
+.asi-feat-pick select.asi-feat-sel {
+  width: 100%;
+  min-width: 12rem;
+  max-width: 28rem;
+  background: #2a2118;
+  color: #f0ebe3;
+  border: 1px solid rgba(196,163,90,0.45);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+}
+.asi-feat-pick select.asi-feat-sel:disabled {
+  opacity: 0.5;
+}
