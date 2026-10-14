@@ -1376,7 +1376,7 @@
           source: cls,
           name: a.name || 'Feature',
           level: a.lvl,
-          text: a.text || ''
+          text: (typeof resolveFeaturePlaceholders === 'function' ? resolveFeaturePlaceholders(a.text || '', ch) : (a.text || ''))
         });
       });
     });
@@ -2046,7 +2046,7 @@
     });
     window.SPELLS = [...spellMap.values()].sort((a,b) => (a.level-b.level) || a.name.localeCompare(b.name));
     try { ensureMoonGuardianSpellList(); } catch (e) {}
-      try { mergeCustomFeatsIntoLibrary(); mergeCustomClassesIntoPhb(); } catch (e) {}
+      try { mergeAllCustomContent(); } catch (e) {}
     window.EQUIPMENT = [...eqMap.values()];
     // Bestiary merge: DSC base + imported (imported keyed by n+source)
     const srcFilter = window.BESTIARY_SOURCE || 'all';
@@ -3419,7 +3419,7 @@
           name: a.name,
           lvl: a.lvl,
           source: `${c.name} ${c.level}`,
-          text: a.text || ''
+          text: (typeof resolveFeaturePlaceholders === 'function' ? resolveFeaturePlaceholders(a.text || '', ch) : (a.text || ''))
         });
       });
       // Subclass / path features (custom pack + Moon Paths)
@@ -3461,7 +3461,7 @@
     if (!cards.length) return '';
     return `<div class="cs-panel"><div class="cs-panel-title">Ability Cards</div>
       <p class="muted small">Class resources, features, path abilities, and feats — same card style as spells.</p>
-      <div class="spell-card-grid ability-card-grid">${cards.map(abilityCardHtml).join('')}</div>
+      <div class="spell-card-grid ability-card-grid">${cards.map(a => { a.text = expandTemplatePlaceholders(a.text || '', ch); return abilityCardHtml(a); }).join('')}</div>
     </div>`;
   }
 
@@ -3477,6 +3477,213 @@
       <div class="spell-card-grid">${cards.join('')}</div></div>`;
   }
 
+
+
+
+  /** Expand Aurora/{{template}} placeholders using character stats when available */
+  function expandTemplatePlaceholders(text, ch) {
+    if (!text) return '';
+    let s = String(text);
+    const pb = Number(ch && ch.profBonus) || 2;
+    const mod = (ab) => {
+      if (!ch) return 0;
+      const v = Number(ch[ab]) || 10;
+      return Math.floor((v - 10) / 2);
+    };
+    const dc = (ab) => 8 + pb + mod(ab);
+    const map = {
+      'wild surge:dc': () => String(dc('con')),
+      'ki:dc': () => String(dc('wis')),
+      'spellcasting:dc': () => {
+        const ab = (ch && ch.spellcastingAbility || 'int').toLowerCase().slice(0, 3);
+        const key = ab === 'cha' ? 'cha' : ab === 'wis' ? 'wis' : 'int';
+        return String(dc(key));
+      },
+      'spellcasting:dc:int': () => String(dc('int')),
+      'spellcasting:dc:wis': () => String(dc('wis')),
+      'spellcasting:dc:cha': () => String(dc('cha')),
+      'proficiency': () => String(pb),
+      'proficiency:half': () => String(Math.floor(pb / 2)),
+      'strength:modifier': () => String(mod('str')),
+      'dexterity:modifier': () => String(mod('dex')),
+      'constitution:modifier': () => String(mod('con')),
+      'intelligence:modifier': () => String(mod('int')),
+      'wisdom:modifier': () => String(mod('wis')),
+      'charisma:modifier': () => String(mod('cha')),
+      'level': () => String((ch && (totalCharacterLevel(ch) || ch.level)) || 1),
+      'martial arts:dice': () => {
+        const lvl = (normalizeClassLevels(ch).find(c => c.name === 'Monk') || {}).level || 1;
+        return lvl >= 17 ? '1d10' : lvl >= 11 ? '1d8' : lvl >= 5 ? '1d6' : '1d4';
+      },
+      'sneak-attack:die': () => {
+        const lvl = (normalizeClassLevels(ch).find(c => c.name === 'Rogue') || {}).level || 1;
+        return Math.ceil(lvl / 2) + 'd6';
+      },
+      'bardic-inspiration:dice': () => {
+        const lvl = (normalizeClassLevels(ch).find(c => c.name === 'Bard') || {}).level || 1;
+        return lvl >= 15 ? '1d12' : lvl >= 10 ? '1d10' : lvl >= 5 ? '1d8' : '1d6';
+      }
+    };
+    s = s.replace(/\{\{([^}]+)\}\}/g, (full, key) => {
+      const k = String(key).trim().toLowerCase();
+      if (map[k]) return map[k]();
+      // level:classname
+      const lm = k.match(/^level:([a-z]+)/);
+      if (lm && ch) {
+        const cls = normalizeClassLevels(ch).find(c => c.name.toLowerCase() === lm[1]);
+        return String(cls ? cls.level : 0);
+      }
+      // generic :dc with ability word
+      if (k.endsWith(':dc') || k.endsWith(' dc')) {
+        return String(dc('con'));
+      }
+      return full; // leave unknown
+    });
+    return s;
+  }
+
+
+  function resolveFeaturePlaceholders(text, ch) {
+    if (!text) return '';
+    let s = String(text);
+    if (!ch) return s.replace(/\{\{[^}]+\}\}/g, '—');
+    const pb = Number(ch.profBonus) || profBonusForTotalLevel(totalCharacterLevel(ch));
+    const mod = (ab) => abilityModNum(ch[ab] != null ? ch[ab] : 10);
+    const dcCon = 8 + pb + mod('con');
+    const dcCha = 8 + pb + mod('cha');
+    const dcWis = 8 + pb + mod('wis');
+    const dcInt = 8 + pb + mod('int');
+    s = s.replace(/\{\{\s*wild\s*surge\s*:\s*dc\s*\}\}/gi, String(dcCon));
+    s = s.replace(/\{\{\s*save\s*dc\s*:\s*con\s*\}\}/gi, String(dcCon));
+    s = s.replace(/\{\{\s*save\s*dc\s*:\s*cha\s*\}\}/gi, String(dcCha));
+    s = s.replace(/\{\{\s*save\s*dc\s*:\s*wis\s*\}\}/gi, String(dcWis));
+    s = s.replace(/\{\{\s*save\s*dc\s*:\s*int\s*\}\}/gi, String(dcInt));
+    s = s.replace(/\{\{\s*pb\s*\}\}/gi, String(pb));
+    // Plain language fallbacks often found in imported XML
+    s = s.replace(/the save DC is \{\{[^}]+\}\}/gi, `the save DC is ${dcCon}`);
+    return s;
+  }
+
+  function tableDcForCharacter(table, ch) {
+    if (!ch || !table) return null;
+    const pb = Number(ch.profBonus) || profBonusForTotalLevel(totalCharacterLevel(ch));
+    const ab = (table.dcAbility || 'con').toLowerCase();
+    const score = ch[ab] != null ? ch[ab] : 10;
+    return 8 + pb + abilityModNum(score);
+  }
+
+
+  function getClassTables() {
+    return (typeof window !== 'undefined' && Array.isArray(window.CLASS_TABLES)) ? window.CLASS_TABLES : [];
+  }
+
+  function rollClassTable(tableId, ch) {
+    const table = getClassTables().find(t => t.id === tableId);
+    if (!table) return null;
+    const n = table.rows.length;
+    if (!n) return null;
+    let idx;
+    let displayRoll;
+    const dice = String(table.dice || '').toLowerCase();
+    if (dice === 'd8' && n === 8) {
+      const r = 1 + Math.floor(Math.random() * 8);
+      idx = r - 1;
+      displayRoll = String(r);
+    } else if (dice === 'd100') {
+      const r = 1 + Math.floor(Math.random() * 100);
+      // Map 100 -> row labeled 99–00 if present
+      idx = Math.min(n - 1, Math.floor((r === 100 ? 99 : r - 1) / (100 / n)));
+      // Better: find row whose range contains r
+      idx = Math.floor((Math.min(r, 100) - 1) / 2); // PHB pairs 01-02, 03-04...
+      if (idx >= n) idx = n - 1;
+      displayRoll = r === 100 ? '00' : String(r).padStart(2, '0');
+    } else {
+      idx = Math.floor(Math.random() * n);
+      displayRoll = table.rows[idx].roll;
+    }
+    const row = table.rows[idx];
+    let effect = row.effect;
+    if (ch) effect = resolveFeaturePlaceholders(effect, ch);
+    const dc = tableDcForCharacter(table, ch);
+    return { table, roll: displayRoll || row.roll, effect, index: idx + 1, dc };
+  }
+
+  function renderClassTablesTools() {
+    const host = document.getElementById('class-tables-tools');
+    if (!host) return;
+    const tables = getClassTables();
+    if (!tables.length) {
+      host.innerHTML = '<div class="tools-block"><h3>Class Tables</h3><p class="muted small">No tables loaded.</p></div>';
+      return;
+    }
+    // Characters from active campaign for DC context
+    let party = [];
+    try {
+      const c = typeof getActive === 'function' ? getActive() : null;
+      if (c) {
+        ensureCampaignShape(c);
+        party = [...(c.party || []), ...(c.villains || [])];
+      }
+    } catch (e) {}
+    host.innerHTML = `
+      <div class="tools-block card tool-card span-2">
+        <h3>Class Tables</h3>
+        <p class="muted small">Subclass tables (Path of Wild Magic, Wild Magic Surge, Divine Intervention). Roll during play. Feature text uses save DC when a character is selected.</p>
+        <div class="form-row">
+          <div class="field" style="flex:2">
+            <label>Table</label>
+            <select id="ct-table">
+              ${tables.map(t => `<option value="${escapeAttr(t.id)}">${escapeHtml(t.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="flex:1.5">
+            <label>Character (for save DC)</label>
+            <select id="ct-char">
+              <option value="">— None —</option>
+              ${party.map(p => `<option value="${escapeAttr(p.id)}">${escapeHtml(p.name || 'Unnamed')}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="align-self:flex-end">
+            <button type="button" class="btn primary" id="ct-roll">Roll</button>
+          </div>
+        </div>
+        <div id="ct-detail" class="detail-text" style="margin-top:0.5rem"></div>
+        <div id="ct-result" class="cs-panel" style="margin-top:0.5rem;display:none"></div>
+      </div>`;
+    const sel = host.querySelector('#ct-table');
+    const charSel = host.querySelector('#ct-char');
+    const detail = host.querySelector('#ct-detail');
+    const result = host.querySelector('#ct-result');
+    function selectedChar() {
+      const id = charSel?.value;
+      return party.find(p => p.id === id) || null;
+    }
+    function showDetail() {
+      const t = tables.find(x => x.id === sel.value);
+      if (!t || !detail) return;
+      const ch = selectedChar();
+      const dc = tableDcForCharacter(t, ch);
+      detail.innerHTML = `<strong>${escapeHtml(t.name)}</strong> · ${escapeHtml(t.dice || '')} · ${escapeHtml(t.source || '')}
+        ${dc != null ? `<span class="stat-chip" style="margin-left:0.35rem">Save DC ${dc}</span>` : ''}
+        <p class="muted small">${escapeHtml(t.note || '')}</p>
+        <details><summary class="muted small">Show full table (${t.rows.length} rows)</summary>
+          <ol class="trait-list compact">${t.rows.map(r => `<li><strong>${escapeHtml(r.roll)}.</strong> ${escapeHtml(r.effect)}</li>`).join('')}</ol>
+        </details>`;
+    }
+    sel?.addEventListener('change', showDetail);
+    charSel?.addEventListener('change', showDetail);
+    showDetail();
+    host.querySelector('#ct-roll')?.addEventListener('click', () => {
+      const ch = selectedChar();
+      const r = rollClassTable(sel.value, ch);
+      if (!r || !result) return;
+      result.style.display = 'block';
+      result.innerHTML = `<div class="cs-panel-title">Result — ${escapeHtml(r.table.dice || '')}${r.dc != null ? ' · Save DC ' + r.dc : ''}</div>
+        <p><strong>Roll:</strong> ${escapeHtml(String(r.roll))} <span class="muted small">(entry ${r.index}/${r.table.rows.length})</span>
+        ${ch ? ` · <span class="muted small">for ${escapeHtml(ch.name || 'character')}</span>` : ''}</p>
+        <p class="cs-body">${escapeHtml(r.effect)}</p>`;
+    });
+  }
 
 
   function getAllSubclasses() {
@@ -3527,6 +3734,130 @@
     }
     return html;
   }
+
+
+
+  function getBackgroundList() {
+    const a = (window.DSCExtensions && window.DSCExtensions.BACKGROUNDS) || [];
+    const b = window.DSC_BACKGROUNDS || [];
+    const map = new Map();
+    [...a, ...b].forEach(bg => { if (bg && bg.name) map.set(bg.name.toLowerCase(), bg); });
+    return [...map.values()].sort((x,y) => x.name.localeCompare(y.name));
+  }
+
+  function mergeAllCustomContent() {
+    try { mergeCustomFeatsIntoLibrary(); } catch (e) {}
+    try { mergeCustomClassesIntoPhb(); } catch (e) {}
+    // Races
+    const races = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_RACES)) ? window.CUSTOM_RACES : [];
+    if (races.length) {
+      if (!Array.isArray(window.PHB_RACES)) window.PHB_RACES = [];
+      const have = new Set(window.PHB_RACES.map(r => (r.name || '').toLowerCase()));
+      races.forEach(r => {
+        const n = (r.name || '').toLowerCase();
+        if (!n || have.has(n)) return;
+        window.PHB_RACES.push({
+          name: r.name,
+          world: r.source || '',
+          tagline: r.summary || '',
+          short: r.summary || '',
+          size: r.size || 'Medium',
+          speed: r.speed || '30 ft.',
+          traits: (r.traits || []).map(t => ({ name: t.name, text: t.text || '' })),
+          source: r.source || 'Custom'
+        });
+        have.add(n);
+      });
+    }
+    // Backgrounds
+    const bgs = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_BACKGROUNDS)) ? window.CUSTOM_BACKGROUNDS : [];
+    if (bgs.length) {
+      if (!Array.isArray(window.BACKGROUNDS)) window.BACKGROUNDS = window.BACKGROUNDS || [];
+      // extensions.js uses BACKGROUNDS const - also try window
+      const target = (typeof BACKGROUNDS !== 'undefined' && Array.isArray(BACKGROUNDS)) ? BACKGROUNDS : null;
+      const list = target || window.DSC_BACKGROUNDS || [];
+      if (!window.DSC_BACKGROUNDS) window.DSC_BACKGROUNDS = list.slice ? list.slice() : [];
+      const haveB = new Set((window.DSC_BACKGROUNDS || []).map(b => (b.name || '').toLowerCase()));
+      bgs.forEach(b => {
+        const n = (b.name || '').toLowerCase();
+        if (!n || haveB.has(n)) return;
+        window.DSC_BACKGROUNDS.push({
+          name: b.name,
+          skills: b.skills || [],
+          feature: b.feature || b.name,
+          featureText: b.featureText || b.summary || '',
+          source: b.source || 'Custom'
+        });
+        haveB.add(n);
+      });
+    }
+    // Spells
+    const spells = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_SPELLS)) ? window.CUSTOM_SPELLS : [];
+    if (spells.length && Array.isArray(window.SPELLS)) {
+      const haveS = new Set(window.SPELLS.map(s => (s.name || '').toLowerCase()));
+      spells.forEach(sp => {
+        const n = (sp.name || '').toLowerCase();
+        if (!n || haveS.has(n)) return;
+        window.SPELLS.push({
+          id: sp.id || n.replace(/\s+/g, '-'),
+          name: sp.name,
+          level: sp.level || 0,
+          school: sp.school || '—',
+          time: sp.time || '1 action',
+          range: sp.range || '—',
+          duration: sp.duration || '—',
+          components: sp.components || '—',
+          description: sp.description || '',
+          summary: (sp.description || '').slice(0, 160),
+          classes: Array.isArray(sp.classes) ? sp.classes : [],
+          source: sp.source || 'Custom'
+        });
+        haveS.add(n);
+      });
+    }
+    // Items / equipment
+    const items = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_ITEMS)) ? window.CUSTOM_ITEMS : [];
+    if (items.length && Array.isArray(window.EQUIPMENT)) {
+      const haveE = new Set(window.EQUIPMENT.map(e => (e.name || '').toLowerCase()));
+      items.forEach(it => {
+        const n = (it.name || '').toLowerCase();
+        if (!n || haveE.has(n)) return;
+        window.EQUIPMENT.push({
+          id: it.id || n.replace(/\s+/g, '-'),
+          name: it.name,
+          category: it.category || (it.magic ? 'magic' : 'gear'),
+          cost: it.cost || '',
+          weight: it.weight || 0,
+          notes: it.notes || '',
+          magic: !!it.magic,
+          source: it.source || 'Custom'
+        });
+        haveE.add(n);
+      });
+    }
+    // Extra class names for dropdowns
+    const xcls = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_CLASSES)) ? window.CUSTOM_CLASSES : [];
+    if (xcls.length && typeof getPhbClasses === 'function') {
+      // ensure PHB_CLASSES list includes them as minimal entries
+      if (!Array.isArray(window.PHB_CLASSES)) window.PHB_CLASSES = [];
+      const haveC = new Set(window.PHB_CLASSES.map(c => (c.name || '').toLowerCase()));
+      xcls.forEach(c => {
+        const n = (c.name || '').toLowerCase();
+        if (!n || haveC.has(n)) return;
+        window.PHB_CLASSES.push({
+          name: c.name,
+          hitDie: c.hitDie || 'd8',
+          primary: c.primary || '—',
+          saves: c.saves || '—',
+          summary: c.summary || '',
+          progression: [],
+          source: c.source || 'Custom'
+        });
+        haveC.add(n);
+      });
+    }
+  }
+
 
   function mergeCustomFeatsIntoLibrary() {
     const custom = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_FEATS)) ? window.CUSTOM_FEATS : [];
@@ -4906,6 +5237,56 @@ function wireInventoryUI() {
       refreshSpellDc();
       wireSpellPicker();
         if (typeof wireFeatsEditor === 'function') wireFeatsEditor();
+        
+      // moon-path-subclass-sync: Path select <-> Subclass field
+      function syncMoonPathFromSubclass() {
+        const sc = ($('#m-subclass')?.value || '').trim();
+        const pathSel = $('#m-moon-path');
+        const pathWrap = $('#m-moon-path-wrap');
+        const isMG = (typeof readMulticlassFromForm === 'function' ? readMulticlassFromForm() : [])
+          .some(c => c.name === 'Moon Guardian') || $('#m-class')?.value === 'Moon Guardian';
+        if (pathWrap) pathWrap.classList.toggle('hidden', !isMG);
+        if (!pathSel) return;
+        if (sc && [...pathSel.options].some(o => o.value === sc)) {
+          pathSel.value = sc;
+        }
+      }
+      function syncSubclassFromMoonPath() {
+        const pathSel = $('#m-moon-path');
+        const path = pathSel?.value || '';
+        const sc = $('#m-subclass');
+        if (path && sc) {
+          if (![...sc.options].some(o => o.value === path)) {
+            sc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
+          }
+          sc.value = path;
+          // Primary multiclass row + any Moon Guardian row
+          document.querySelectorAll('.mc-row').forEach(row => {
+            const cls = row.querySelector('.mc-class')?.value;
+            if (cls && cls !== 'Moon Guardian') return;
+            const mcSc = row.querySelector('.mc-subclass');
+            if (!mcSc) return;
+            if (![...mcSc.options].some(o => o.value === path)) {
+              mcSc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
+            }
+            mcSc.value = path;
+          });
+        }
+        if (typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+      }
+      $('#m-moon-path')?.addEventListener('change', syncSubclassFromMoonPath);
+      $('#m-subclass')?.addEventListener('change', () => {
+        syncMoonPathFromSubclass();
+        const sc = $('#m-subclass')?.value || '';
+        if (/path of/i.test(sc) && typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+      });
+      document.getElementById('m-mc-rows')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-subclass')) {
+          syncMoonPathFromSubclass();
+        }
+      });
+      syncMoonPathFromSubclass();
+
         if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
         if (typeof refreshPreparedSpellCheckboxes === 'function') {
           setTimeout(refreshPreparedSpellCheckboxes, 50);
@@ -5115,8 +5496,8 @@ function wireInventoryUI() {
           <div class="field"><label>Background</label>
             <select id="m-background">
               <option value="">—</option>
-              ${(window.DSCExtensions && window.DSCExtensions.BACKGROUNDS ? window.DSCExtensions.BACKGROUNDS : []).map(b => `<option value="${escapeAttr(b.name)}" ${ch.background === b.name ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
-              ${ch.background && !(window.DSCExtensions && window.DSCExtensions.BACKGROUNDS || []).some(b => b.name === ch.background) ? `<option value="${escapeAttr(ch.background)}" selected>${escapeHtml(ch.background)}</option>` : ''}
+              ${getBackgroundList().map(b => `<option value="${escapeAttr(b.name)}" ${ch.background === b.name ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
+              ${ch.background && !getBackgroundList().some(b => b.name === ch.background) ? `<option value="${escapeAttr(ch.background)}" selected>${escapeHtml(ch.background)}</option>` : ''}
             </select>
           </div>
           <div class="field"><label>Alignment</label><input type="text" id="m-alignment" value="${escapeAttr(ch.alignment)}" placeholder="e.g. NG" /></div>
@@ -5346,6 +5727,51 @@ function wireInventoryUI() {
         wireAvatarPicker();
         wireSpellPicker();
         if (typeof wireFeatsEditor === 'function') wireFeatsEditor();
+        
+      // moon-path-subclass-sync: Path select <-> Subclass field
+      function syncMoonPathFromSubclass() {
+        const sc = ($('#m-subclass')?.value || '').trim();
+        const pathSel = $('#m-moon-path');
+        const pathWrap = $('#m-moon-path-wrap');
+        const isMG = (typeof readMulticlassFromForm === 'function' ? readMulticlassFromForm() : [])
+          .some(c => c.name === 'Moon Guardian') || $('#m-class')?.value === 'Moon Guardian';
+        if (pathWrap) pathWrap.classList.toggle('hidden', !isMG);
+        if (!pathSel) return;
+        if (sc && [...pathSel.options].some(o => o.value === sc)) {
+          pathSel.value = sc;
+        }
+      }
+      function syncSubclassFromMoonPath() {
+        const pathSel = $('#m-moon-path');
+        const path = pathSel?.value || '';
+        const sc = $('#m-subclass');
+        if (path && sc) {
+          sc.value = path;
+          // also multiclass primary row
+          const row = document.querySelector('.mc-row');
+          const mcSc = row?.querySelector('.mc-subclass');
+          if (mcSc) {
+            if (![...mcSc.options].some(o => o.value === path)) {
+              mcSc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
+            }
+            mcSc.value = path;
+          }
+        }
+        if (typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+      }
+      $('#m-moon-path')?.addEventListener('change', syncSubclassFromMoonPath);
+      $('#m-subclass')?.addEventListener('change', () => {
+        syncMoonPathFromSubclass();
+        const sc = $('#m-subclass')?.value || '';
+        if (/path of/i.test(sc) && typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
+      });
+      document.getElementById('m-mc-rows')?.addEventListener('change', (e) => {
+        if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-subclass')) {
+          syncMoonPathFromSubclass();
+        }
+      });
+      syncMoonPathFromSubclass();
+
         if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
         if (typeof refreshPreparedSpellCheckboxes === 'function') {
           setTimeout(refreshPreparedSpellCheckboxes, 50);
@@ -5657,7 +6083,7 @@ function parseAttackLines(ch) {
       for (let i = 0; i < markers.length; i++) {
         const start = markers[i].end;
         const end = i + 1 < markers.length ? markers[i + 1].index : text.length;
-        sections.push({ title: markers[i].title.replace(/^—\s*|\s*—$/g, '').trim(), body: text.slice(start, end).trim() });
+        sections.push({ title: markers[i].title.replace(/^—\s*|\s*—$/g, '').trim(), body: (typeof resolveFeaturePlaceholders === "function" ? resolveFeaturePlaceholders(text.slice(start, end).trim(), ch) : text.slice(start, end).trim()) });
       }
       // preamble before first marker
       const pre = text.slice(0, markers[0].index).trim();
@@ -5679,15 +6105,16 @@ function parseAttackLines(ch) {
       ? sections.map(s => `
           <div class="cs-feat-block">
             <div class="cs-panel-subtitle">${escapeHtml(s.title)}</div>
-            <div class="cs-feat-body">${formatFeatureBody(s.body)}</div>
+            <div class="cs-feat-body">${formatFeatureBody(s.body, ch)}</div>
           </div>`).join('')
       : '<p class="muted small">No features recorded.</p>';
 
     return `<div class="cs-features-structured">${bodyHtml}${classBlocks}${featsBlock}</div>`;
   }
 
-  function formatFeatureBody(body) {
+  function formatFeatureBody(body, ch) {
     if (!body) return '';
+    body = expandTemplatePlaceholders(body, ch);
     // Bullet-like lines
     const lines = String(body).split(/\n+/).map(l => l.trim()).filter(Boolean);
     if (lines.length <= 1) return `<p class="cs-body">${escapeHtml(body)}</p>`;
@@ -5713,7 +6140,7 @@ function parseAttackLines(ch) {
       }
       if (feats.length) {
         inner += `<ul class="trait-list compact">${feats.map(a =>
-          `<li><strong>L${a.lvl} — ${escapeHtml(a.name)}.</strong> ${escapeHtml(a.text || '')}</li>`
+          `<li><strong>L${a.lvl} — ${escapeHtml(a.name)}.</strong> ${escapeHtml(expandTemplatePlaceholders(a.text || '', ch))}</li>`
         ).join('')}</ul>`;
       }
       // Subclass features (custom AGP pack + official stubs + Moon Paths)
@@ -5723,7 +6150,7 @@ function parseAttackLines(ch) {
         if (pf.length) {
           inner += `<p class="muted small"><strong>${escapeHtml(subData.name)}</strong>${subData.source ? ' · ' + escapeHtml(subData.source) : ''}</p>`;
           inner += `<ul class="trait-list compact">${pf.map(f =>
-            `<li><strong>L${f.lvl || '—'} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text || '')}</li>`
+            `<li><strong>L${f.lvl || '—'} ${escapeHtml(f.name)}.</strong> ${escapeHtml(expandTemplatePlaceholders(f.text || '', ch))}</li>`
           ).join('')}</ul>`;
         }
       } else if (c.name === 'Moon Guardian') {
@@ -6051,71 +6478,91 @@ function parseAttackLines(ch) {
   function printCharacterSheet(ch) {
     try {
       const bodyHtml = characterSheetViewHtml(ch);
-      const title = (ch.name || 'Character').replace(/[<>]/g, '');
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — Print</title>
+      const title = String(ch.name || 'Character').replace(/[<>&"]/g, '');
+      // Print-light CSS: same gold/parchment language as the app, minimal assets
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>
-  @page { size: A4; margin: 10mm; }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 8px; font-family: Georgia, 'Times New Roman', serif; background: #1a1208; color: #f0ebe3; }
-  .cs-tabs, .cs-toolbar { display: none !important; }
-  .cs-page { display: block !important; margin-bottom: 12px; }
-  .cs-sheet { max-width: 100%; }
-  .cs-char-name { font-size: 1.4rem; font-weight: 700; color: #e8c56a; }
-  .cs-char-meta { color: #cfc6b4; font-size: 0.9rem; }
-  .cs-combat-row, .cs-resource-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-  .cs-stat-box, .cs-resource-pill, .cs-panel, .spell-card, .cs-atk-card {
-    border: 1px solid rgba(201,162,39,0.4); border-radius: 8px; padding: 6px 8px; background: #22180c;
+@page{size:A4;margin:9mm}
+*{box-sizing:border-box}
+body{margin:0;padding:6px 8px;font:11pt/1.35 Georgia,"Times New Roman",serif;background:#1c1510;color:#f0ebe3}
+.cs-tabs,.cs-toolbar,.btn{display:none!important}
+.cs-page{display:block!important;margin:0 0 10px;page-break-inside:avoid}
+.cs-char-name{font:700 1.35rem Georgia,serif;color:#d4af37;margin:0}
+.cs-char-meta{color:#c9b89a;font-size:.85rem;margin:1px 0}
+.cs-portrait-block{display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap}
+.cs-portrait-ring{width:52px;height:52px;border-radius:50%;border:2px solid #c4a35a;display:flex;align-items:center;justify-content:center;font-weight:700;color:#c4a35a;flex-shrink:0;overflow:hidden}
+.cs-portrait-ring img,.cs-avatar-img{width:100%;height:100%;object-fit:cover}
+.cs-header-right{display:flex;gap:6px;margin-left:auto}
+.cs-mini-stat{border:1px solid rgba(196,163,90,.4);border-radius:6px;padding:3px 7px;text-align:center}
+.cs-mini-lbl{display:block;font-size:.6rem;text-transform:uppercase;color:#a89880}
+.cs-mini-val{color:#d4af37;font-weight:700}
+.cs-combat-row,.cs-resource-bar{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+.cs-stat-box,.cs-resource-pill{min-width:4.5rem;flex:1;text-align:center;padding:5px 4px;border-radius:7px;border:1px solid rgba(196,163,90,.4);background:#2a2118}
+.cs-stat-val,.cs-res-val{font-size:1.2rem;font-weight:800;color:#f5efd8;line-height:1.1}
+.cs-stat-label,.cs-res-name{font-size:.62rem;text-transform:uppercase;letter-spacing:.04em;color:#d4af37;margin-top:2px}
+.cs-stat-sub,.cs-res-sub,.muted{color:#a89880;font-size:.7rem}
+.cs-main{display:grid;grid-template-columns:32% 1fr;gap:8px}
+.cs-panel{border:1px solid rgba(196,163,90,.28);border-radius:8px;padding:6px 8px;margin-bottom:6px;background:#241c14}
+.cs-panel-title,.cs-page-title{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:#d4af37;font-weight:700;margin:0 0 4px;border-bottom:1px solid rgba(196,163,90,.2);padding-bottom:2px}
+.cs-abilities{display:flex;flex-wrap:wrap;gap:4px}
+.cs-ability{min-width:2.8rem;text-align:center;border:1px solid rgba(196,163,90,.25);border-radius:5px;padding:3px}
+.cs-ab-label{font-size:.55rem;color:#a89880}
+.cs-ab-mod{font-weight:700;color:#f0e6d0}
+.cs-ab-score{font-size:.75rem;color:#c9b89a}
+.cs-skills{display:grid;grid-template-columns:1fr 1fr;gap:1px 6px;font-size:.72rem}
+.cs-skill{display:flex;gap:3px;align-items:center}
+.cs-skill.prof .cs-skill-name{color:#e8c56a}
+.cs-atk-grid,.spell-card-grid,.ability-card-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.cs-atk-card,.spell-card,.ability-card{border:1px solid rgba(196,163,90,.35);border-radius:7px;padding:5px 7px;background:#2a2118;page-break-inside:avoid}
+.cs-atk-name,.spell-card-name{font-weight:700;color:#f0e6d0;font-size:.9rem}
+.spell-card-level{font-size:.7rem;color:#a89880}
+.spell-card-stats{display:grid;grid-template-columns:1fr 1fr;gap:2px 6px;font-size:.72rem;margin:3px 0;border-top:1px solid rgba(196,163,90,.15);border-bottom:1px solid rgba(196,163,90,.15);padding:3px 0}
+.spell-stat-label{font-size:.58rem;text-transform:uppercase;color:#a89880}
+.spell-card-desc,.cs-body,.cs-pre,.cs-feat-body{font-size:.78rem;line-height:1.32;white-space:pre-wrap;margin:0}
+.cs-features-structured{display:flex;flex-direction:column;gap:5px}
+.cs-feat-block{border:1px solid rgba(196,163,90,.2);border-radius:6px;padding:4px 6px;background:#1f1812}
+.cs-panel-subtitle{font-size:.7rem;text-transform:uppercase;color:#e8c56a;font-weight:600;margin-bottom:2px}
+.trait-list{margin:2px 0 0;padding-left:1.1rem;font-size:.78rem}
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th,td{border-bottom:1px solid rgba(255,255,255,.06);padding:2px 4px;text-align:left}
+th{color:#d4af37;font-size:.65rem;text-transform:uppercase}
+@media print{
+  body{background:#fff;color:#222}
+  .cs-panel,.cs-stat-box,.cs-resource-pill,.cs-atk-card,.spell-card,.ability-card,.cs-feat-block,.cs-ability{
+    background:#faf7f0!important;border-color:#ccc!important;color:#222!important
   }
-  .cs-stat-val, .cs-res-val { font-size: 1.2rem; font-weight: 800; color: #fffdf8; }
-  .cs-stat-label, .cs-res-name, .cs-panel-title { font-size: 0.7rem; text-transform: uppercase; color: #e8c56a; }
-  .cs-panel-title { font-size: 0.85rem; margin-bottom: 4px; }
-  .spell-card-grid, .ability-card-grid, .cs-atk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .spell-card-name { font-weight: 700; color: #f0e6d0; }
-  .spell-card-desc, .cs-body, .cs-pre { font-size: 0.82rem; line-height: 1.35; white-space: pre-wrap; }
-  .cs-abilities { display: flex; flex-wrap: wrap; gap: 4px; }
-  .cs-ability { text-align: center; min-width: 3rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-  th, td { border-bottom: 1px solid rgba(255,255,255,0.08); padding: 3px 4px; text-align: left; }
-  @media print {
-    body { background: #fff; color: #111; }
-    .cs-stat-box, .cs-resource-pill, .cs-panel, .spell-card, .cs-atk-card { background: #faf6ee; border-color: #bbb; color: #111; }
-    .cs-char-name, .cs-stat-label, .cs-res-name, .cs-panel-title { color: #553; }
-    .cs-stat-val, .cs-res-val, .spell-card-name { color: #111; }
-    .cs-page { page-break-inside: avoid; }
-  }
+  .cs-char-name,.cs-panel-title,.cs-page-title,.cs-stat-label,.cs-res-name,.cs-panel-subtitle,.spell-card-name{color:#6a5420!important}
+  .cs-stat-val,.cs-res-val,.cs-ab-mod{color:#111!important}
+  .cs-char-meta,.muted,.cs-stat-sub,.spell-card-level,.spell-stat-label{color:#555!important}
+  a{color:inherit}
+}
 </style></head><body>
 <div class="cs-print-root">${bodyHtml}</div>
 <script>
-  document.querySelectorAll('.cs-page').forEach(function(p){ p.classList.add('active'); p.style.display='block'; });
-  document.querySelectorAll('.cs-tabs').forEach(function(t){ t.style.display='none'; });
-  setTimeout(function(){ window.focus(); window.print(); }, 300);
-</script>
+document.querySelectorAll('.cs-page').forEach(function(p){p.classList.add('active');p.style.display='block';});
+document.querySelectorAll('.cs-tabs,.cs-toolbar').forEach(function(t){t.style.display='none';});
+setTimeout(function(){window.focus();window.print();},280);
+<\/script>
 </body></html>`;
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const w = window.open(url, '_blank');
       if (!w) {
-        // Fallback: iframe print
         const iframe = document.createElement('iframe');
-        iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
+        iframe.setAttribute('style', 'position:fixed;right:0;bottom:0;width:0;height:0;border:0');
         document.body.appendChild(iframe);
         iframe.onload = function() {
           try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch (e) {}
-          setTimeout(function(){ URL.revokeObjectURL(url); iframe.remove(); }, 60000);
+          setTimeout(function() { URL.revokeObjectURL(url); iframe.remove(); }, 60000);
         };
         iframe.src = url;
-        if (typeof toast === 'function') toast('Print opened (popup blocked — using frame)');
+        if (typeof toast === 'function') toast('Print opened in background frame');
       } else {
-        setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+        setTimeout(function() { URL.revokeObjectURL(url); }, 60000);
       }
     } catch (err) {
       console.error(err);
-      if (typeof toast === 'function') toast('Print failed: ' + (err.message || err));
+      if (typeof toast === 'function') toast('Print failed: ' + (err && err.message ? err.message : err));
     }
   }
 
@@ -6981,6 +7428,8 @@ function parseAttackLines(ch) {
 
   // ─── Tools (generators + reference) ──────────────────────────────────────
   function renderTools() {
+    try { renderClassTablesTools(); } catch (e) {}
+
     // Tools view is mostly static HTML; we just wire the generator buttons if present
     const genFactionBtn = $('#tool-gen-faction');
     const genForceBtn = $('#tool-gen-force');
