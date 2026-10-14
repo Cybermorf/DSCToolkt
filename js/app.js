@@ -3366,6 +3366,95 @@
     </article>`;
   }
 
+
+  function abilityCardHtml(a) {
+    if (!a) return '';
+    const lvl = a.lvl != null ? `Level ${a.lvl}` : (a.level != null ? `Level ${a.level}` : '');
+    const src = a.source || a.className || '';
+    const subtitle = [lvl, src].filter(Boolean).join(' · ');
+    const uses = a.uses != null ? String(a.uses) : (a.max != null ? `${a.remaining != null ? a.remaining : a.max} / ${a.max}` : '');
+    const recover = a.recover || a.recovery || '';
+    return `<article class="ability-card spell-card">
+      <div class="spell-card-banner">
+        <div class="spell-card-name">${escapeHtml(a.name || 'Ability')}</div>
+        <div class="spell-card-level">${escapeHtml(subtitle || 'Class Feature')}</div>
+      </div>
+      <div class="spell-card-stats">
+        ${uses ? `<div class="spell-stat"><div class="spell-stat-label">Uses</div><div class="spell-stat-value">${escapeHtml(uses)}</div></div>` : ''}
+        ${recover ? `<div class="spell-stat"><div class="spell-stat-label">Recovery</div><div class="spell-stat-value">${escapeHtml(recover)}</div></div>` : ''}
+        ${a.action ? `<div class="spell-stat"><div class="spell-stat-label">Action</div><div class="spell-stat-value">${escapeHtml(a.action)}</div></div>` : ''}
+        ${a.range ? `<div class="spell-stat"><div class="spell-stat-label">Range</div><div class="spell-stat-value">${escapeHtml(a.range)}</div></div>` : ''}
+      </div>
+      <div class="spell-card-desc">${escapeHtml(a.text || a.description || '').split(String.fromCharCode(10)).join('<br>')}</div>
+    </article>`;
+  }
+
+  function combatAbilityCardsHtml(ch) {
+    const list = normalizeClassLevels(ch);
+    const abilities = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
+    const used = ch.resourceUsed && typeof ch.resourceUsed === 'object' ? ch.resourceUsed : {};
+    const cards = [];
+
+    // Resource pools as ability cards first (Ki, etc.)
+    (typeof classResourcesForCharacter === 'function' ? classResourcesForCharacter(ch) : []).forEach(r => {
+      const u = used[r.id] != null ? Number(used[r.id]) : 0;
+      const left = r.max >= 99 ? '∞' : Math.max(0, r.max - u);
+      const maxL = r.max >= 99 ? '∞' : String(r.max);
+      cards.push({
+        name: r.label,
+        source: r.className || 'Resource',
+        uses: `${left} / ${maxL}`,
+        remaining: left,
+        max: r.max,
+        recover: r.recover,
+        text: `${r.label} pool for ${r.className || 'class'}. Remaining shown as current / max.`
+      });
+    });
+
+    // Class features up to each class level (combat-relevant + all detailed)
+    list.forEach(c => {
+      (abilities[c.name] || []).filter(a => (a.lvl || 0) <= (c.level || 1)).forEach(a => {
+        cards.push({
+          name: a.name,
+          lvl: a.lvl,
+          source: `${c.name} ${c.level}`,
+          text: a.text || ''
+        });
+      });
+      // Moon path features
+      if (c.name === 'Moon Guardian') {
+        const path = findMoonPath(c.subclass || ch.subclass);
+        if (path) {
+          (path.features || []).filter(f => f.lvl <= c.level).forEach(f => {
+            cards.push({
+              name: f.name,
+              lvl: f.lvl,
+              source: path.name,
+              text: f.text || ''
+            });
+          });
+        }
+      }
+    });
+
+    // Feats as cards
+    (Array.isArray(ch.feats) ? ch.feats : []).forEach(f => {
+      const full = (typeof findFeat === 'function' ? findFeat(f.id) : null) || f;
+      cards.push({
+        name: full.name || f.name,
+        source: 'Feat',
+        text: full.text || f.text || ''
+      });
+    });
+
+    if (!cards.length) return '';
+    return `<div class="cs-panel"><div class="cs-panel-title">Ability Cards</div>
+      <p class="muted small">Class resources, features, path abilities, and feats — same card style as spells.</p>
+      <div class="spell-card-grid ability-card-grid">${cards.map(abilityCardHtml).join('')}</div>
+    </div>`;
+  }
+
+
   function spellSheetCardsHtml(ch) {
     const ids = parseKnownSpellIds(ch);
     if (!ids.length) return '';
@@ -5697,6 +5786,9 @@ function parseAttackLines(ch) {
             <pre class="cs-pre">${escapeHtml(ch.attacks || '—')}</pre>
           </div>
 
+          <div class="cs-page-title" style="margin-top:1.1rem">Abilities</div>
+          ${combatAbilityCardsHtml(ch) || '<p class="muted small">No class abilities loaded.</p>'}
+
           <div class="cs-page-title" style="margin-top:1.1rem">Spellcasting</div>
           ${spellSheetBlock(ch) || '<p class="muted small">No spellcasting on this character.</p>'}
           ${spellSheetCardsHtml(ch) || ''}
@@ -5852,313 +5944,62 @@ function parseAttackLines(ch) {
   }
 
   function printCharacterSheet(ch) {
-    // Build a denser print-only layout (same visual language, no empty page breaks)
-    const race = getPhbRaces().find(r => r.name === ch.race);
-    const cls = findPhbClass(ch.class);
-    const path = findMoonPath(ch.subclass);
-    const inv = ch.inventory || [];
-    const equipped = inv.filter(i => i.equipped);
-    const armor = equipped.find(i => i.category === 'armor');
-    const shield = equipped.find(i => i.category === 'shield');
-    const attacks = parseAttackLines(ch);
-    const initMod = abilityModNum(ch.dex);
-    const initStr = (initMod >= 0 ? '+' : '') + initMod;
-    const passivePer = 10 + abilityModNum(ch.wis) + ((ch.skills || '').toLowerCase().includes('perception') ? (ch.profBonus || 2) : 0);
-
-    const abBlock = ABS.map(a => {
-      const total = ch[a] || 10;
-      return `<div class="p-ab"><div class="p-ab-lbl">${a.toUpperCase()}</div><div class="p-ab-mod">${modStr(total)}</div><div class="p-ab-sc">${total}</div></div>`;
-    }).join('');
-
-    const attackCards = attacks.length ? attacks.map(a => `
-      <div class="p-atk">
-        <div class="p-atk-name">${escapeHtml(a.name)}</div>
-        <div class="p-atk-row"><span>Atk</span><strong>${escapeHtml(a.bonus)}</strong></div>
-        <div class="p-atk-row"><span>Dmg</span><strong>${escapeHtml(a.damage)}</strong></div>
-        <div class="p-atk-row"><span>Range</span><strong>${escapeHtml(a.range)}</strong></div>
-        ${a.props ? `<div class="p-atk-props">${escapeHtml(a.props)}</div>` : ''}
-      </div>`).join('') : '<span class="muted">No attacks</span>';
-
-    const invRows = inv.length ? inv.map(i =>
-      `<tr class="${i.equipped ? 'eq' : ''}"><td>${i.equipped ? '●' : ''}</td><td>${escapeHtml(i.name)}${i.qty > 1 ? ' ×' + i.qty : ''}</td><td>${escapeHtml(i.category)}</td><td>${i.weight ? (i.weight * i.qty) + ' lb' : '—'}</td></tr>`
-    ).join('') : '<tr><td colspan="4">—</td></tr>';
-
-    // Compact skills: only proficient + a short list feel
-    const skillLines = (ch.skills || '—');
-
-    const umb = ch.isUmbrarian ? umbrarianSheetBlock(ch) : '';
-
-    // Features once (avoid duplicating race/path blocks that are already in features)
-    const features = ch.features || '—';
-
-    const html = `
-      <div class="p-sheet">
-        <header class="p-head">
-          ${portraitHtml(ch)}
-          <div class="p-id">
-            <div class="p-name">${escapeHtml(ch.name || 'Unnamed')}</div>
-            <div class="p-meta">${escapeHtml(classLevelsSummary(ch))} · Level ${totalCharacterLevel(ch)}</div>
-            <div class="p-meta">${escapeHtml(ch.race || '—')}${ch.background ? ' · ' + escapeHtml(ch.background) : ''}${ch.alignment ? ' · ' + escapeHtml(ch.alignment) : ''}${ch.world ? ' · ' + escapeHtml(ch.world) : ''}</div>
-          </div>
-          <div class="p-head-stats">
-            <div class="p-pill"><span>Init</span><strong>${initStr}</strong></div>
-            <div class="p-pill"><span>PB</span><strong>+${ch.profBonus || 2}</strong></div>
-          </div>
-        </header>
-
-        ${resourcesSheetHtml(ch)}
-        <div class="p-combat">
-          <div class="p-box"><div class="p-val">${ch.ac}</div><div class="p-lbl">Armor Class</div><div class="p-sub">${armor ? escapeHtml(armor.name) : 'Unarmored'}${shield ? ' + Shield' : ''}</div></div>
-          <div class="p-box"><div class="p-val">${ch.hp}<span class="p-dim">/${ch.hpMax}</span></div><div class="p-lbl">Hit Points</div></div>
-          <div class="p-box"><div class="p-val">${escapeHtml((ch.speed || '30 ft.').replace(' ft.',''))}</div><div class="p-lbl">Speed</div></div>
-          <div class="p-box"><div class="p-val">${passivePer}</div><div class="p-lbl">Passive Perc.</div></div>
-          ${ch.corruption > 0 || ch.isUmbrarian ? `<div class="p-box p-corrupt"><div class="p-val">${ch.corruption}/6</div><div class="p-lbl">Corruption</div></div>` : ''}
-        </div>
-
-        <div class="p-grid p-grid-fill">
-          <div class="p-col">
-            <section class="p-panel">
-              <h3>Class Progression</h3>
-              ${multiclassProgressionHtml(ch)}
-            </section>
-            <section class="p-panel"><h3>Features &amp; Traits</h3>${featuresStructuredHtml(ch)}</section>
-            ${Array.isArray(ch.feats) && ch.feats.length ? '' : ''}
-            <section class="p-panel">
-              <h3>Ability Scores</h3>
-              <div class="p-abs">${abBlock}</div>
-            </section>
-            <section class="p-panel">
-              <h3>Saving Throws</h3>
-              <div>${escapeHtml(multiclassSavesHtml(ch))}</div>
-            </section>
-            <section class="p-panel">
-              <h3>Skills</h3>
-              <div class="p-skills">${escapeHtml(skillLines)}</div>
-            </section>
-          </div>
-          <div class="p-col p-col-wide p-col-stack">
-            <section class="p-panel p-combat-summary">
-              <h3>Combat Summary</h3>
-              <div class="p-atk-mini">${attacks.slice(0,8).map(a => `<div><strong>${escapeHtml(a.name)}</strong> ${escapeHtml(a.bonus)} · ${escapeHtml(a.damage)}</div>`).join('') || '<span class="p-empty">No attacks listed</span>'}</div>
-              ${ch.attacks ? `<pre class="p-pre p-pre-tight">${escapeHtml(ch.attacks)}</pre>` : ''}
-            </section>
-            <section class="p-panel p-features-fill">
-              <h3>Features &amp; Traits</h3>
-              <pre class="p-pre">${escapeHtml(features || '—')}</pre>
-            </section>
-          </div>
-        </div>
-
-        <section class="p-section-block">
-          <h2 class="p-section-title">Spellcasting</h2>
-          <div class="p-panel">
-            ${spellSheetBlock(ch) || '<p class="p-empty">No spell slots or spellcasting class.</p>'}
-          </div>
-          <div class="p-panel">
-            <h3>Spell Cards</h3>
-            ${spellSheetCardsHtml(ch) || '<p class="p-empty">No spells prepared or known.</p>'}
-          </div>
-        </section>
-
-        <section class="p-section-block">
-          <h2 class="p-section-title">Attacks</h2>
-          <div class="p-panel">
-            <div class="p-atk-grid">${attackCards || '<p class="p-empty">No attacks listed.</p>'}</div>
-            ${ch.attacks ? `<pre class="p-pre">${escapeHtml(ch.attacks)}</pre>` : '<p class="p-empty">No attack notes.</p>'}
-          </div>
-        </section>
-
-        <section class="p-section-block">
-          <h2 class="p-section-title">Equipment <span class="p-dim">(${inventoryWeight(inv).toFixed(1)} lb)</span></h2>
-          <div class="p-panel">
-            <table class="p-table"><thead><tr><th></th><th>Item</th><th>Type</th><th>Wt</th></tr></thead><tbody>${invRows}</tbody></table>
-          </div>
-          <div class="p-panel">
-            <h3>Equipped</h3>
-            <ul class="p-list">${equipped.length ? equipped.map(i => `<li><strong>${escapeHtml(i.name)}</strong> (${escapeHtml(i.category)}${i.damage ? ' · ' + escapeHtml(i.damage) : ''})</li>`).join('') : '<li class="p-empty">Nothing equipped</li>'}</ul>
-          </div>
-        </section>
-
-        ${umb ? `<section class="p-section-block"><h2 class="p-section-title">Umbrarian</h2><div class="p-umb-wrap">${umb}</div></section>` : ''}
-
-        ${(race || path || ch.notes) ? `
-        <div class="p-grid p-grid-3">
-          ${race ? `<section class="p-panel"><h3>Race — ${escapeHtml(race.name)}</h3>
-            <ul class="p-list">${(race.traits||[]).slice(0,10).map(t => `<li><strong>${escapeHtml(t.name)}.</strong> ${escapeHtml(t.text)}</li>`).join('')}</ul>
-          </section>` : ''}
-          ${path ? `<section class="p-panel"><h3>${escapeHtml(path.name)}</h3>
-            <ul class="p-list">${(path.features||[]).filter(f => f.lvl <= ch.level).map(f => `<li><strong>L${f.lvl} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text)}</li>`).join('')}</ul>
-          </section>` : ''}
-          ${ch.notes ? `<section class="p-panel"><h3>Notes</h3><pre class="p-pre">${escapeHtml(ch.notes)}</pre></section>` : ''}
-        </div>` : ''}
-
-        <footer class="p-foot">The Dark Sun Chronicles · Character Sheet</footer>
-      </div>`;
-
-    const w = window.open('', '_blank');
+    // Print uses the same layout as View (all pages visible, dense flow)
+    const bodyHtml = characterSheetViewHtml(ch);
+    const w = window.open('', '_blank', 'noopener,noreferrer');
     if (!w) { toast('Allow pop-ups to print'); return; }
-    const css = `
-      * { box-sizing: border-box; }
-      @page { size: A4 portrait; margin: 10mm; }
-      html, body { width: 210mm; }
-      body {
-        margin: 0 auto; padding: 0;
-        font-family: "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-        background: #14110e; color: #e8dcc8;
-        font-size: 10pt; line-height: 1.25;
-      }
-      .p-sheet { width: 100%; max-width: 190mm; margin: 0 auto; }
-      .p-head { display: flex; gap: 12px; align-items: center; border-bottom: 2px solid rgba(196,163,90,0.35); padding-bottom: 8px; margin-bottom: 8px; }
-      .cs-portrait-ring {
-        width: 56px; height: 56px; border-radius: 50%; border: 2px solid #c4a35a;
-        background: radial-gradient(circle at 30% 30%, #3a3028, #1a1510);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.4rem; font-weight: 700; color: #c4a35a; overflow: hidden; flex-shrink: 0;
-      }
-      .cs-portrait-ring.has-avatar { padding: 0; }
-      .cs-avatar-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .p-name { font-size: 1.35rem; font-weight: 700; color: #f0e6d0; line-height: 1.15; }
-      .p-meta { color: #a89880; font-size: 0.85rem; }
-      .p-id { flex: 1; min-width: 0; }
-      .p-head-stats { display: flex; gap: 6px; }
-      .p-pill {
-        border: 1px solid rgba(196,163,90,0.35); border-radius: 6px; padding: 4px 8px; text-align: center;
-      }
-      .p-pill span { display: block; font-size: 0.65rem; color: #a89880; text-transform: uppercase; }
-      .p-pill strong { color: #c4a35a; font-size: 1rem; }
-      .p-combat {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-        gap: 6px; margin-bottom: 8px;
-      }
-      .p-box {
-        background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.35);
-        border-radius: 6px; text-align: center; padding: 6px 4px;
-      }
-      .p-val { font-size: 1.35rem; font-weight: 700; color: #c4a35a; line-height: 1.1; }
-      .p-dim { color: #a89880; font-weight: 500; font-size: 0.9em; }
-      .p-lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: #a89880; margin-top: 2px; }
-      .p-sub { font-size: 0.65rem; color: #a89880; }
-      .p-corrupt .p-val { color: #d08080; }
-      .p-grid { display: grid; grid-template-columns: 28% 1fr; gap: 6px; margin-bottom: 6px; align-items: start; }
-      .p-grid-fill { align-items: stretch; }
-      .p-col-stack { display: flex; flex-direction: column; gap: 6px; min-height: 100%; }
-      .p-features-fill { flex: 1 1 auto; }
-      .p-features-fill .p-pre { white-space: pre-wrap; margin: 0; font-size: 9pt; line-height: 1.3; }
-      .p-pre-tight { margin: 4px 0 0; font-size: 8.5pt; }
-      .p-combat-summary { flex: 0 0 auto; }
-      .p-grid-3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-      .p-panel {
-        background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.3);
-        border-radius: 6px; padding: 6px 8px; margin-bottom: 6px;
-      }
-      .p-panel h3 {
-        margin: 0 0 4px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
-        color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 2px;
-      }
-      .p-abs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-      .p-ab {
-        text-align: center; border: 1px solid rgba(196,163,90,0.2); border-radius: 4px;
-        padding: 3px; background: rgba(0,0,0,0.2);
-      }
-      .p-ab-lbl { font-size: 0.62rem; color: #a89880; }
-      .p-ab-mod { font-size: 1.05rem; font-weight: 700; color: #f0e6d0; }
-      .p-ab-sc {
-        display: inline-block; font-size: 0.72rem; color: #c4a35a;
-        border: 1px solid rgba(196,163,90,0.3); border-radius: 999px; padding: 0 5px;
-      }
-      .p-skills { font-size: 0.8rem; }
-      .p-atk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
-      .p-atk {
-        border: 1px solid rgba(196,163,90,0.35); border-radius: 6px; padding: 5px 7px;
-        background: rgba(0,0,0,0.15);
-      }
-      .p-atk-name { font-weight: 700; color: #f0e6d0; border-bottom: 1px solid rgba(196,163,90,0.2); margin-bottom: 3px; padding-bottom: 2px; font-size: 0.85rem; }
-      .p-atk-row { display: flex; justify-content: space-between; gap: 6px; font-size: 0.78rem; }
-      .p-atk-row span { color: #a89880; }
-      .p-atk-row strong { color: #c4a35a; }
-      .p-atk-props { font-size: 0.68rem; color: #a89880; margin-top: 2px; }
-      .p-pre {
-        white-space: pre-wrap; font-family: inherit; font-size: 0.78rem;
-        margin: 4px 0 0; color: #e8dcc8; max-height: none;
-      }
-      .p-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-      .p-table th { text-align: left; color: #a89880; font-size: 0.65rem; text-transform: uppercase; border-bottom: 1px solid rgba(196,163,90,0.3); padding: 2px 3px; }
-      .p-table td { padding: 2px 3px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-      .p-table tr.eq td { color: #c4a35a; }
-      .p-list { margin: 0; padding-left: 1rem; font-size: 0.75rem; }
-      .p-list li { margin-bottom: 2px; }
-      .p-umb-wrap { margin-bottom: 8px; }
-      .p-umb-wrap .cs-panel { margin-bottom: 0; }
-      .p-umb-wrap .cs-panel-title {
-        font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
-        color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 2px; margin-bottom: 4px; font-weight: 700;
-      }
-      .p-umb-wrap .cs-umb { border: 1px solid rgba(196,92,74,0.45); border-radius: 6px; padding: 6px 8px; background: rgba(28,22,18,0.95); }
-      .p-umb-wrap .cs-umb-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin: 4px 0; }
-      .p-umb-wrap .cs-stat-box { text-align: center; border: 1px solid rgba(196,163,90,0.3); border-radius: 4px; padding: 4px; }
-      .p-umb-wrap .cs-stat-val { font-size: 1.1rem; font-weight: 700; color: #c4a35a; }
-      .p-umb-wrap .cs-stat-label { font-size: 0.6rem; color: #a89880; text-transform: uppercase; }
-      .p-umb-wrap .cs-stat-sub { font-size: 0.62rem; color: #a89880; }
-      .p-umb-wrap .trait-list { margin: 0; padding-left: 1rem; font-size: 0.75rem; }
-      .p-foot {
-        text-align: center; margin-top: 8px; font-size: 0.65rem; letter-spacing: 0.12em;
-        text-transform: uppercase; color: #a89880;
-      }
-      .p-section-title {
-        font-size: 12pt; font-weight: 700; color: #c4a35a; text-transform: uppercase;
-        letter-spacing: 0.08em; border-bottom: 2px solid rgba(196,163,90,0.4);
-        padding-bottom: 4px; margin: 10px 0 8px;
-      }
-      .p-section-block { margin-bottom: 10px; }
-      .p-break { break-before: auto; page-break-before: auto; margin-top: 8px; }
-      .p-section-block { break-inside: avoid; page-break-inside: avoid; }
-      .p-panel { margin-bottom: 6px; }
-      .p-empty { color: #a89880; font-style: italic; font-size: 9pt; }
-      .p-atk-grid { min-height: 0; }
-      .spell-card-grid { margin-top: 4px; }
-      .muted { color: #a89880; }
-      .p-spell-wrap { margin-bottom: 6px; }
-      .p-spell-wrap .cs-panel { background: rgba(28,22,18,0.95); border: 1px solid rgba(196,163,90,0.3); border-radius: 6px; padding: 6px 8px; }
-      .p-spell-wrap .cs-panel-title { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: #c4a35a; border-bottom: 1px solid rgba(196,163,90,0.25); padding-bottom: 2px; margin-bottom: 4px; font-weight: 700; }
-      .p-spell-wrap .cs-umb-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 4px 0; }
-      .p-spell-wrap .cs-stat-box { text-align: center; border: 1px solid rgba(196,163,90,0.3); border-radius: 4px; padding: 4px; }
-      .p-spell-wrap .cs-stat-val { font-size: 1.1rem; font-weight: 700; color: #c4a35a; }
-      .p-spell-wrap .cs-stat-label { font-size: 0.6rem; color: #a89880; text-transform: uppercase; }
-      .p-spell-wrap .cs-pre { white-space: pre-wrap; font-family: inherit; font-size: 0.78rem; margin: 2px 0 0; }
-      .spell-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-      .spell-card {
-        border: 1px solid rgba(196,163,90,0.45); border-radius: 4px; overflow: hidden;
-        background: rgba(28,22,18,0.95); break-inside: avoid; page-break-inside: avoid;
-        font-size: 9pt;
-      }
-      .spell-card-banner { background: rgba(196,163,90,0.12); border-bottom: 1px solid rgba(196,163,90,0.3); padding: 6px 8px; }
-      .spell-card-name { font-weight: 700; font-size: 11pt; color: #f0e6d0; }
-      .spell-card-level { font-size: 8pt; color: #a89880; font-style: italic; }
-      .spell-card-stats {
-        display: grid; grid-template-columns: 1fr 1fr; gap: 0;
-        border-bottom: 1px solid rgba(196,163,90,0.25);
-      }
-      .spell-stat { padding: 4px 6px; border-right: 1px solid rgba(196,163,90,0.2); border-bottom: 1px solid rgba(196,163,90,0.15); }
-      .spell-stat:nth-child(2n) { border-right: none; }
-      .spell-stat-label {
-        font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; color: #a89880; font-weight: 700;
-      }
-      .spell-stat-value { font-size: 9pt; color: #e8dcc8; font-weight: 600; }
-      .spell-card-desc { padding: 6px 8px; font-size: 8.5pt; line-height: 1.3; color: #e8dcc8; }
-      .spell-card-actions { display: none; }
-      @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #14110e; }
-        .p-panel, .p-box, .p-atk, .p-ab { break-inside: avoid; page-break-inside: avoid; }
-        .p-grid { break-inside: auto; }
-      }
-    `;
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${(ch.name || 'Sheet').replace(/[<>]/g,'')}</title><style>${css}</style></head><body>${html}<script>window.onload=function(){setTimeout(function(){window.print();},150);}</script></body></html>`);
+    const cssLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      .map(l => l.href).filter(Boolean)
+      .map(href => `<link rel="stylesheet" href="${href}">`).join('\n');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(ch.name || 'Character')} — Print</title>
+      ${cssLinks}
+      <style>
+        @page { size: A4; margin: 10mm; }
+        html, body { background: #1a1208 !important; color: #f0ebe3 !important; }
+        body { margin: 0; padding: 8px; }
+        .cs-tabs, .cs-toolbar, .modal-actions, .btn { display: none !important; }
+        .cs-page { display: block !important; page-break-inside: avoid; margin-bottom: 0.75rem; }
+        .cs-page:not(.active) { display: block !important; }
+        .cs-sheet { max-width: 100%; }
+        .cs-resources-panel { margin: 0.4rem 0 0.5rem; }
+        .cs-resource-bar { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .cs-resource-pill {
+          min-width: 6.5rem; padding: 0.3rem 0.45rem; border-radius: 8px;
+          border: 1px solid rgba(201,162,39,0.45); background: #2a1f0e; text-align: center;
+        }
+        .cs-res-name { font-size: 0.65rem; text-transform: uppercase; color: #e8c56a; font-weight: 600; }
+        .cs-res-val { font-size: 1.15rem; font-weight: 800; color: #fffdf8; }
+        .cs-res-sub { font-size: 0.62rem; color: #a89880; }
+        .cs-combat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 0.35rem; }
+        .spell-card-grid, .ability-card-grid, .cs-atk-grid {
+          display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem;
+        }
+        .spell-card, .ability-card, .cs-atk-card {
+          break-inside: avoid; page-break-inside: avoid;
+          border: 1px solid rgba(201,162,39,0.35); background: #22180c;
+        }
+        .cs-panel { break-inside: avoid; margin-bottom: 0.4rem; }
+        .cs-features-structured .cs-feat-block { break-inside: avoid; }
+        @media print {
+          html, body { background: #fff !important; color: #111 !important; }
+          .cs-resource-pill, .spell-card, .cs-panel, .cs-stat-box, .cs-atk-card {
+            background: #faf6ee !important; border-color: #bbb !important; color: #111 !important;
+          }
+          .cs-res-name, .cs-panel-title, .spell-card-name, .cs-stat-label { color: #664 !important; }
+          .cs-res-val, .cs-stat-val, .spell-card-name { color: #111 !important; }
+          .cs-page { page-break-after: auto; }
+        }
+      </style>
+    </head><body>
+      <div class="cs-print-root">${bodyHtml}</div>
+      <script>
+        document.querySelectorAll('.cs-page').forEach(p => p.classList.add('active'));
+        document.querySelectorAll('.cs-tabs').forEach(t => t.style.display = 'none');
+        setTimeout(function(){ window.focus(); window.print(); }, 250);
+      </script>
+    </body></html>`);
     w.document.close();
   }
-
-
-
-
 
 
   function renderParty() {
