@@ -4581,16 +4581,34 @@
     const unlockAt = subclassUnlockLevel(className);
     const lvl = classLevel != null && classLevel !== '' ? Number(classLevel) : 1;
     const locked = lvl < unlockAt;
+    const cn = String(className || '').trim();
+    const isMG = cn === 'Moon Guardian';
+    // DSC Moon Guardian world-paths only (not Barbarian "Path of the Berserker" etc.)
+    const moonPathNames = new Set();
+    if (typeof getMoonPaths === 'function') {
+      (getMoonPaths() || []).forEach(p => { if (p && p.name) moonPathNames.add(String(p.name)); });
+    }
+    // Known DSC path labels even if getMoonPaths is incomplete
+    ['Path of Luna','Path of Harmonia','Path of Umbraria','Path of Aetheria','Path of Solara','Path of Eternum','Path of Celestia','Path of the Eclipse','Path of the Full Moon'].forEach(n => moonPathNames.add(n));
+
     const subs = (typeof getAllSubclasses === 'function' ? getAllSubclasses() : [])
-      .filter(s => (s.parentClass || '').toLowerCase() === String(className || '').toLowerCase());
-    // Also moon paths for Moon Guardian
-    if (String(className) === 'Moon Guardian' && typeof getMoonPaths === 'function') {
-      (getMoonPaths() || []).forEach(p => {
-        if (!subs.some(s => s.name === p.name)) {
-          subs.push({ name: p.name, parentClass: 'Moon Guardian', summary: p.summary || '' });
+      .filter(s => {
+        const parent = String(s.parentClass || '').trim();
+        if (!parent || parent.toLowerCase() !== cn.toLowerCase()) return false;
+        // Only strip DSC moon paths from non–Moon Guardian classes
+        if (!isMG && moonPathNames.has(s.name)) return false;
+        return true;
+      });
+    if (isMG) {
+      moonPathNames.forEach(name => {
+        if (!subs.some(s => s.name === name)) {
+          subs.push({ name, parentClass: 'Moon Guardian', summary: '' });
         }
       });
     }
+    let selVal = selected || '';
+    // Clear only true DSC moon paths stuck on the wrong class
+    if (selVal && !isMG && moonPathNames.has(selVal)) selVal = '';
     let html = '';
     if (locked) {
       html += `<option value="">— Subclass at class level ${unlockAt} —</option>`;
@@ -4599,11 +4617,12 @@
     }
     subs.forEach(s => {
       const dis = locked ? 'disabled' : '';
-      const sel = (!locked && selected && selected === s.name) ? 'selected' : '';
+      const sel = (!locked && selVal && selVal === s.name) ? 'selected' : '';
       html += `<option value="${escapeAttr(s.name)}" ${sel} ${dis}>${escapeHtml(s.name)}</option>`;
     });
-    if (!locked && selected && !subs.some(s => s.name === selected)) {
-      html += `<option value="${escapeAttr(selected)}" selected>${escapeHtml(selected)}</option>`;
+    // Preserve legitimate custom selected values for this class
+    if (!locked && selVal && !subs.some(s => s.name === selVal)) {
+      html += `<option value="${escapeAttr(selVal)}" selected>${escapeHtml(selVal)}</option>`;
     }
     return html;
   }
@@ -4905,16 +4924,16 @@
     const total = list.reduce((s, c) => s + (c.level || 0), 0);
     return `
       <div class="multiclass-editor" id="m-multiclass">
+        <div class="mc-toolbar">
+          <button type="button" class="btn primary btn-tiny" id="m-level-up" title="Increase a class level and unlock new ASI slots">Level Up</button>
+          <span class="muted small" id="m-mc-total">Character level: <strong>${total}</strong>${total > 20 ? ' <em>(epic)</em>' : ''}</span>
+        </div>
         <div class="mc-head">
           <span>Class</span><span>Lvl</span><span>Subclass</span><span></span>
-        </div>
-        <div class="form-row" style="margin-bottom:0.35rem">
-          <button type="button" class="btn primary btn-tiny" id="m-level-up">Level Up</button>
         </div>
         <div id="m-mc-rows">${rows}</div>
         <div class="mc-footer">
           <button type="button" class="btn secondary btn-tiny" id="m-mc-add">+ Add class</button>
-          <span class="muted small" id="m-mc-total">Character level: <strong>${total}</strong>${total > 20 ? ' <em>(epic)</em>' : ''}</span>
         </div>
         <p class="muted small">Multiclass follows PHB rules: total level sums class levels; proficiency from total level; spell slots use the multiclass caster table. ${allowEpic ? 'Levels above 20 are allowed (DM option).' : 'Max total level 20.'}</p>
         <p class="muted small" id="m-mc-prereq"></p>
@@ -5006,7 +5025,10 @@
         if (sc) {
           const prev = sc.value;
           const lvl = parseInt(row?.querySelector('.mc-level')?.value, 10) || 1;
-          sc.innerHTML = subclassOptionsHtml(e.target.value, prev, lvl);
+          const newClass = e.target.value;
+          let keep = prev;
+          sc.innerHTML = subclassOptionsHtml(newClass, keep, lvl);
+          if (keep && ![...sc.options].some(o => o.value === keep)) sc.value = '';
           // Primary class change → refresh skill picker limits
           const idx = parseInt(e.target.dataset.idx || row?.dataset.idx || '0', 10) || 0;
           if (typeof refreshSkillsForPrimaryClass === 'function') {
@@ -6640,9 +6662,9 @@ function wireInventoryUI() {
           const list = (typeof readMulticlassFromForm === 'function') ? readMulticlassFromForm() : [];
           const hasMG = list.some(c => c.name === 'Moon Guardian') || $('#m-class')?.value === 'Moon Guardian';
           if (pathWrap) pathWrap.classList.toggle('hidden', !hasMG);
-          // Update every Moon Guardian multiclass row (not only primary / legacy)
-          document.querySelectorAll('.mc-row').forEach(row => {
-            const cls = row.querySelector('.mc-class')?.value;
+          // Update ONLY Moon Guardian multiclass rows
+          document.querySelectorAll('#m-mc-rows .mc-row').forEach(row => {
+            const cls = (row.querySelector('.mc-class')?.value || '').trim();
             if (cls !== 'Moon Guardian') return;
             const mcSc = row.querySelector('.mc-subclass');
             if (!mcSc) return;
@@ -6753,36 +6775,7 @@ function wireInventoryUI() {
           pathSel.value = sc;
         }
       }
-      function syncSubclassFromMoonPath() {
-        const pathSel = $('#m-moon-path');
-        const path = pathSel?.value || '';
-        const sc = $('#m-subclass');
-        if (path && sc) {
-          sc.value = path;
-          // also multiclass primary row
-          const row = document.querySelector('.mc-row');
-          const mcSc = row?.querySelector('.mc-subclass');
-          if (mcSc) {
-            if (![...mcSc.options].some(o => o.value === path)) {
-              mcSc.insertAdjacentHTML('beforeend', `<option value="${escapeAttr(path)}">${escapeHtml(path)}</option>`);
-            }
-            mcSc.value = path;
-          }
-        }
-        if (typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
-      }
-      $('#m-moon-path')?.addEventListener('change', syncSubclassFromMoonPath);
-      $('#m-subclass')?.addEventListener('change', () => {
-        syncMoonPathFromSubclass();
-        const sc = $('#m-subclass')?.value || '';
-        if (/path of/i.test(sc) && typeof applyMoonPathToFeatures === 'function') applyMoonPathToFeatures();
-      });
-      document.getElementById('m-mc-rows')?.addEventListener('change', (e) => {
-        if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-subclass')) {
-          syncMoonPathFromSubclass();
-        }
-      });
-      syncMoonPathFromSubclass();
+
 
         if (typeof wireSlotSteppers === 'function') wireSlotSteppers(document.getElementById('modal-body'));
         if (typeof refreshPreparedSpellCheckboxes === 'function') {
@@ -7466,6 +7459,7 @@ function parseAttackLines(ch) {
     const data = {
       format: 'DSCToolkt-character-v1',
       exportedAt: new Date().toISOString(),
+      characterId: ch.id,
       character: ch
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -7482,23 +7476,63 @@ function parseAttackLines(ch) {
     reader.onload = () => {
       try {
         const data = JSON.parse(reader.result);
-        let ch = data.character || data;
-        if (!ch || typeof ch !== 'object') throw new Error('Invalid file');
-        ch = normalizeCharacter({ ...ch, id: uid() });
+        let raw = data.character || data;
+        if (!raw || typeof raw !== 'object') throw new Error('Invalid file');
+        // Stable unique id (hidden from view/edit/print UI — stored on the record only)
+        const stableId = raw.id || data.characterId || data.id || uid();
+        let ch = normalizeCharacter({ ...raw, id: stableId });
+        ch.id = stableId;
+        // DM Toolkit export: if Umbrarian template is active, lock it for the player app
+        if (ch.isUmbrarian || data.umbrarian || data.template === 'umbrarian') {
+          ch.isUmbrarian = true;
+          ch.umbrarianLocked = true;
+          if (!ch.umbrarianStage) ch.umbrarianStage = data.umbrarianStage || 'dormant';
+        } else if (data.umbrarian === false) {
+          // explicit clear only if export says so — otherwise keep existing on update
+        }
         const c = getActive();
         if (!c) { toast('Open a campaign first'); return; }
         ensureCampaignShape(c);
-        if (asVillain || ch.type === 'villain') {
+        const isVillain = asVillain || ch.type === 'villain' || data.asVillain;
+        if (isVillain) {
           ch.type = 'villain';
-          c.villains.push(ch);
+          const idx = (c.villains || []).findIndex(p => p.id === ch.id);
+          if (idx >= 0) {
+            const prev = c.villains[idx];
+            c.villains[idx] = { ...prev, ...ch, id: ch.id, updatedAt: new Date().toISOString() };
+            toast(`Updated villain ${ch.name || 'character'}`);
+          } else {
+            c.villains.push(ch);
+            toast(`Imported ${ch.name || 'character'}`);
+          }
         } else {
           ch.type = ch.type === 'ally' ? 'ally' : 'pc';
-          c.party.push(ch);
+          const idx = (c.party || []).findIndex(p => p.id === ch.id);
+          if (idx >= 0) {
+            const prev = c.party[idx];
+            // Preserve local play-state the player may have changed if not in export
+            const merged = {
+              ...prev,
+              ...ch,
+              id: ch.id,
+              // Prefer imported combat state when present
+              hp: ch.hp != null ? ch.hp : prev.hp,
+              hpMax: ch.hpMax != null ? ch.hpMax : prev.hpMax,
+              conditions: Array.isArray(ch.conditions) ? ch.conditions : (prev.conditions || []),
+              resourceUsed: ch.resourceUsed || prev.resourceUsed || {},
+              updatedAt: new Date().toISOString()
+            };
+            c.party[idx] = merged;
+            toast(`Updated ${ch.name || 'character'} (matched id)`);
+          } else {
+            c.party.push(ch);
+            toast(`Imported ${ch.name || 'character'}`);
+          }
         }
         c.updatedAt = new Date().toISOString();
         save();
         renderParty();
-        toast(`Imported ${ch.name || 'character'}`);
+        if (typeof renderVillains === 'function') renderVillains();
       } catch (e) {
         console.warn(e);
         toast('Import failed — invalid JSON');

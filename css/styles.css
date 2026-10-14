@@ -2806,3 +2806,18 @@ table, .prog-table td {
 .asi-feat-pick select.asi-feat-sel:disabled {
   opacity: 0.5;
 }
+
+.mc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.mc-toolbar #m-level-up {
+  width: auto;
+  min-width: 6.5rem;
+  max-width: 10rem;
+  flex: 0 0 auto;
+}
