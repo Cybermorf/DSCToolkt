@@ -2046,6 +2046,7 @@
     });
     window.SPELLS = [...spellMap.values()].sort((a,b) => (a.level-b.level) || a.name.localeCompare(b.name));
     try { ensureMoonGuardianSpellList(); } catch (e) {}
+      try { mergeCustomFeatsIntoLibrary(); mergeCustomClassesIntoPhb(); } catch (e) {}
     window.EQUIPMENT = [...eqMap.values()];
     // Bestiary merge: DSC base + imported (imported keyed by n+source)
     const srcFilter = window.BESTIARY_SOURCE || 'all';
@@ -3421,8 +3422,18 @@
           text: a.text || ''
         });
       });
-      // Moon path features
-      if (c.name === 'Moon Guardian') {
+      // Subclass / path features (custom pack + Moon Paths)
+      const sub = findSubclass(c.name, c.subclass || (c.name === primaryClassName(ch) ? ch.subclass : ''));
+      if (sub && Array.isArray(sub.features)) {
+        sub.features.filter(f => (f.lvl || 0) <= (c.level || 1)).forEach(f => {
+          cards.push({
+            name: f.name,
+            lvl: f.lvl,
+            source: sub.name,
+            text: f.text || ''
+          });
+        });
+      } else if (c.name === 'Moon Guardian') {
         const path = findMoonPath(c.subclass || ch.subclass);
         if (path) {
           (path.features || []).filter(f => f.lvl <= c.level).forEach(f => {
@@ -3464,6 +3475,83 @@
     if (!cards.length) return '';
     return `<div class="cs-panel"><div class="cs-panel-title">Spell Cards</div>
       <div class="spell-card-grid">${cards.join('')}</div></div>`;
+  }
+
+
+
+  function getAllSubclasses() {
+    const list = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_SUBCLASSES))
+      ? window.CUSTOM_SUBCLASSES.slice() : [];
+    // Moon Paths as subclasses of Moon Guardian
+    if (typeof getMoonPaths === 'function') {
+      getMoonPaths().forEach(p => {
+        if (!list.some(s => s.name === p.name && s.parentClass === 'Moon Guardian')) {
+          list.push({
+            id: 'moon-' + (p.id || p.name),
+            name: p.name,
+            parentClass: 'Moon Guardian',
+            source: 'DSC',
+            summary: p.summary || '',
+            features: (p.features || []).map(f => ({ name: f.name, lvl: f.lvl, text: f.text || '' }))
+          });
+        }
+      });
+    }
+    return list;
+  }
+
+  function subclassesForClass(className) {
+    const n = String(className || '').trim().toLowerCase();
+    if (!n) return [];
+    return getAllSubclasses().filter(s => String(s.parentClass || '').toLowerCase() === n)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function findSubclass(className, subclassName) {
+    if (!subclassName) return null;
+    const list = subclassesForClass(className);
+    const q = String(subclassName).toLowerCase();
+    return list.find(s => s.name.toLowerCase() === q) ||
+      getAllSubclasses().find(s => s.name.toLowerCase() === q) || null;
+  }
+
+  function subclassOptionsHtml(className, selected) {
+    const opts = subclassesForClass(className);
+    const sel = String(selected || '');
+    let html = `<option value="">— Subclass —</option>`;
+    opts.forEach(s => {
+      html += `<option value="${escapeAttr(s.name)}" ${s.name === sel ? 'selected' : ''}>${escapeHtml(s.name)}</option>`;
+    });
+    if (sel && !opts.some(s => s.name === sel)) {
+      html += `<option value="${escapeAttr(sel)}" selected>${escapeHtml(sel)} (custom)</option>`;
+    }
+    return html;
+  }
+
+  function mergeCustomFeatsIntoLibrary() {
+    const custom = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_FEATS)) ? window.CUSTOM_FEATS : [];
+    if (!custom.length) return;
+    if (!Array.isArray(window.FEATS)) window.FEATS = [];
+    const have = new Set(window.FEATS.map(f => (f.name || '').toLowerCase()));
+    custom.forEach(f => {
+      const n = (f.name || '').toLowerCase();
+      if (!n || have.has(n)) return;
+      window.FEATS.push({
+        id: f.id || n.replace(/\s+/g, '-'),
+        name: f.name,
+        text: f.text || '',
+        prerequisite: f.prerequisite || '',
+        source: f.source || 'Custom'
+      });
+      have.add(n);
+    });
+  }
+
+  function mergeCustomClassesIntoPhb() {
+    const extra = (typeof window !== 'undefined' && Array.isArray(window.CUSTOM_CLASSES)) ? window.CUSTOM_CLASSES : [];
+    if (!extra.length || typeof getPhbClasses !== 'function') return;
+    // Soft: only ensure names appear in class dropdown via window.CUSTOM_CLASS_NAMES
+    window.CUSTOM_CLASS_NAMES = extra.map(c => c.name).filter(Boolean);
   }
 
 
@@ -3605,7 +3693,7 @@
           ${classOptionsHtml(c.name)}
         </select>
         <input type="number" class="mc-level" data-idx="${idx}" min="1" max="${maxLvl}" value="${c.level}" title="Levels in this class" />
-        <input type="text" class="mc-subclass" data-idx="${idx}" value="${escapeAttr(c.subclass)}" placeholder="Subclass" />
+        <select class="mc-subclass" data-idx="${idx}">${subclassOptionsHtml(c.name, c.subclass)}</select>
         <button type="button" class="btn ghost btn-tiny mc-remove" data-idx="${idx}" title="Remove">✕</button>
       </div>`).join('');
     const total = list.reduce((s, c) => s + (c.level || 0), 0);
@@ -3699,7 +3787,15 @@
     }
 
     root.addEventListener('input', (e) => {
-      if (e.target.classList.contains('mc-level') || e.target.classList.contains('mc-subclass')) updateTotal();
+      if (e.target.classList.contains('mc-class')) {
+        const row = e.target.closest('.mc-row');
+        const sc = row?.querySelector('.mc-subclass');
+        if (sc) {
+          const prev = sc.value;
+          sc.innerHTML = subclassOptionsHtml(e.target.value, prev);
+        }
+      }
+      if (e.target.classList.contains('mc-level') || e.target.classList.contains('mc-subclass') || e.target.classList.contains('mc-class')) updateTotal();
     });
     root.addEventListener('change', (e) => {
       if (e.target.classList.contains('mc-class') || e.target.classList.contains('mc-level')) updateTotal();
@@ -3730,7 +3826,7 @@
           ${classOptionsHtml('')}
         </select>
         <input type="number" class="mc-level" data-idx="${idx}" min="1" max="${maxLvl}" value="1" />
-        <input type="text" class="mc-subclass" data-idx="${idx}" value="" placeholder="Subclass" />
+        <select class="mc-subclass" data-idx="${idx}">${subclassOptionsHtml('', '')}</select>
         <button type="button" class="btn ghost btn-tiny mc-remove" data-idx="${idx}" title="Remove">✕</button>`;
       box.appendChild(div);
       updateTotal();
@@ -5000,7 +5096,7 @@ function wireInventoryUI() {
           <div class="field"><label>Class</label>
             <select id="m-class">${classOptionsHtml(primaryClassName(ch))}</select>
           </div>
-          <div class="field"><label>Subclass</label><input type="text" id="m-subclass" value="${escapeAttr((normalizeClassLevels(ch)[0]||{}).subclass || ch.subclass || '')}" placeholder="Optional / Moon Path" /></div>
+          <div class="field"><label>Subclass</label><select id="m-subclass">${subclassOptionsHtml((normalizeClassLevels(ch)[0]||{}).name || ch.class, (normalizeClassLevels(ch)[0]||{}).subclass || ch.subclass || '')}</select></div>
           <div class="field"><label>Level</label><input type="number" id="m-level" min="1" max="40" value="${totalCharacterLevel(ch)}" /></div>
         </div>
         <div class="sheet-section">
@@ -5620,8 +5716,17 @@ function parseAttackLines(ch) {
           `<li><strong>L${a.lvl} — ${escapeHtml(a.name)}.</strong> ${escapeHtml(a.text || '')}</li>`
         ).join('')}</ul>`;
       }
-      // Moon Path features for this class only
-      if (c.name === 'Moon Guardian') {
+      // Subclass features (custom AGP pack + official stubs + Moon Paths)
+      const subData = findSubclass(c.name, c.subclass);
+      if (subData && Array.isArray(subData.features) && subData.features.length) {
+        const pf = subData.features.filter(f => (f.lvl || 0) <= (c.level || 1));
+        if (pf.length) {
+          inner += `<p class="muted small"><strong>${escapeHtml(subData.name)}</strong>${subData.source ? ' · ' + escapeHtml(subData.source) : ''}</p>`;
+          inner += `<ul class="trait-list compact">${pf.map(f =>
+            `<li><strong>L${f.lvl || '—'} ${escapeHtml(f.name)}.</strong> ${escapeHtml(f.text || '')}</li>`
+          ).join('')}</ul>`;
+        }
+      } else if (c.name === 'Moon Guardian') {
         const path = findMoonPath(c.subclass || ch.subclass);
         if (path) {
           const pf = (path.features || []).filter(f => f.lvl <= c.level);
@@ -5944,61 +6049,74 @@ function parseAttackLines(ch) {
   }
 
   function printCharacterSheet(ch) {
-    // Print uses the same layout as View (all pages visible, dense flow)
-    const bodyHtml = characterSheetViewHtml(ch);
-    const w = window.open('', '_blank', 'noopener,noreferrer');
-    if (!w) { toast('Allow pop-ups to print'); return; }
-    const cssLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
-      .map(l => l.href).filter(Boolean)
-      .map(href => `<link rel="stylesheet" href="${href}">`).join('\n');
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(ch.name || 'Character')} — Print</title>
-      ${cssLinks}
-      <style>
-        @page { size: A4; margin: 10mm; }
-        html, body { background: #1a1208 !important; color: #f0ebe3 !important; }
-        body { margin: 0; padding: 8px; }
-        .cs-tabs, .cs-toolbar, .modal-actions, .btn { display: none !important; }
-        .cs-page { display: block !important; page-break-inside: avoid; margin-bottom: 0.75rem; }
-        .cs-page:not(.active) { display: block !important; }
-        .cs-sheet { max-width: 100%; }
-        .cs-resources-panel { margin: 0.4rem 0 0.5rem; }
-        .cs-resource-bar { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-        .cs-resource-pill {
-          min-width: 6.5rem; padding: 0.3rem 0.45rem; border-radius: 8px;
-          border: 1px solid rgba(201,162,39,0.45); background: #2a1f0e; text-align: center;
-        }
-        .cs-res-name { font-size: 0.65rem; text-transform: uppercase; color: #e8c56a; font-weight: 600; }
-        .cs-res-val { font-size: 1.15rem; font-weight: 800; color: #fffdf8; }
-        .cs-res-sub { font-size: 0.62rem; color: #a89880; }
-        .cs-combat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 0.35rem; }
-        .spell-card-grid, .ability-card-grid, .cs-atk-grid {
-          display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem;
-        }
-        .spell-card, .ability-card, .cs-atk-card {
-          break-inside: avoid; page-break-inside: avoid;
-          border: 1px solid rgba(201,162,39,0.35); background: #22180c;
-        }
-        .cs-panel { break-inside: avoid; margin-bottom: 0.4rem; }
-        .cs-features-structured .cs-feat-block { break-inside: avoid; }
-        @media print {
-          html, body { background: #fff !important; color: #111 !important; }
-          .cs-resource-pill, .spell-card, .cs-panel, .cs-stat-box, .cs-atk-card {
-            background: #faf6ee !important; border-color: #bbb !important; color: #111 !important;
-          }
-          .cs-res-name, .cs-panel-title, .spell-card-name, .cs-stat-label { color: #664 !important; }
-          .cs-res-val, .cs-stat-val, .spell-card-name { color: #111 !important; }
-          .cs-page { page-break-after: auto; }
-        }
-      </style>
-    </head><body>
-      <div class="cs-print-root">${bodyHtml}</div>
-      <script>
-        document.querySelectorAll('.cs-page').forEach(p => p.classList.add('active'));
-        document.querySelectorAll('.cs-tabs').forEach(t => t.style.display = 'none');
-        setTimeout(function(){ window.focus(); window.print(); }, 250);
-      </script>
-    </body></html>`);
-    w.document.close();
+    try {
+      const bodyHtml = characterSheetViewHtml(ch);
+      const title = (ch.name || 'Character').replace(/[<>]/g, '');
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — Print</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 8px; font-family: Georgia, 'Times New Roman', serif; background: #1a1208; color: #f0ebe3; }
+  .cs-tabs, .cs-toolbar { display: none !important; }
+  .cs-page { display: block !important; margin-bottom: 12px; }
+  .cs-sheet { max-width: 100%; }
+  .cs-char-name { font-size: 1.4rem; font-weight: 700; color: #e8c56a; }
+  .cs-char-meta { color: #cfc6b4; font-size: 0.9rem; }
+  .cs-combat-row, .cs-resource-bar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .cs-stat-box, .cs-resource-pill, .cs-panel, .spell-card, .cs-atk-card {
+    border: 1px solid rgba(201,162,39,0.4); border-radius: 8px; padding: 6px 8px; background: #22180c;
+  }
+  .cs-stat-val, .cs-res-val { font-size: 1.2rem; font-weight: 800; color: #fffdf8; }
+  .cs-stat-label, .cs-res-name, .cs-panel-title { font-size: 0.7rem; text-transform: uppercase; color: #e8c56a; }
+  .cs-panel-title { font-size: 0.85rem; margin-bottom: 4px; }
+  .spell-card-grid, .ability-card-grid, .cs-atk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .spell-card-name { font-weight: 700; color: #f0e6d0; }
+  .spell-card-desc, .cs-body, .cs-pre { font-size: 0.82rem; line-height: 1.35; white-space: pre-wrap; }
+  .cs-abilities { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cs-ability { text-align: center; min-width: 3rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th, td { border-bottom: 1px solid rgba(255,255,255,0.08); padding: 3px 4px; text-align: left; }
+  @media print {
+    body { background: #fff; color: #111; }
+    .cs-stat-box, .cs-resource-pill, .cs-panel, .spell-card, .cs-atk-card { background: #faf6ee; border-color: #bbb; color: #111; }
+    .cs-char-name, .cs-stat-label, .cs-res-name, .cs-panel-title { color: #553; }
+    .cs-stat-val, .cs-res-val, .spell-card-name { color: #111; }
+    .cs-page { page-break-inside: avoid; }
+  }
+</style></head><body>
+<div class="cs-print-root">${bodyHtml}</div>
+<script>
+  document.querySelectorAll('.cs-page').forEach(function(p){ p.classList.add('active'); p.style.display='block'; });
+  document.querySelectorAll('.cs-tabs').forEach(function(t){ t.style.display='none'; });
+  setTimeout(function(){ window.focus(); window.print(); }, 300);
+</script>
+</body></html>`;
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (!w) {
+        // Fallback: iframe print
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+        iframe.onload = function() {
+          try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch (e) {}
+          setTimeout(function(){ URL.revokeObjectURL(url); iframe.remove(); }, 60000);
+        };
+        iframe.src = url;
+        if (typeof toast === 'function') toast('Print opened (popup blocked — using frame)');
+      } else {
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+      }
+    } catch (err) {
+      console.error(err);
+      if (typeof toast === 'function') toast('Print failed: ' + (err.message || err));
+    }
   }
 
 
