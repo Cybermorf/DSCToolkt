@@ -8731,6 +8731,100 @@ setTimeout(function(){window.focus();window.print();},280);
     return BESTIARY.find(b => b.n.toLowerCase() === String(name).toLowerCase()) || null;
   }
 
+
+  function parseCombatAttacks(cb, best) {
+    const attacks = [];
+    const seen = new Set();
+    function add(name, toHit, damage, notes) {
+      const key = (name + '|' + toHit + '|' + damage).toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      attacks.push({
+        name: name || 'Attack',
+        toHit: toHit != null && toHit !== '' ? Number(toHit) : null,
+        damage: damage || '',
+        notes: notes || ''
+      });
+    }
+    if (cb && Array.isArray(cb.attackList)) {
+      cb.attackList.forEach(a => add(a.name, a.toHit, a.damage, a.notes));
+    }
+    const blobs = [cb && cb.notes, cb && cb.attacks, best && best.run, best && best.desc]
+      .filter(Boolean).map(String);
+    blobs.forEach(blob => {
+      String(blob).split(/\n|;/).forEach(raw => {
+        const line = raw.trim();
+        if (!line || line.length < 4) return;
+        let m = line.match(/^([A-Za-z][A-Za-z0-9' \-]{1,36}?)\s*\+?\s*([+-]?\d+)\s*to hit[,:]?\s*(.*)$/i);
+        if (m) {
+          const dmg = (m[3] || '').match(/(\d+d\d+(?:\s*[+-]\s*\d+)?(?:\s+[A-Za-z]+)?)/);
+          add(m[1].trim(), m[2], dmg ? dmg[1] : (m[3] || '').trim());
+          return;
+        }
+        m = line.match(/^([A-Za-z][A-Za-z0-9' \-]{1,36}?)\s*\(\s*([+-]?\d+)\s*to hit,\s*([^)]+)\)/i);
+        if (m) { add(m[1].trim(), m[2], m[3].trim()); return; }
+        m = line.match(/^([A-Za-z][A-Za-z0-9' \-]{1,36}?)\s*\+?\s*([+-]?\d+)\s*\(([^)]+)\)/);
+        if (m) { add(m[1].trim(), m[2], m[3].trim()); return; }
+      });
+    });
+    if (!attacks.length) {
+      add('Melee Attack', 5, '1d8+3', 'Generic');
+      add('Ranged Attack', 5, '1d6+2', 'Generic');
+    }
+    add('Custom…', null, '', 'Enter bonus below');
+    return attacks;
+  }
+
+  function rollDieExpr(expr) {
+    const s = String(expr || '').replace(/\s+/g, '');
+    const m = s.match(/^(\d+)d(\d+)([+-]\d+)?$/i);
+    if (!m) {
+      const flat = parseInt(s, 10);
+      return { total: isNaN(flat) ? 0 : flat, detail: String(expr || '0') };
+    }
+    const n = Math.min(20, parseInt(m[1], 10) || 1);
+    const sides = parseInt(m[2], 10) || 6;
+    const bonus = m[3] ? parseInt(m[3], 10) : 0;
+    const rolls = [];
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const r = 1 + Math.floor(Math.random() * sides);
+      rolls.push(r);
+      sum += r;
+    }
+    return { total: sum + bonus, detail: rolls.join('+') + (bonus ? (bonus >= 0 ? '+' : '') + bonus : '') + '=' + (sum + bonus) };
+  }
+
+  function rollCombatAttack(opts) {
+    const adv = opts.adv || 'normal';
+    const hitBonus = Number(opts.hitBonus) || 0;
+    const dmgBonus = Number(opts.dmgBonus) || 0;
+    const toHit = opts.toHit != null ? Number(opts.toHit) : 0;
+    const dmgExpr = opts.damage || '1d8';
+    function d20() { return 1 + Math.floor(Math.random() * 20); }
+    const r1 = d20();
+    const r2 = d20();
+    let used = r1;
+    let note = '';
+    if (adv === 'adv') { used = Math.max(r1, r2); note = `adv [${r1}, ${r2}] → ${used}`; }
+    else if (adv === 'dis') { used = Math.min(r1, r2); note = `dis [${r1}, ${r2}] → ${used}`; }
+    else { note = `d20=${used}`; }
+    const hitTotal = used + toHit + hitBonus;
+    const isCrit = used === 20;
+    const isFumble = used === 1;
+    let dmg = rollDieExpr(dmgExpr);
+    if (isCrit) {
+      const dmg2 = rollDieExpr(dmgExpr);
+      dmg = { total: dmg.total + dmg2.total, detail: dmg.detail + ' + crit ' + dmg2.detail };
+    }
+    return {
+      hitTotal, used, note, isCrit, isFumble, toHit, hitBonus,
+      dmgTotal: dmg.total + dmgBonus,
+      dmgDetail: dmg.detail + (dmgBonus ? ((dmgBonus >= 0 ? '+' : '') + dmgBonus) : ''),
+      formula: `${used} ${toHit >= 0 ? '+' : ''}${toHit}${hitBonus ? (hitBonus >= 0 ? ' +' : ' ') + hitBonus : ''} = ${hitTotal}`
+    };
+  }
+
   function showCombatDetail(cb) {
     const panel = $('#combat-detail');
     if (!panel) return;
@@ -8786,7 +8880,93 @@ setTimeout(function(){window.focus();window.print();},280);
       }
       // Note: People of [World] intentionally omitted from combat tracker
     }
+    // ── Combat attack roller ──
+    const attacks = parseCombatAttacks(cb, best);
+    html += `
+      <div class="detail-block combat-roller" id="combat-attack-roller">
+        <div class="detail-label">Attack Roller</div>
+        <div class="field" style="margin-top:0.35rem">
+          <label>Attack</label>
+          <select id="cr-attack">
+            ${attacks.map((a, i) => `<option value="${i}">${escapeHtml(a.name)}${a.toHit != null ? ' (+' + a.toHit + ')' : ''}${a.damage ? ' · ' + escapeHtml(a.damage) : ''}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-row" style="margin-top:0.35rem">
+          <div class="field"><label>Roll</label>
+            <select id="cr-adv">
+              <option value="normal">Normal</option>
+              <option value="adv">Advantage</option>
+              <option value="dis">Disadvantage</option>
+            </select>
+          </div>
+          <div class="field"><label>To-hit bonus</label>
+            <input type="number" id="cr-hit-bonus" value="0" step="1" />
+          </div>
+          <div class="field"><label>Damage bonus</label>
+            <input type="number" id="cr-dmg-bonus" value="0" step="1" />
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:0.35rem">
+          <div class="field"><label>To-hit mod</label>
+            <input type="number" id="cr-tohit" value="${attacks[0] && attacks[0].toHit != null ? attacks[0].toHit : 0}" step="1" />
+          </div>
+          <div class="field"><label>Damage dice</label>
+            <input type="text" id="cr-dmg" value="${escapeAttr((attacks[0] && attacks[0].damage) || '1d8+3')}" placeholder="2d6+4" />
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:0.35rem">
+          <div class="field"><label>Target AC (optional)</label>
+            <input type="number" id="cr-ac" value="" placeholder="—" min="1" max="40" />
+          </div>
+          <div class="field" style="display:flex;align-items:flex-end;gap:0.35rem">
+            <button type="button" class="btn primary" id="cr-roll-btn">Roll Attack</button>
+            <button type="button" class="btn secondary" id="cr-roll-dmg">Damage only</button>
+          </div>
+        </div>
+        <div id="cr-result" class="combat-roll-result muted small" style="margin-top:0.5rem;padding:0.5rem;border:1px solid rgba(196,163,90,0.35);border-radius:6px;min-height:2.5rem">Select an attack and roll.</div>
+      </div>`;
+
     panel.innerHTML = html;
+    (function wireCombatRoller() {
+      const atkSel = panel.querySelector('#cr-attack');
+      const toHitEl = panel.querySelector('#cr-tohit');
+      const dmgEl = panel.querySelector('#cr-dmg');
+      const list = parseCombatAttacks(cb, best);
+      atkSel?.addEventListener('change', () => {
+        const a = list[parseInt(atkSel.value, 10) || 0];
+        if (!a) return;
+        if (toHitEl && a.toHit != null) toHitEl.value = a.toHit;
+        if (dmgEl && a.damage) dmgEl.value = a.damage;
+      });
+      panel.querySelector('#cr-roll-btn')?.addEventListener('click', () => {
+        const res = rollCombatAttack({
+          adv: panel.querySelector('#cr-adv')?.value || 'normal',
+          toHit: parseInt(toHitEl?.value, 10) || 0,
+          hitBonus: parseInt(panel.querySelector('#cr-hit-bonus')?.value, 10) || 0,
+          damage: dmgEl?.value || '1d8',
+          dmgBonus: parseInt(panel.querySelector('#cr-dmg-bonus')?.value, 10) || 0
+        });
+        const acVal = parseInt(panel.querySelector('#cr-ac')?.value, 10);
+        let hitLine = '';
+        if (!isNaN(acVal)) {
+          const hits = res.isFumble ? false : (res.isCrit || res.hitTotal >= acVal);
+          hitLine = hits ? ` <strong style="color:#8d8">HIT</strong> vs AC ${acVal}` : ` <strong style="color:#c66">MISS</strong> vs AC ${acVal}`;
+        }
+        const box = panel.querySelector('#cr-result');
+        const atkName = (list[parseInt(atkSel?.value, 10) || 0] || {}).name || 'Attack';
+        if (box) {
+          box.innerHTML = `<div><strong>${escapeHtml(atkName)}</strong> · ${escapeHtml(res.note)}</div>
+            <div>To hit: <strong>${res.formula}</strong>${res.isCrit ? ' · <strong>CRIT</strong>' : ''}${res.isFumble ? ' · <strong>FUMBLE</strong>' : ''}${hitLine}</div>
+            <div>Damage: <strong>${res.dmgTotal}</strong> <span class="muted">(${escapeHtml(res.dmgDetail)})</span></div>`;
+        }
+      });
+      panel.querySelector('#cr-roll-dmg')?.addEventListener('click', () => {
+        const dmg = rollDieExpr(dmgEl?.value || '1d8');
+        const bonus = parseInt(panel.querySelector('#cr-dmg-bonus')?.value, 10) || 0;
+        const box = panel.querySelector('#cr-result');
+        if (box) box.innerHTML = `<div>Damage only: <strong>${dmg.total + bonus}</strong> <span class="muted">(${escapeHtml(dmg.detail)}${bonus ? (bonus >= 0 ? '+' : '') + bonus : ''})</span></div>`;
+      });
+    })();
   }
 
   function renderCombat() {

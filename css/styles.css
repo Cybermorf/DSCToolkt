@@ -2821,3 +2821,7 @@ table, .prog-table td {
   max-width: 10rem;
   flex: 0 0 auto;
 }
+
+.combat-roller .form-row { margin-bottom: 0.25rem; }
+.combat-roll-result { color: #f0ebe3 !important; background: rgba(0,0,0,0.25); }
+.combat-roll-result strong { color: #e8dcc8; }
