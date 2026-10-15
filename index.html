@@ -204,7 +204,7 @@
             <button id="combat-next-btn" class="btn primary">Next Turn</button>
           </div>
         </div>
-        <p class="view-desc">Track initiative, HP, and conditions. Add from Party, Villains, Bestiary, or Quick Add. Use <strong>Random Encounter</strong> for a CR-scaled pull from the current world.</p>
+        <p class="view-desc">Track initiative, HP, conditions, concentration, and actions. Select a combatant for the <strong>info + attack roller</strong> panel (actions, bonus/legendary, spells). Generate bosses with the Villain Generator.</p>
         <div class="combat-toolbar">
           <div class="combat-meta">
             <span class="stat-pill">Round <strong id="combat-round">1</strong></span>
@@ -218,6 +218,8 @@
             <button id="combat-random-enc-btn" class="btn primary">🎲 Random Encounter</button>
             <button id="combat-roll-init-btn" class="btn secondary">Roll Init</button>
             <button id="combat-sort-btn" class="btn secondary">Sort by Init</button>
+            <button id="combat-end-round-btn" class="btn secondary" title="Advance round and clear some effects">End Round</button>
+            <button id="combat-add-villain-gen-btn" class="btn danger">+ Generate Villain</button>
           </div>
         </div>
         <div class="combat-layout">
@@ -354,6 +356,7 @@
               <button id="tool-gen-force" class="btn primary">🎲 Random Active Force</button>
               <button id="tool-gen-complication" class="btn secondary">🎲 World Complication</button>
               <button id="tool-gen-npc" class="btn primary">🎲 Random NPC (Full Stats)</button>
+              <button id="tool-gen-villain" class="btn danger">🎲 Villain Generator (Boss)</button>
             </div>
             <div class="npc-gen-options">
               <label class="checkbox-row">
