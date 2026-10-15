@@ -2859,7 +2859,11 @@
   let _compendiumSaveTimer = null;
 
   function emptyCompendium() {
-    return { spells: [], equipment: [], creatures: [], meta: {} };
+    return {
+      spells: [], equipment: [], creatures: [],
+      races: [], classes: [], subclasses: [], feats: [],
+      meta: {}
+    };
   }
 
   function openCompendiumDb() {
@@ -3093,6 +3097,24 @@
     try { ensureMoonGuardianSpellList(); } catch (e) {}
       try { mergeAllCustomContent(); } catch (e) {}
     window.EQUIPMENT = [...eqMap.values()];
+    // Homebrew catalog → runtime CUSTOM_* arrays (merged with file-based custom content)
+    const homeRaces = extra.races || [];
+    const homeClasses = extra.classes || [];
+    const homeSubs = extra.subclasses || [];
+    const homeFeats = extra.feats || [];
+    window.CUSTOM_RACES = [...(Array.isArray(window.CUSTOM_RACES_FILE) ? window.CUSTOM_RACES_FILE : (window.CUSTOM_RACES || [])), ...homeRaces];
+    // Dedupe races by name
+    (function dedupe(arr, key) {
+      const m = new Map();
+      arr.forEach(x => { if (x && x[key]) m.set(String(x[key]).toLowerCase(), x); });
+      return [...m.values()];
+    });
+    window.CUSTOM_RACES = (() => { const m = new Map(); (window.CUSTOM_RACES || []).forEach(r => { if (r && r.name) m.set(r.name.toLowerCase(), r); }); return [...m.values()]; })();
+    window.CUSTOM_CLASSES = (() => { const m = new Map(); [...(window.CUSTOM_CLASSES || []), ...homeClasses].forEach(c => { if (c && c.name) m.set(c.name.toLowerCase(), c); }); return [...m.values()]; })();
+    window.CUSTOM_SUBCLASSES = (() => { const m = new Map(); [...(window.CUSTOM_SUBCLASSES || []), ...homeSubs].forEach(s => { if (s && s.name) m.set((s.parentClass||'') + '::' + s.name.toLowerCase(), s); }); return [...m.values()]; })();
+    window.CUSTOM_FEATS = (() => { const m = new Map(); [...(window.CUSTOM_FEATS || []), ...homeFeats].forEach(f => { if (f && f.name) m.set(f.name.toLowerCase(), f); }); return [...m.values()]; })();
+    try { if (typeof mergeAllCustomContent === 'function') mergeAllCustomContent(); } catch (e) {}
+
     // Bestiary merge: DSC base + imported (imported keyed by n+source)
     const srcFilter = window.BESTIARY_SOURCE || 'all';
     const importedRaw = (extra.creatures || []).map(c => ({ ...c, _src: c._src || c.source || 'Imported' }));
@@ -3205,10 +3227,91 @@
     });
     // expose for status messages
     importCompendiumPack._lastCreatureStats = { added: cAdded, updated: cUpdated, skipped: cSkipped };
+    // Races / classes / subclasses / feats (homebrew)
+    function mergeList(existing, incoming, mapFn) {
+      const map = new Map();
+      (existing || []).forEach(x => {
+        const m = mapFn(x);
+        if (m) map.set(m.id || m.name, m);
+      });
+      let n = 0;
+      (incoming || []).forEach(raw => {
+        const m = mapFn(raw);
+        if (!m) return;
+        map.set(m.id || m.name, m);
+        n++;
+      });
+      return { list: [...map.values()], count: n };
+    }
+    const raceIn = obj.races || obj.race || meta.races || [];
+    const classIn = obj.classes || obj.class || [];
+    const subIn = obj.subclasses || obj.subclass || [];
+    const featIn = obj.feats || obj.feat || [];
+    const raceMerge = mergeList(extra.races, Array.isArray(raceIn) ? raceIn : [], (raw) => {
+      if (!raw || !raw.name) return null;
+      const name = String(raw.name).trim();
+      const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      return {
+        id, name,
+        source: raw.source || 'Homebrew',
+        size: raw.size || 'Medium',
+        speed: raw.speed || '30 ft.',
+        summary: raw.summary || raw.description || '',
+        abilityBonuses: raw.abilityBonuses || raw.asi || {},
+        traits: Array.isArray(raw.traits) ? raw.traits : [],
+        world: raw.world || '',
+        tagline: raw.tagline || raw.summary || ''
+      };
+    });
+    const classMerge = mergeList(extra.classes, Array.isArray(classIn) ? classIn : [], (raw) => {
+      if (!raw || !raw.name) return null;
+      const name = String(raw.name).trim();
+      const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      return {
+        id, name,
+        source: raw.source || 'Homebrew',
+        hitDie: raw.hitDie || raw.hit_die || 'd8',
+        primaryAbility: raw.primaryAbility || [],
+        saves: raw.saves || [],
+        skillsChoose: raw.skillsChoose != null ? Number(raw.skillsChoose) : 2,
+        skills: raw.skills || [],
+        summary: raw.summary || '',
+        progression: raw.progression || [],
+        features: raw.features || []
+      };
+    });
+    const subMerge = mergeList(extra.subclasses, Array.isArray(subIn) ? subIn : [], (raw) => {
+      if (!raw || !raw.name) return null;
+      const name = String(raw.name).trim();
+      const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      return {
+        id, name,
+        parentClass: raw.parentClass || raw.parent || raw.class || '',
+        source: raw.source || 'Homebrew',
+        summary: raw.summary || '',
+        features: raw.features || []
+      };
+    });
+    const featMerge = mergeList(extra.feats, Array.isArray(featIn) ? featIn : [], (raw) => {
+      if (!raw || !raw.name) return null;
+      const name = String(raw.name).trim();
+      const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      return {
+        id, name,
+        source: raw.source || 'Homebrew',
+        prerequisite: raw.prerequisite || '',
+        text: raw.text || raw.description || ''
+      };
+    });
+
     const next = {
       spells: [...spellMap.values()],
       equipment: [...eqMap.values()],
       creatures: [...creMap.values()],
+      races: raceMerge.list,
+      classes: classMerge.list,
+      subclasses: subMerge.list,
+      feats: featMerge.list,
       meta: { ...(extra.meta || {}), ...meta, updatedAt: new Date().toISOString() }
     };
     saveUserCompendium(next);
@@ -3218,6 +3321,10 @@
       spells: sCount,
       equipment: eCount,
       creatures: cCount,
+      races: raceMerge.count,
+      classes: classMerge.count,
+      subclasses: subMerge.count,
+      feats: featMerge.count,
       creaturesAdded: cStats.added,
       creaturesUpdated: cStats.updated,
       creaturesSkipped: cStats.skipped,
@@ -8929,6 +9036,115 @@ setTimeout(function(){window.focus();window.print();},280);
       });
     }
 
+
+    // Custom content creator / exporter
+    const customHost = document.getElementById('tool-custom-content');
+    if (customHost && !customHost.dataset.wired) {
+      customHost.dataset.wired = '1';
+      customHost.innerHTML = `
+        <div class="compendium-panel">
+          <h3>Custom Content (Homebrew)</h3>
+          <p class="muted small">Create or import races, classes, subclasses, feats, weapons, and armor. Export a pack for the Player app. Template: <code>templates/custom-compendium-pack.template.json</code></p>
+          <div class="form-row">
+            <div class="field"><label>Type</label>
+              <select id="cc-type">
+                <option value="race">Race</option>
+                <option value="class">Class</option>
+                <option value="subclass">Subclass</option>
+                <option value="feat">Feat</option>
+                <option value="weapon">Weapon</option>
+                <option value="armor">Armor</option>
+                <option value="spell">Spell</option>
+              </select>
+            </div>
+            <div class="field"><label>Name</label><input type="text" id="cc-name" placeholder="Name" /></div>
+          </div>
+          <div class="form-row">
+            <div class="field"><label>Parent class (subclasses)</label><input type="text" id="cc-parent" placeholder="e.g. Wizard" /></div>
+            <div class="field"><label>Source</label><input type="text" id="cc-source" value="Homebrew" /></div>
+          </div>
+          <div class="field"><label>Summary / text</label><textarea id="cc-text" rows="3" placeholder="Description, traits, features…"></textarea></div>
+          <div class="form-row">
+            <div class="field"><label>Weapon damage</label><input type="text" id="cc-damage" placeholder="1d8" /></div>
+            <div class="field"><label>Armor AC base</label><input type="number" id="cc-ac" placeholder="14" /></div>
+            <div class="field"><label>Spell level</label><input type="number" id="cc-level" min="0" max="9" value="0" /></div>
+          </div>
+          <div class="tool-btns" style="margin-top:0.5rem">
+            <button type="button" class="btn primary" id="cc-add">Add to Compendium</button>
+            <button type="button" class="btn secondary" id="cc-export">Export Custom Pack</button>
+            <button type="button" class="btn secondary" id="cc-import">Import Pack JSON</button>
+            <input type="file" id="cc-file" accept=".json,application/json" hidden />
+          </div>
+          <p class="muted small" id="cc-status">Ready.</p>
+        </div>`;
+      const status = () => customHost.querySelector('#cc-status');
+      customHost.querySelector('#cc-add')?.addEventListener('click', () => {
+        const type = customHost.querySelector('#cc-type')?.value || 'race';
+        const name = (customHost.querySelector('#cc-name')?.value || '').trim();
+        if (!name) { toast('Name required'); return; }
+        const source = (customHost.querySelector('#cc-source')?.value || 'Homebrew').trim();
+        const text = (customHost.querySelector('#cc-text')?.value || '').trim();
+        const parent = (customHost.querySelector('#cc-parent')?.value || '').trim();
+        const pack = { format: 'DSCToolkt-compendium-v2', meta: { name: 'Inline homebrew', source } };
+        if (type === 'race') {
+          pack.races = [{ name, source, summary: text, traits: text ? [{ name: 'Trait', text }] : [] }];
+        } else if (type === 'class') {
+          pack.classes = [{ name, source, summary: text, skillsChoose: 2, features: text ? [{ name: 'Feature', lvl: 1, text }] : [] }];
+        } else if (type === 'subclass') {
+          pack.subclasses = [{ name, parentClass: parent || 'Fighter', source, summary: text, features: text ? [{ name: 'Feature', lvl: 3, text }] : [] }];
+        } else if (type === 'feat') {
+          pack.feats = [{ name, source, text }];
+        } else if (type === 'weapon') {
+          pack.equipment = [{ name, category: 'weapon', damage: customHost.querySelector('#cc-damage')?.value || '1d8', damageType: 'slashing', source, notes: text }];
+        } else if (type === 'armor') {
+          pack.equipment = [{ name, category: 'armor', armorType: 'medium', acBase: parseInt(customHost.querySelector('#cc-ac')?.value, 10) || 14, acDexMax: 2, source, notes: text }];
+        } else if (type === 'spell') {
+          pack.spells = [{ name, level: parseInt(customHost.querySelector('#cc-level')?.value, 10) || 0, school: 'Evocation', description: text, source }];
+        }
+        const res = importCompendiumPack(pack);
+        if (status()) status().textContent = `Added ${name} (${type}). Pack merge: ${JSON.stringify(res)}`;
+        toast(`Added ${name}`);
+      });
+      customHost.querySelector('#cc-export')?.addEventListener('click', () => {
+        const extra = getUserCompendium();
+        const pack = {
+          format: 'DSCToolkt-compendium-v2',
+          meta: { name: 'DSC Custom Export', exportedAt: new Date().toISOString(), ...(extra.meta || {}) },
+          races: extra.races || [],
+          classes: extra.classes || [],
+          subclasses: extra.subclasses || [],
+          feats: extra.feats || [],
+          equipment: extra.equipment || [],
+          spells: extra.spells || [],
+          creatures: [] // omit creatures for player-safe export by default
+        };
+        if (typeof downloadJson === 'function') downloadJson('dsc-custom-pack.json', pack);
+        else {
+          const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'dsc-custom-pack.json';
+          a.click();
+        }
+        toast('Exported custom pack (no creatures — Player-safe)');
+      });
+      customHost.querySelector('#cc-import')?.addEventListener('click', () => customHost.querySelector('#cc-file')?.click());
+      customHost.querySelector('#cc-file')?.addEventListener('change', async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        try {
+          const obj = JSON.parse(await file.text());
+          const res = importCompendiumPack(obj);
+          if (status()) status().textContent = `Imported: ${JSON.stringify(res)}`;
+          toast('Custom pack imported');
+        } catch (e) {
+          toast('Import failed');
+          console.warn(e);
+        }
+        ev.target.value = '';
+      });
+    }
+
   }
 
   // ─── Combat Tracker ──────────────────────────────────────────────────────
@@ -9150,6 +9366,10 @@ setTimeout(function(){window.focus();window.print();},280);
         <div class="combat-detail-roller">
           <div class="detail-label">Attack / Check Roller</div>
           <div class="field" style="margin-top:0.35rem">
+            <label>Target</label>
+            <select id="cr-target"></select>
+          </div>
+          <div class="field" style="margin-top:0.35rem">
             <label>Roll mode</label>
             <select id="cr-mode">
               <option value="attack">Attack roll</option>
@@ -9211,6 +9431,13 @@ setTimeout(function(){window.focus();window.print();},280);
             <input type="number" id="cr-dc" value="15" min="1" max="40" />
           </div>
           <div id="cr-result" class="combat-roll-result muted small">Select an attack and roll.</div>
+          <div class="combat-apply-row" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.35rem">
+            <button type="button" class="btn danger" id="cr-apply-dmg" title="Apply last damage to target">Apply Damage</button>
+            <button type="button" class="btn primary" id="cr-apply-heal" title="Heal target">Apply Heal</button>
+            <button type="button" class="btn secondary" id="cr-apply-cond" title="Add condition to target">Apply Condition</button>
+            <input type="number" id="cr-apply-amt" value="" placeholder="Amt" style="width:4.5rem" title="Override amount" />
+            <input type="text" id="cr-apply-cond-text" value="" placeholder="Condition…" style="flex:1;min-width:6rem" />
+          </div>
           <div class="detail-block" style="margin-top:0.75rem">
             <div class="detail-label">Combat Log</div>
             <div id="cr-log" class="combat-log muted small">${(cb.combatLog || []).slice(-8).map(l => `<div>${escapeHtml(l)}</div>`).join('') || '—'}</div>
@@ -9226,6 +9453,28 @@ setTimeout(function(){window.focus();window.print();},280);
       const log = panel.querySelector('#cr-log');
       if (log) log.innerHTML = cb.combatLog.slice(-8).map(l => `<div>${escapeHtml(l)}</div>`).join('');
     }
+
+
+    // Populate targets from current combat
+    (function fillTargets() {
+      const sel = panel.querySelector('#cr-target');
+      if (!sel) return;
+      let combatants = [];
+      try {
+        const c = getActive();
+        combatants = (getCombat(c).combatants || []);
+      } catch (e) {}
+      const opts = combatants.map((x, i) => {
+        const label = `${x.name} (${x.hp}/${x.hpMax} HP)${x.side ? ' · ' + x.side : ''}`;
+        return `<option value="${i}">${escapeHtml(label)}</option>`;
+      });
+      sel.innerHTML = '<option value="">— Choose target —</option>' + opts.join('');
+      // Default: first enemy different from self
+      const selfIdx = combatants.findIndex(x => x === cb || x.id === cb.id || x.name === cb.name);
+      const enemy = combatants.findIndex((x, i) => i !== selfIdx && (x.side === 'enemy' || x.side === 'party' || true));
+      if (enemy >= 0) sel.value = String(enemy);
+    })();
+    window.__lastCombatRoll = window.__lastCombatRoll || { damage: 0, heal: 0, hit: null };
 
     // Wire roller
     const atkSel = panel.querySelector('#cr-attack');
@@ -9257,6 +9506,7 @@ setTimeout(function(){window.focus();window.print();},280);
         const dmg = rollDieExpr(dmgEl?.value || '1d4+1');
         const bonus = parseInt(panel.querySelector('#cr-dmg-bonus')?.value, 10) || 0;
         if (box) box.innerHTML = `<div><strong>${escapeHtml(atkName)}</strong> — auto-hit</div><div>Damage: <strong>${dmg.total + bonus}</strong></div>`;
+        window.__lastCombatRoll = { damage: dmg.total + bonus, heal: 0, hit: true, name: atkName };
         appendLog(`${atkName}: auto-hit dmg ${dmg.total + bonus}`);
         return;
       }
@@ -9281,6 +9531,13 @@ setTimeout(function(){window.focus();window.print();},280);
         }
         if (box) box.innerHTML = `<div><strong>${escapeHtml(atkName)}</strong> · Save vs DC ${dc}</div>
           <div>Roll: <strong>${total}</strong> → <strong style="color:${ok?'#8d8':'#c66'}">${ok?'SUCCESS':'FAIL'}</strong></div>${dmgLine}`;
+        if (!ok && dmgEl?.value) {
+          const dmg = rollDieExpr(dmgEl.value);
+          const db = parseInt(panel.querySelector('#cr-dmg-bonus')?.value, 10) || 0;
+          window.__lastCombatRoll = { damage: dmg.total + db, heal: 0, hit: true, name: atkName };
+        } else {
+          window.__lastCombatRoll = { damage: 0, heal: 0, hit: false, name: atkName };
+        }
         appendLog(`${atkName}: save ${total} vs DC ${dc} ${ok?'OK':'FAIL'}`);
         return;
       }
@@ -9302,7 +9559,8 @@ setTimeout(function(){window.focus();window.print();},280);
           <div>To hit: <strong>${res.formula}</strong>${res.isCrit ? ' · CRIT' : ''}${res.isFumble ? ' · FUMBLE' : ''}${hitLine}</div>
           <div>Damage: <strong>${res.dmgTotal}</strong> <span class="muted">(${escapeHtml(res.dmgDetail)})</span></div>`;
       }
-      appendLog(`${atkName}: ${res.formula}${hitLine} · dmg ${res.dmgTotal}`);
+      window.__lastCombatRoll = { damage: res.dmgTotal, heal: 0, hit: !hitLine.includes('MISS'), name: atkName };
+        appendLog(`${atkName}: ${res.formula}${hitLine} · dmg ${res.dmgTotal}`);
     });
     panel.querySelector('#cr-roll-dmg')?.addEventListener('click', () => {
       const dmg = rollDieExpr(dmgEl?.value || '1d8');
@@ -9368,6 +9626,63 @@ setTimeout(function(){window.focus();window.print();},280);
     });
 
     // Click action chips → load into roller
+
+    function getTargetCombatant() {
+      const c = getActive();
+      if (!c) return null;
+      const combat = getCombat(c);
+      const idx = parseInt(panel.querySelector('#cr-target')?.value, 10);
+      if (isNaN(idx) || idx < 0) return null;
+      return { combat, idx, target: combat.combatants[idx] };
+    }
+    function applyToTarget(kind) {
+      const pack = getTargetCombatant();
+      if (!pack || !pack.target) { toast('Choose a target'); return; }
+      const { combat, idx, target } = pack;
+      const override = parseInt(panel.querySelector('#cr-apply-amt')?.value, 10);
+      if (kind === 'damage') {
+        let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.damage || 0);
+        if (!amt) { amt = parseInt(prompt('Damage amount?', '5'), 10) || 0; }
+        if (amt <= 0) return;
+        let left = amt;
+        const temp = target.tempHp || 0;
+        if (temp > 0) {
+          const absorb = Math.min(temp, left);
+          target.tempHp = temp - absorb;
+          left -= absorb;
+        }
+        target.hp = Math.max(0, (target.hp || 0) - left);
+        if (!target.combatLog) target.combatLog = [];
+        target.combatLog.push(`Took ${amt} from ${cb.name || 'attacker'}`);
+        appendLog(`Applied ${amt} damage to ${target.name} (now ${target.hp}/${target.hpMax})`);
+        toast(`${target.name}: −${amt} HP`);
+      } else if (kind === 'heal') {
+        let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.heal || 0);
+        if (!amt) { amt = parseInt(prompt('Heal amount?', '5'), 10) || 0; }
+        if (amt <= 0) return;
+        target.hp = Math.min(target.hpMax || amt, (target.hp || 0) + amt);
+        appendLog(`Healed ${target.name} for ${amt} (now ${target.hp}/${target.hpMax})`);
+        toast(`${target.name}: +${amt} HP`);
+      } else if (kind === 'cond') {
+        const cond = (panel.querySelector('#cr-apply-cond-text')?.value || '').trim() || prompt('Condition?', 'poisoned');
+        if (!cond) return;
+        const prev = (target.conditions || '').trim();
+        target.conditions = prev ? (prev + ', ' + cond) : cond;
+        appendLog(`${target.name}: ${cond}`);
+        toast(`${target.name}: ${cond}`);
+      }
+      try { save(); } catch (e) {}
+      renderCombat();
+      // re-select
+      try {
+        const c2 = getActive();
+        getCombat(c2).selectedIndex = (getCombat(c2).combatants || []).findIndex(x => x.id === cb.id || x.name === cb.name);
+      } catch (e) {}
+    }
+    panel.querySelector('#cr-apply-dmg')?.addEventListener('click', () => applyToTarget('damage'));
+    panel.querySelector('#cr-apply-heal')?.addEventListener('click', () => applyToTarget('heal'));
+    panel.querySelector('#cr-apply-cond')?.addEventListener('click', () => applyToTarget('cond'));
+
     panel.querySelectorAll('.combat-action-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const hit = btn.dataset.hit;

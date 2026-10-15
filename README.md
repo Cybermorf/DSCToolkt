@@ -113,6 +113,17 @@ Works the same in the Player Companion.
 
 ---
 
+
+### Custom content (homebrew)
+
+Create or import races, classes, subclasses, feats, weapons, armor, and spells.
+
+1. **Tools → Custom Content** — quick-add a single item, **Import Pack JSON**, or **Export Custom Pack** (Player-safe: no creatures).
+2. **Template:** [`templates/custom-compendium-pack.template.json`](templates/custom-compendium-pack.template.json) — copy, edit, import.
+3. Format: `DSCToolkt-compendium-v2` (v1 packs with only spells/equipment still work).
+
+**Player Companion** can import the same pack for spells, equipment, races, classes, subclasses, and feats. Bestiary creatures stay DM-only.
+
 ## CritterDB bulk import
 
 ```bash
