@@ -37,6 +37,7 @@
     </header>
 
     <!-- Sidebar Navigation -->
+    <button type="button" id="sidebar-collapse-btn" class="sidebar-collapse-btn" title="Hide/show menu" aria-label="Toggle menu">☰</button>
     <aside id="sidebar" class="sidebar">
       <nav class="sidebar-nav">
         <button class="nav-item active" data-view="campaigns">
@@ -55,10 +56,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Party &amp; Roster
         </button>
-        <button class="nav-item" data-view="combat" disabled>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 17.5L3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M14.5 6.5L18 3h3v3l-3.5 3.5"/></svg>
-          Combat
-        </button>
+        <!-- Combat moved to Cybervlachos Combat Tracker -->
         <button class="nav-item" data-view="bestiary">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h5"/></svg>
           Bestiary
@@ -196,7 +194,7 @@
       </section>
 
       <!-- Combat Tracker View -->
-      <section id="view-combat" class="view">
+      <section id="view-combat" class="view" style="display:none" hidden>
         <div class="view-header">
           <h1>Combat Tracker</h1>
           <div class="header-actions">
@@ -218,7 +216,11 @@
             <button id="combat-random-enc-btn" class="btn primary">🎲 Random Encounter</button>
             <button id="combat-roll-init-btn" class="btn secondary">Roll Init</button>
             <button id="combat-sort-btn" class="btn secondary">Sort by Init</button>
-            <button id="combat-end-round-btn" class="btn secondary" title="Advance round and clear some effects">End Round</button>
+            <button id="combat-end-round-btn" class="btn secondary" title="Advance to next initiative">End Turn / Next</button>
+            <button id="combat-delay-btn" class="btn secondary" title="Delay this turn">Delay</button>
+            <button id="combat-save-enc-btn" class="btn secondary" title="Save encounter preset">Save Encounter</button>
+            <button id="combat-load-enc-btn" class="btn secondary" title="Load encounter preset">Load Encounter</button>
+            <button id="combat-export-log-btn" class="btn secondary" title="Export combat log">Export Log</button>
             <button id="combat-add-villain-gen-btn" class="btn danger">+ Generate Villain</button>
           </div>
         </div>

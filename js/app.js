@@ -2107,6 +2107,243 @@
     return [...byId.values()];
   }
 
+
+  function attacksPerAction(ch) {
+    if (!ch) return 1;
+    let n = 1;
+    const list = typeof normalizeClassLevels === 'function' ? normalizeClassLevels(ch) : [];
+    list.forEach(c => {
+      const name = c.name || '';
+      const lvl = Number(c.level) || 1;
+      // Fighter: Extra Attack at 5, 11, 20
+      if (name === 'Fighter') {
+        if (lvl >= 20) n = Math.max(n, 4);
+        else if (lvl >= 11) n = Math.max(n, 3);
+        else if (lvl >= 5) n = Math.max(n, 2);
+      } else if (['Barbarian','Monk','Paladin','Ranger','Moon Guardian','Bloodhunter','Ghostblade'].includes(name)) {
+        if (lvl >= 5) n = Math.max(n, 2);
+      } else if (name === 'Shadowblade' && lvl >= 5) {
+        // rogue-like — no extra attack by default
+      }
+    });
+    // Haste etc. not auto — DM can override via combatant.attacksMax
+    return n;
+  }
+
+  function ensureCombatantTurnState(cb, ch) {
+    if (!cb) return;
+    if (cb.attacksMax == null) cb.attacksMax = attacksPerAction(ch);
+    if (cb.attacksUsed == null) cb.attacksUsed = 0;
+    // Full turn economy defaults
+    if (cb.speed == null) cb.speed = (ch && ch.speed) ? Number(ch.speed) || 30 : 30;
+    if (cb.moveUsed == null) cb.moveUsed = 0;
+    if (cb.actionUsed == null) cb.actionUsed = false;
+    if (cb.bonusUsed == null) cb.bonusUsed = false;
+    if (cb.objectInteractUsed == null) cb.objectInteractUsed = false;
+    if (cb.reactionUsed == null) cb.reactionUsed = false;
+    if (cb.turnPhase == null) cb.turnPhase = 'ready'; // ready | active | ended
+
+    if (!cb.combatResources && ch) {
+      const pools = classResourcesForCharacter(ch);
+      const used = (ch.resourceUsed && typeof ch.resourceUsed === 'object') ? ch.resourceUsed : {};
+      cb.combatResources = {};
+      pools.forEach(r => {
+        const u = used[r.id] != null ? Number(used[r.id]) : 0;
+        cb.combatResources[r.id] = { label: r.label, max: r.max, used: u, recover: r.recover || '', className: r.className || '' };
+      });
+    }
+    if (!cb.combatSpellSlots && ch) {
+      try {
+        const maxes = typeof getMulticlassSpellSlotMaxes === 'function' ? getMulticlassSpellSlotMaxes(ch) : null;
+        const used = ch.spellSlotsUsed || {};
+        if (maxes) {
+          cb.combatSpellSlots = {};
+          for (let L = 1; L <= 9; L++) {
+            const m = maxes[L] || maxes[String(L)] || 0;
+            if (m > 0) {
+              const u = used[L] != null ? Number(used[L]) : (used[String(L)] != null ? Number(used[String(L)]) : 0);
+              cb.combatSpellSlots[L] = { max: m, used: u };
+            }
+          }
+        }
+        // Warlock pact
+        const wl = typeof warlockLevels === 'function' ? warlockLevels(ch) : 0;
+        if (wl > 0 && window.SPELL_SLOTS_WARLOCK) {
+          const row = window.SPELL_SLOTS_WARLOCK[Math.min(wl, 20)];
+          if (row) {
+            cb.pactSlotLevel = row[0];
+            cb.pactSlotsMax = row[1];
+            cb.pactSlotsUsed = used.pact != null ? Number(used.pact) : 0;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
+  function syncCombatResourcesToCharacter(cb) {
+    if (!cb) return;
+    const id = cb.charId || cb.sourceId;
+    if (!id) return;
+    try {
+      const c = getActive();
+      if (!c) return;
+      const lists = [c.party, c.villains];
+      for (const list of lists) {
+        if (!Array.isArray(list)) continue;
+        const ch = list.find(x => x.id === id);
+        if (!ch) continue;
+        if (cb.combatResources) {
+          ch.resourceUsed = ch.resourceUsed || {};
+          Object.keys(cb.combatResources).forEach(rid => {
+            ch.resourceUsed[rid] = cb.combatResources[rid].used || 0;
+          });
+        }
+        if (cb.combatSpellSlots) {
+          ch.spellSlotsUsed = ch.spellSlotsUsed || {};
+          Object.keys(cb.combatSpellSlots).forEach(L => {
+            ch.spellSlotsUsed[L] = cb.combatSpellSlots[L].used || 0;
+          });
+        }
+        if (cb.pactSlotsUsed != null) {
+          ch.spellSlotsUsed = ch.spellSlotsUsed || {};
+          ch.spellSlotsUsed.pact = cb.pactSlotsUsed;
+        }
+      }
+    } catch (e) {}
+  }
+
+  function combatResourcesHtml(cb) {
+    const res = cb.combatResources || {};
+    const keys = Object.keys(res);
+    if (!keys.length) return '';
+    return `<div class="detail-block">
+      <div class="detail-label">Class Resources</div>
+      <div class="combat-res-list">
+        ${keys.map(k => {
+          const r = res[k];
+          const left = r.max >= 99 ? '∞' : Math.max(0, r.max - (r.used || 0));
+          const maxL = r.max >= 99 ? '∞' : r.max;
+          return `<div class="combat-res-row" data-res="${escapeAttr(k)}">
+            <span class="combat-res-name" title="${escapeAttr(r.recover || '')}">${escapeHtml(r.label)}</span>
+            <button type="button" class="btn secondary btn-tiny cd-res-dec" data-res="${escapeAttr(k)}">−</button>
+            <span class="combat-res-val"><strong>${left}</strong>/${maxL}</span>
+            <button type="button" class="btn secondary btn-tiny cd-res-inc" data-res="${escapeAttr(k)}">+</button>
+            <button type="button" class="btn secondary btn-tiny cd-res-spend" data-res="${escapeAttr(k)}" title="Spend 1">Use</button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  function combatSpellSlotsHtml(cb) {
+    const slots = cb.combatSpellSlots || {};
+    const levels = Object.keys(slots).map(Number).sort((a,b)=>a-b);
+    if (!levels.length && !cb.pactSlotsMax) return '';
+    const slotOpts = levels.filter(L => (slots[L].max - (slots[L].used||0)) > 0).map(L =>
+      `<option value="${L}">${L}${L===1?'st':L===2?'nd':L===3?'rd':'th'} (${slots[L].max-(slots[L].used||0)} left)</option>`
+    ).join('');
+    const pact = cb.pactSlotsMax
+      ? `<div class="combat-res-row"><span class="combat-res-name">Pact (${cb.pactSlotLevel})</span>
+          <button type="button" class="btn secondary btn-tiny" id="cd-pact-dec">−</button>
+          <span class="combat-res-val"><strong>${Math.max(0,(cb.pactSlotsMax||0)-(cb.pactSlotsUsed||0))}</strong>/${cb.pactSlotsMax}</span>
+          <button type="button" class="btn secondary btn-tiny" id="cd-pact-inc">+</button>
+          <button type="button" class="btn secondary btn-tiny" id="cd-pact-spend">Use</button></div>`
+      : '';
+    return `<div class="detail-block">
+      <div class="detail-label">Spell Slots</div>
+      <div class="combat-slots-grid">
+        ${levels.map(L => {
+          const s = slots[L];
+          const left = Math.max(0, s.max - (s.used||0));
+          return `<div class="combat-slot-chip ${left===0?'empty':''}" data-slot="${L}" title="Level ${L}">
+            <span class="slot-lvl">L${L}</span>
+            <span class="slot-val">${left}/${s.max}</span>
+            <button type="button" class="btn secondary btn-tiny cd-slot-spend" data-slot="${L}">−</button>
+            <button type="button" class="btn secondary btn-tiny cd-slot-restore" data-slot="${L}">+</button>
+          </div>`;
+        }).join('')}
+      </div>
+      ${pact}
+      <div class="field" style="margin-top:0.4rem">
+        <label>Cast / Upcast using slot</label>
+        <div class="tool-btns" style="align-items:center">
+          <select id="cr-upcast-level" style="min-width:7rem">${slotOpts || '<option value="">No slots</option>'}</select>
+          <button type="button" class="btn primary btn-tiny" id="cr-cast-slot">Spend Slot</button>
+        </div>
+        <p class="muted small">Select slot level to upcast, then Spend Slot (or after rolling a spell).</p>
+      </div>
+    </div>`;
+  }
+
+  function combatAttacksBudgetHtml(cb) {
+    const max = cb.attacksMax != null ? cb.attacksMax : 1;
+    const used = cb.attacksUsed || 0;
+    const left = Math.max(0, max - used);
+    const speed = cb.speed != null ? cb.speed : 30;
+    const moveUsed = cb.moveUsed || 0;
+    const moveLeft = Math.max(0, speed - moveUsed);
+    const phase = cb.turnPhase || 'ready';
+    const phaseLabel = phase === 'active' ? 'Your turn' : phase === 'ended' ? 'Turn ended' : 'Waiting';
+    return `<div class="detail-block combat-turn-phases">
+      <div class="detail-label">Turn structure <span class="muted small">(${escapeHtml(phaseLabel)})</span></div>
+      <div class="turn-phase-steps muted small" style="margin-bottom:0.4rem">
+        <span class="turn-step ${phase==='active'?'on':''}">1. Start</span> →
+        <span class="turn-step ${phase==='active'?'on':''}">2. Move / Action / Bonus</span> →
+        <span class="turn-step ${phase==='ended'?'on':''}">3. End</span> →
+        <span class="turn-step">4. Reaction / LA</span>
+      </div>
+      <div class="combat-res-row">
+        <span class="combat-res-name">Movement</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-move-dec" title="Reduce used">−</button>
+        <span class="combat-res-val"><strong>${moveLeft}</strong> / ${speed} ft</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-move-inc" title="Spend 5 ft">+5</button>
+        <button type="button" class="btn secondary btn-tiny" id="cd-move-all" title="Use full speed">All</button>
+        <button type="button" class="btn secondary btn-tiny" id="cd-move-reset">Reset</button>
+      </div>
+      <div class="combat-res-row">
+        <span class="combat-res-name">Action</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-action-toggle">${cb.actionUsed ? 'Used ✓' : 'Available'}</button>
+        <span class="muted small">Attack · Cast · Dash · Dodge · Help · Hide · Ready · …</span>
+      </div>
+      <div class="combat-res-row">
+        <span class="combat-res-name">Attack budget</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-atk-dec">−</button>
+        <span class="combat-res-val"><strong>${left}</strong> / ${max}</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-atk-inc">+</button>
+        <button type="button" class="btn secondary btn-tiny" id="cd-atk-reset">Reset</button>
+        <span class="muted small">Extra Attack included</span>
+      </div>
+      <div class="combat-res-row">
+        <span class="combat-res-name">Bonus action</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-bonus-toggle">${cb.bonusUsed ? 'Used ✓' : 'Available'}</button>
+        <span class="muted small">Only if a feature grants one</span>
+      </div>
+      <div class="combat-res-row">
+        <span class="combat-res-name">Object interaction</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-object-toggle">${cb.objectInteractUsed ? 'Used ✓' : 'Available'}</button>
+        <span class="muted small">Draw weapon, open door, …</span>
+      </div>
+      <div class="combat-res-row">
+        <span class="combat-res-name">Reaction</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-reaction-toggle">${cb.reactionUsed ? 'Used ✓' : 'Available'}</button>
+        <span class="muted small">Until start of next turn</span>
+      </div>
+      ${cb.legendary ? `<div class="combat-res-row">
+        <span class="combat-res-name">Legendary actions</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-la-dec">−</button>
+        <span class="combat-res-val"><strong>${cb.legendaryActionsLeft != null ? cb.legendaryActionsLeft : 3}</strong> / ${cb.legendaryActionsPerRound != null ? cb.legendaryActionsPerRound : 3}</span>
+        <button type="button" class="btn secondary btn-tiny" id="cd-la-inc">+</button>
+        <button type="button" class="btn secondary btn-tiny" id="cd-spend-la">Spend</button>
+      </div>` : ''}
+      <div class="tool-btns" style="margin-top:0.4rem">
+        <button type="button" class="btn primary btn-tiny" id="cd-start-turn">Start turn</button>
+        <button type="button" class="btn secondary btn-tiny" id="cd-end-turn-local">End turn (mark)</button>
+        <button type="button" class="btn secondary btn-tiny" id="cd-reset-turn">Reset turn economy</button>
+      </div>
+      <p class="muted small" style="margin-top:0.35rem">Order: <strong>Start</strong> → Move / Action / Bonus / Object (any order) → <strong>End</strong>. Reaction &amp; LA happen outside your turn.</p>
+    </div>`;
+  }
+
   function resourcesSheetHtml(ch, opts = {}) {
     const res = classResourcesForCharacter(ch);
     if (!res.length) return '';
@@ -3045,10 +3282,14 @@
     const name = String(raw.name).trim();
     const id = (raw.id || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const cat = (raw.category || raw.type || 'gear').toLowerCase();
+    let catNorm = ['armor','weapon','shield','gear','tool','consumable','potion'].includes(cat) ? cat : 'gear';
+    if (catNorm === 'potion') catNorm = 'consumable';
+    const nmLow = name.toLowerCase();
+    if (/potion|elixir|philter/.test(nmLow)) catNorm = 'consumable';
     const item = {
       id,
       name,
-      category: ['armor','weapon','shield','gear','tool'].includes(cat) ? cat : 'gear',
+      category: catNorm,
       cost: raw.cost || '',
       weight: raw.weight != null ? Number(raw.weight) || 0 : 0,
       notes: raw.notes || raw.description || '',
@@ -3062,6 +3303,21 @@
     if (item.category === 'shield') {
       item.armorType = 'shield';
       item.acBonus = raw.acBonus != null ? Number(raw.acBonus) : 2;
+    }
+    if (item.category === 'consumable' || /potion|elixir/i.test(item.name)) {
+      item.consumable = true;
+      const blob = (item.notes || '') + ' ' + item.name;
+      if (/heal|regain|hit point/i.test(blob)) {
+        item.healing = true;
+        const hm = blob.match(/(\d+d\d+\s*[+]?\s*\d*)/i);
+        if (hm) item.healDice = hm[1].replace(/\s+/g, '');
+        if (/potion of healing/i.test(item.name) && !/greater|superior|supreme/i.test(item.name)) item.healDice = item.healDice || '2d4+2';
+        if (/greater healing/i.test(item.name)) item.healDice = item.healDice || '4d4+4';
+        if (/superior healing/i.test(item.name)) item.healDice = item.healDice || '8d4+8';
+        if (/supreme healing/i.test(item.name)) item.healDice = item.healDice || '10d4+20';
+      }
+      if (raw.healDice) item.healDice = raw.healDice;
+      if (raw.healFlat != null) item.healFlat = Number(raw.healFlat);
     }
     if (item.category === 'weapon') {
       item.weaponType = raw.weaponType || raw.weapon_type || '';
@@ -5634,30 +5890,58 @@ function getEquipmentList() {
 
   function normalizeInventoryItem(it) {
     if (!it) return null;
-    return {
-      uid: it.uid || uid(),
-      id: it.id || '',
-      name: it.name || 'Item',
-      category: it.category || 'gear',
-      qty: Math.max(1, Number(it.qty) || 1),
-      equipped: !!it.equipped,
-      armorType: it.armorType || '',
-      acBase: it.acBase != null ? Number(it.acBase) : null,
-      acDexMax: it.acDexMax != null ? it.acDexMax : null,
-      acBonus: it.acBonus != null ? Number(it.acBonus) : 0,
-      damage: it.damage || '',
-      damageType: it.damageType || '',
-      props: it.props || '',
-      weaponType: it.weaponType || '',
-      notes: it.notes || '',
-      cost: it.cost || '',
-      weight: it.weight != null ? Number(it.weight) : 0,
-      magic: !!it.magic,
-      magicBonus: it.magicBonus != null ? Number(it.magicBonus) : 0,
-      rarity: it.rarity || '',
-      attunement: !!it.attunement
-    };
+    const o = typeof it === 'string' ? { name: it } : { ...it };
+    o.uid = o.uid || (typeof uid === 'function' ? uid() : 'i' + Math.random().toString(36).slice(2, 9));
+    o.id = o.id || '';
+    o.name = o.name || 'Item';
+    o.category = (o.category || 'gear').toLowerCase();
+    o.qty = Math.max(1, parseInt(o.qty, 10) || 1);
+    o.equipped = !!o.equipped;
+    o.weight = o.weight != null ? Number(o.weight) || 0 : 0;
+    o.cost = o.cost || '';
+    o.notes = o.notes || '';
+    // Consumables / potions
+    const nm = String(o.name).toLowerCase();
+    const notes = String(o.notes || '').toLowerCase();
+    if (o.category === 'potion' || o.category === 'consumable' || /potion|elixir|philter/.test(nm)) {
+      o.category = o.category === 'gear' ? 'consumable' : o.category;
+      if (/potion/.test(nm)) o.category = 'consumable';
+      o.consumable = true;
+    }
+    if (o.healDice || o.healFlat) {
+      o.consumable = true;
+      o.healing = true;
+    } else if (/regains?|restores?|hit points|heal/i.test(notes + ' ' + nm) && /potion|elixir|medicine|salve|bandage|potion of healing/.test(nm + notes)) {
+      o.healing = true;
+      o.consumable = true;
+      // Parse common heal dice from notes e.g. 2d4 + 2
+      const hm = String(o.notes || '').match(/(\d+d\d+\s*[+]?\s*\d*|\d+d\d+)/i);
+      if (hm) o.healDice = hm[1].replace(/\s+/g, '');
+      if (/potion of healing\b/i.test(o.name) && !/greater|superior|supreme/i.test(o.name)) o.healDice = o.healDice || '2d4+2';
+      if (/greater healing/i.test(o.name)) o.healDice = o.healDice || '4d4+4';
+      if (/superior healing/i.test(o.name)) o.healDice = o.healDice || '8d4+8';
+      if (/supreme healing/i.test(o.name)) o.healDice = o.healDice || '10d4+20';
+    }
+    if (o.category === 'weapon') {
+      o.damage = o.damage || '';
+      o.damageType = o.damageType || '';
+      o.weaponType = o.weaponType || '';
+    }
+    if (o.category === 'armor') {
+      o.armorType = o.armorType || 'light';
+      o.acBase = o.acBase != null ? Number(o.acBase) : null;
+      o.acDexMax = o.acDexMax != null ? o.acDexMax : null;
+    }
+    if (o.category === 'shield') {
+      o.acBonus = o.acBonus != null ? Number(o.acBonus) : 2;
+    }
+    o.magic = !!o.magic;
+    o.magicBonus = Number(o.magicBonus) || 0;
+    o.attunement = !!o.attunement;
+    o.rarity = o.rarity || '';
+    return o;
   }
+
 
   function catalogItemToInventory(cat) {
     return normalizeInventoryItem({
@@ -5756,19 +6040,52 @@ function getEquipmentList() {
 
   function inventoryListHtml(inventory) {
     const inv = inventory || [];
-    if (!inv.length) return '<p class="muted small" id="m-inv-empty">Inventory is empty. Search and add items below.</p>';
-    return `<ul class="inv-list" id="m-inv-list">${inv.map((it, idx) => {
-      const canEquip = it.category === 'armor' || it.category === 'shield' || it.category === 'weapon';
-      return `<li class="inv-item" data-uid="${escapeAttr(it.uid)}">
-        <label class="inv-equip">${canEquip ? `<input type="checkbox" class="inv-equipped" data-uid="${escapeAttr(it.uid)}" ${it.equipped ? 'checked' : ''} title="Equipped"/>` : '<span class="inv-equip-spacer"></span>'}
-        <span class="inv-name">${escapeHtml(it.name)}</span></label>
-        <span class="muted small inv-meta">${escapeHtml(it.category)}${it.damage ? ' · ' + escapeHtml(it.damage) + ' ' + escapeHtml(it.damageType || '') : ''}${it.acBase != null ? ' · AC ' + it.acBase : ''}${it.acBonus ? ' · +' + it.acBonus + ' AC' : ''}</span>
-        <input type="number" class="inv-qty" data-uid="${escapeAttr(it.uid)}" min="1" value="${it.qty}" title="Qty" />
+    if (!inv.length) {
+      return '<p class="muted small">Inventory empty. Search equipment to add armor, weapons, potions, and gear.</p>';
+    }
+    const groups = {
+      armor: [], weapon: [], shield: [], consumable: [], gear: [], other: []
+    };
+    inv.forEach(it => {
+      const c = (it.category || 'gear').toLowerCase();
+      if (c === 'armor') groups.armor.push(it);
+      else if (c === 'weapon') groups.weapon.push(it);
+      else if (c === 'shield') groups.shield.push(it);
+      else if (c === 'consumable' || c === 'potion' || it.consumable || it.healing) groups.consumable.push(it);
+      else if (c === 'gear' || c === 'tool') groups.gear.push(it);
+      else groups.other.push(it);
+    });
+    function row(it) {
+      const tags = [];
+      if (it.healing) tags.push('healing');
+      if (it.consumable) tags.push('consumable');
+      if (it.magic) tags.push('magic');
+      if (it.attunement) tags.push('attune');
+      if (it.healDice) tags.push(it.healDice);
+      return `<li class="inv-item ${it.equipped ? 'equipped' : ''} ${it.healing ? 'inv-healing' : ''}" data-uid="${escapeAttr(it.uid)}">
+        <label class="inv-equip"><input type="checkbox" class="inv-eq" data-uid="${escapeAttr(it.uid)}" ${it.equipped ? 'checked' : ''} ${it.consumable ? 'disabled title="Consumable — use from combat"' : ''} /> ${it.consumable ? '' : 'Equip'}</label>
+        <span class="inv-name">${escapeHtml(it.name)}</span>
+        <span class="inv-meta muted small">${escapeHtml(it.category || '')}${it.damage ? ' · ' + escapeHtml(it.damage) : ''}${it.acBase != null ? ' · AC ' + it.acBase : ''}${it.acBonus ? ' · +' + it.acBonus + ' AC' : ''}${tags.length ? ' · ' + tags.join(', ') : ''}</span>
+        <input type="number" class="inv-qty" data-uid="${escapeAttr(it.uid)}" min="0" value="${it.qty}" title="Qty" />
         <button type="button" class="btn danger btn-tiny inv-remove" data-uid="${escapeAttr(it.uid)}">✕</button>
       </li>`;
-    }).join('')}</ul>
-    <p class="muted small">Weight: ${inventoryWeight(inv).toFixed(1)} lb · Check box to equip armor/shield/weapon (affects AC &amp; attacks).</p>`;
+    }
+    function section(title, arr) {
+      if (!arr.length) return '';
+      return `<div class="inv-group"><div class="inv-group-title">${escapeHtml(title)} (${arr.length})</div><ul class="inv-list">${arr.map(row).join('')}</ul></div>`;
+    }
+    return `
+    <div class="inventory-ui">
+      ${section('Armor', groups.armor)}
+      ${section('Shields', groups.shield)}
+      ${section('Weapons', groups.weapon)}
+      ${section('Potions & Consumables', groups.consumable)}
+      ${section('Gear & Tools', groups.gear)}
+      ${section('Other', groups.other)}
+      <p class="muted small">Weight: ${inventoryWeight(inv).toFixed(1)} lb · Equip armor/shield/weapon for AC & attacks. Healing potions appear under Consumables and can be used from the combat tracker.</p>
+    </div>`;
   }
+
 
 const STANDARD_ARRAY = [15, 14, 13, 12, 10, 8];
   const POINT_BUY_COST = {8:0,9:1,10:2,11:3,12:4,13:5,14:7,15:9};
@@ -9148,6 +9465,93 @@ setTimeout(function(){window.focus();window.print();},280);
   }
 
   // ─── Combat Tracker ──────────────────────────────────────────────────────
+
+  function syncLinkedCharacterHp(cb) {
+    if (!cb) return;
+    const id = cb.charId || cb.sourceId;
+    if (!id) return;
+    try {
+      const c = getActive();
+      if (!c) return;
+      const lists = [c.party, c.villains];
+      lists.forEach(list => {
+        if (!Array.isArray(list)) return;
+        const ch = list.find(x => x.id === id);
+        if (ch) {
+          ch.hp = cb.hp;
+          ch.hpMax = cb.hpMax;
+          if (cb.tempHp != null) ch.tempHp = cb.tempHp;
+          if (cb.deathSaves) ch.deathSaves = { ...cb.deathSaves };
+        }
+      });
+    } catch (e) {}
+  }
+
+  function characterCanHeal(cb) {
+    // Healing allowed if linked character has healing spells or healing consumables
+    try {
+      const c = getActive();
+      if (!c) return { ok: false, reasons: [] };
+      const id = cb.charId || cb.sourceId;
+      let ch = null;
+      if (id) ch = [...(c.party||[]), ...(c.villains||[])].find(x => x.id === id);
+      // Also check combatant-carried spells/inventory
+      const spells = (ch && (ch.spells || ch.cantrips)) || (cb.spells || cb.cantrips) || '';
+      const inv = (ch && ch.inventory) || cb.inventory || [];
+      const healSpellRe = /cure wounds|healing word|heal\b|mass heal|prayer of healing|aura of vitality|goodberry|preservation|revivify|regenerate|spare the dying/i;
+      const hasSpell = healSpellRe.test(String(spells));
+      const potions = (Array.isArray(inv) ? inv : []).filter(i => i && (i.healing || /potion of healing|greater healing|superior healing|supreme healing/i.test(i.name || '')));
+      const hasPotion = potions.some(p => (p.qty || 0) > 0);
+      // Generic NPC/enemy with no sheet: allow heal only via potions on combatant
+      if (!ch && !hasPotion && !hasSpell) {
+        // Bestiary creatures generally don't heal allies unless notes say so — allow if side is party
+        if (cb.side === 'party' || cb.side === 'ally') return { ok: true, reasons: ['ally'], potions };
+        return { ok: false, reasons: [], potions: [] };
+      }
+      return { ok: hasSpell || hasPotion, reasons: [hasSpell ? 'spell' : null, hasPotion ? 'potion' : null].filter(Boolean), potions };
+    } catch (e) {
+      return { ok: false, reasons: [], potions: [] };
+    }
+  }
+
+  function consumeHealingPotion(cb, potionName) {
+    try {
+      const c = getActive();
+      const id = cb.charId || cb.sourceId;
+      if (!id || !c) return null;
+      const lists = [c.party, c.villains];
+      for (const list of lists) {
+        if (!Array.isArray(list)) continue;
+        const ch = list.find(x => x.id === id);
+        if (!ch || !Array.isArray(ch.inventory)) continue;
+        const item = ch.inventory.find(i => (i.healing || /potion/i.test(i.name||'')) && (!potionName || i.name === potionName) && (i.qty || 0) > 0);
+        if (item) {
+          item.qty = Math.max(0, (item.qty || 1) - 1);
+          if (item.qty === 0) ch.inventory = ch.inventory.filter(x => x.uid !== item.uid);
+          return item;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function tickConditionDurations(combat) {
+    (combat.combatants || []).forEach(cb => {
+      if (!cb.effectList || !Array.isArray(cb.effectList)) return;
+      cb.effectList = cb.effectList.map(e => ({ ...e, rounds: (e.rounds || 1) - 1 })).filter(e => e.rounds > 0);
+      // rebuild conditions string from effects + free text sticky
+      const fromEffects = cb.effectList.map(e => `${e.name}${e.rounds ? ' (' + e.rounds + ' rd)' : ''}`).join(', ');
+      cb.conditions = fromEffects;
+    });
+  }
+
+  function loadEncounterPresets() {
+    try { return JSON.parse(localStorage.getItem('dsc_encounter_presets') || '[]'); } catch (e) { return []; }
+  }
+  function saveEncounterPresets(list) {
+    try { localStorage.setItem('dsc_encounter_presets', JSON.stringify(list.slice(0, 30))); } catch (e) {}
+  }
+
   function getCombat(c) {
     ensureCampaignShape(c);
     if (!c.combat || !Array.isArray(c.combat.combatants)) {
@@ -9174,6 +9578,11 @@ setTimeout(function(){window.focus();window.print();},280);
       attacks: n.attacks || '',
       cantrips: n.cantrips || '',
       spells: n.spells || '',
+      isUmbrarian: !!n.isUmbrarian,
+      umbrarianStage: n.umbrarianStage || '',
+      shard: n.shard || '',
+      shardAbility: n.shardAbility || '',
+      inventory: n.inventory || [],
       actions: n.actions || [],
       bonusActions: n.bonusActions || [],
       reactions: n.reactions || [],
@@ -9274,8 +9683,8 @@ setTimeout(function(){window.focus();window.print();},280);
     else if (adv === 'dis') { used = Math.min(r1, r2); note = `dis [${r1}, ${r2}] → ${used}`; }
     else { note = `d20=${used}`; }
     const hitTotal = used + toHit + hitBonus;
-    const isCrit = used === 20;
-    const isFumble = used === 1;
+    const isCrit = !!opts.forceCrit || used === 20;
+    const isFumble = !opts.forceCrit && used === 1;
     let dmg = rollDieExpr(dmgExpr);
     if (isCrit) {
       const dmg2 = rollDieExpr(dmgExpr);
@@ -9324,7 +9733,7 @@ setTimeout(function(){window.focus();window.print();},280);
             <div class="detail-label">Combat Stats</div>
             <div class="bestiary-stats">
               <span class="stat-chip">AC ${cb.ac}</span>
-              <span class="stat-chip">HP ${cb.hp}/${cb.hpMax}</span>
+              <span class="stat-chip">HP ${cb.hideHp ? "??/??" : (cb.hp + "/" + cb.hpMax)}</span>
               <span class="stat-chip">Init ${cb.init}</span>
               ${cb.speed ? `<span class="stat-chip">${escapeHtml(cb.speed)}</span>` : ''}
             </div>
@@ -9339,11 +9748,34 @@ setTimeout(function(){window.focus();window.print();},280);
             <div class="muted small" style="margin-top:0.25rem">Temp HP: <strong id="cd-temphp-val">${cb.tempHp || 0}</strong>
               ${cb.concentrating ? ' · <span style="color:#c4a35a">Concentrating</span>' : ''}</div>
           </div>
+          ${typeof combatAttacksBudgetHtml === 'function' ? combatAttacksBudgetHtml(cb) : ''}
+          ${typeof combatResourcesHtml === 'function' ? combatResourcesHtml(cb) : ''}
+          ${typeof combatSpellSlotsHtml === 'function' ? combatSpellSlotsHtml(cb) : ''}
           <div class="detail-block">
             <div class="detail-label">Conditions / Effects</div>
             <input type="text" id="cd-conditions" value="${escapeAttr(cb.conditions || '')}" placeholder="poisoned, prone…" style="width:100%" />
             <label class="checkbox-row" style="margin-top:0.35rem"><input type="checkbox" id="cd-conc" ${cb.concentrating ? 'checked' : ''}/> Concentrating</label>
+            <label class="checkbox-row"><input type="checkbox" id="cd-hidden-hp" ${cb.hideHp ? 'checked' : ''}/> Hide HP from summary</label>
           </div>
+          ${(cb.hp <= 0 || (cb.deathSaves && (cb.deathSaves.successes || cb.deathSaves.failures))) ? `
+          <div class="detail-block">
+            <div class="detail-label">Death Saves</div>
+            <div class="death-saves-ui">
+              <span>OK: <strong>${(cb.deathSaves&&cb.deathSaves.successes)||0}</strong>/3</span>
+              <span>Fail: <strong>${(cb.deathSaves&&cb.deathSaves.failures)||0}</strong>/3</span>
+              <button type="button" class="btn secondary btn-tiny" id="cd-ds-roll">Roll</button>
+              <button type="button" class="btn secondary btn-tiny" id="cd-ds-ok-btn">+OK</button>
+              <button type="button" class="btn secondary btn-tiny" id="cd-ds-fail-btn">+Fail</button>
+            </div>
+          </div>` : ''}
+          ${cb.legendaryResistMax ? `<div class="detail-block">
+            <div class="detail-label">Legendary Resistance</div>
+            <div class="combat-res-row">
+              <span class="combat-res-name">LR</span>
+              <span class="combat-res-val"><strong>${cb.legendaryResist != null ? cb.legendaryResist : cb.legendaryResistMax}</strong>/${cb.legendaryResistMax}</span>
+              <button type="button" class="btn secondary btn-tiny" id="cd-spend-lr">Use LR</button>
+            </div>
+          </div>` : ''}
           ${cb.resistances || cb.immunities || cb.vulnerabilities || (best && (best.resistances || best.immunities)) ? `
           <div class="detail-block">
             <div class="detail-label">Defenses</div>
@@ -9358,7 +9790,8 @@ setTimeout(function(){window.focus();window.print();},280);
           ${renderActionSection('Bonus Actions', actions.bonus)}
           ${renderActionSection('Reactions', actions.reaction)}
           ${renderActionSection('Legendary Actions', actions.legendary)}
-          ${renderActionSection('Spells / Abilities', actions.spell)}
+          ${renderActionSection('Special Abilities', actions.ability)}
+          ${renderActionSection('Spells', actions.spell)}
           ${cb.notes ? `<div class="detail-block"><div class="detail-label">Notes</div><div class="detail-text">${escapeHtml(cb.notes)}</div></div>` : ''}
           ${best && best.desc ? `<div class="detail-block"><div class="detail-label">Description</div><div class="detail-text">${escapeHtml(best.desc)}</div></div>` : ''}
           ${best && best.run ? `<div class="detail-block"><div class="detail-label">Running the Creature</div><div class="detail-text">${escapeHtml(best.run)}</div></div>` : ''}
@@ -9366,8 +9799,13 @@ setTimeout(function(){window.focus();window.print();},280);
         <div class="combat-detail-roller">
           <div class="detail-label">Attack / Check Roller</div>
           <div class="field" style="margin-top:0.35rem">
-            <label>Target</label>
-            <select id="cr-target"></select>
+            <label>Target(s) — filtered by ability · Ctrl/Cmd multi-select</label>
+            <div id="cr-target-hint" class="muted small">Select an action/spell to auto-filter valid targets.</div>
+            <select id="cr-target" multiple size="5" style="min-height:5.5rem;width:100%"></select>
+            <div class="tool-btns" style="margin-top:0.35rem">
+              <button type="button" class="btn secondary btn-tiny" id="cr-select-all-targets">Select all valid</button>
+              <button type="button" class="btn secondary btn-tiny" id="cr-select-none-targets">Clear</button>
+            </div>
           </div>
           <div class="field" style="margin-top:0.35rem">
             <label>Roll mode</label>
@@ -9431,12 +9869,17 @@ setTimeout(function(){window.focus();window.print();},280);
             <input type="number" id="cr-dc" value="15" min="1" max="40" />
           </div>
           <div id="cr-result" class="combat-roll-result muted small">Select an attack and roll.</div>
-          <div class="combat-apply-row" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.35rem">
-            <button type="button" class="btn danger" id="cr-apply-dmg" title="Apply last damage to target">Apply Damage</button>
-            <button type="button" class="btn primary" id="cr-apply-heal" title="Heal target">Apply Heal</button>
-            <button type="button" class="btn secondary" id="cr-apply-cond" title="Add condition to target">Apply Condition</button>
-            <input type="number" id="cr-apply-amt" value="" placeholder="Amt" style="width:4.5rem" title="Override amount" />
-            <input type="text" id="cr-apply-cond-text" value="" placeholder="Condition…" style="flex:1;min-width:6rem" />
+          <div class="combat-apply-row" style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center">
+            <button type="button" class="btn primary" id="cr-apply-effect" title="Apply this ability/spell effect to selected targets">Apply Effect</button>
+            <button type="button" class="btn danger" id="cr-apply-dmg" title="Apply damage to target(s)">Apply Damage</button>
+            <button type="button" class="btn primary" id="cr-apply-heal" title="Requires healing spell or potion">Apply Heal</button>
+            <button type="button" class="btn secondary" id="cr-apply-cond">Apply Condition</button>
+            <label class="checkbox-row" style="margin:0"><input type="checkbox" id="cr-half" /> Half dmg</label>
+            <input type="number" id="cr-apply-amt" value="" placeholder="Amt" style="width:4.5rem" />
+            <input type="text" id="cr-apply-cond-text" value="" placeholder="Condition…" style="flex:1;min-width:5rem" />
+            <input type="number" id="cr-cond-rounds" value="" placeholder="Rds" style="width:3.5rem" min="0" title="Duration rounds" />
+            <button type="button" class="btn secondary btn-tiny" id="cr-copy-roll">Copy</button>
+            <label class="checkbox-row" style="margin:0"><input type="checkbox" id="cr-force-crit" /> Force crit</label>
           </div>
           <div class="detail-block" style="margin-top:0.75rem">
             <div class="detail-label">Combat Log</div>
@@ -9468,11 +9911,11 @@ setTimeout(function(){window.focus();window.print();},280);
         const label = `${x.name} (${x.hp}/${x.hpMax} HP)${x.side ? ' · ' + x.side : ''}`;
         return `<option value="${i}">${escapeHtml(label)}</option>`;
       });
-      sel.innerHTML = '<option value="">— Choose target —</option>' + opts.join('');
-      // Default: first enemy different from self
+      sel.innerHTML = opts.join('') || '<option value="" disabled>No combatants</option>';
       const selfIdx = combatants.findIndex(x => x === cb || x.id === cb.id || x.name === cb.name);
-      const enemy = combatants.findIndex((x, i) => i !== selfIdx && (x.side === 'enemy' || x.side === 'party' || true));
-      if (enemy >= 0) sel.value = String(enemy);
+      const enemy = combatants.findIndex((x, i) => i !== selfIdx && x.side !== (cb.side || ''));
+      if (enemy >= 0 && sel.options[enemy]) sel.options[enemy].selected = true;
+      else if (sel.options[0]) sel.options[0].selected = true;
     })();
     window.__lastCombatRoll = window.__lastCombatRoll || { damage: 0, heal: 0, hit: null };
 
@@ -9541,12 +9984,23 @@ setTimeout(function(){window.focus();window.print();},280);
         appendLog(`${atkName}: save ${total} vs DC ${dc} ${ok?'OK':'FAIL'}`);
         return;
       }
+      // Attack budget (Extra Attack)
+      {
+        const maxAtk = cb.attacksMax != null ? cb.attacksMax : 1;
+        if ((cb.attacksUsed || 0) >= maxAtk) {
+          if (!confirm('Attack budget for this turn is used (' + maxAtk + '). Roll anyway?')) return;
+        } else {
+          cb.attacksUsed = (cb.attacksUsed || 0) + 1;
+        }
+      }
+      const forceCrit = !!panel.querySelector('#cr-force-crit')?.checked;
       const res = rollCombatAttack({
         adv: panel.querySelector('#cr-adv')?.value || 'normal',
         toHit: parseInt(toHitEl?.value, 10) || 0,
         hitBonus: parseInt(panel.querySelector('#cr-hit-bonus')?.value, 10) || 0,
         damage: dmgEl?.value || '1d8',
-        dmgBonus: parseInt(panel.querySelector('#cr-dmg-bonus')?.value, 10) || 0
+        dmgBonus: parseInt(panel.querySelector('#cr-dmg-bonus')?.value, 10) || 0,
+        forceCrit
       });
       const acVal = parseInt(panel.querySelector('#cr-ac')?.value, 10);
       let hitLine = '';
@@ -9627,62 +10081,400 @@ setTimeout(function(){window.focus();window.print();},280);
 
     // Click action chips → load into roller
 
-    function getTargetCombatant() {
+    function getSelectedTargets() {
       const c = getActive();
-      if (!c) return null;
+      if (!c) return [];
       const combat = getCombat(c);
-      const idx = parseInt(panel.querySelector('#cr-target')?.value, 10);
-      if (isNaN(idx) || idx < 0) return null;
-      return { combat, idx, target: combat.combatants[idx] };
+      const sel = panel.querySelector('#cr-target');
+      const idxs = sel ? [...sel.selectedOptions].map(o => parseInt(o.value, 10)).filter(n => !isNaN(n)) : [];
+      return idxs.map(idx => ({ combat, idx, target: combat.combatants[idx] })).filter(x => x.target);
     }
     function applyToTarget(kind) {
-      const pack = getTargetCombatant();
-      if (!pack || !pack.target) { toast('Choose a target'); return; }
-      const { combat, idx, target } = pack;
-      const override = parseInt(panel.querySelector('#cr-apply-amt')?.value, 10);
-      if (kind === 'damage') {
-        let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.damage || 0);
-        if (!amt) { amt = parseInt(prompt('Damage amount?', '5'), 10) || 0; }
-        if (amt <= 0) return;
-        let left = amt;
-        const temp = target.tempHp || 0;
-        if (temp > 0) {
-          const absorb = Math.min(temp, left);
-          target.tempHp = temp - absorb;
-          left -= absorb;
-        }
-        target.hp = Math.max(0, (target.hp || 0) - left);
-        if (!target.combatLog) target.combatLog = [];
-        target.combatLog.push(`Took ${amt} from ${cb.name || 'attacker'}`);
-        appendLog(`Applied ${amt} damage to ${target.name} (now ${target.hp}/${target.hpMax})`);
-        toast(`${target.name}: −${amt} HP`);
-      } else if (kind === 'heal') {
-        let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.heal || 0);
-        if (!amt) { amt = parseInt(prompt('Heal amount?', '5'), 10) || 0; }
-        if (amt <= 0) return;
-        target.hp = Math.min(target.hpMax || amt, (target.hp || 0) + amt);
-        appendLog(`Healed ${target.name} for ${amt} (now ${target.hp}/${target.hpMax})`);
-        toast(`${target.name}: +${amt} HP`);
-      } else if (kind === 'cond') {
-        const cond = (panel.querySelector('#cr-apply-cond-text')?.value || '').trim() || prompt('Condition?', 'poisoned');
-        if (!cond) return;
-        const prev = (target.conditions || '').trim();
-        target.conditions = prev ? (prev + ', ' + cond) : cond;
-        appendLog(`${target.name}: ${cond}`);
-        toast(`${target.name}: ${cond}`);
+      const packs = getSelectedTargets();
+      if (!packs.length) { toast('Choose one or more targets'); return; }
+      if (kind === 'heal') {
+        const can = characterCanHeal(cb);
+        if (!can.ok) { toast('This combatant has no healing spells or potions'); return; }
       }
+      const override = parseInt(panel.querySelector('#cr-apply-amt')?.value, 10);
+      const half = !!panel.querySelector('#cr-half')?.checked;
+      packs.forEach(({ target }) => {
+        if (kind === 'damage') {
+          let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.damage || 0);
+          if (!amt) return;
+          if (half) amt = Math.floor(amt / 2);
+          let left = amt;
+          const temp = target.tempHp || 0;
+          if (temp > 0) {
+            const absorb = Math.min(temp, left);
+            target.tempHp = temp - absorb;
+            left -= absorb;
+          }
+          target.hp = Math.max(0, (target.hp || 0) - left);
+          if (target.concentrating && left > 0) {
+            const dc = Math.max(10, Math.floor(left / 2));
+            const roll = 1 + Math.floor(Math.random() * 20);
+            const ok = roll >= dc;
+            if (!ok) target.concentrating = false;
+            appendLog(`${target.name} concentration DC ${dc}: ${roll} (${ok ? 'OK' : 'LOST'})`);
+          }
+          if (target.hp === 0) target.deathSaves = target.deathSaves || { successes: 0, failures: 0 };
+          if (!target.combatLog) target.combatLog = [];
+          target.combatLog.push(`Took ${amt} from ${cb.name || 'attacker'}`);
+          appendLog(`Applied ${amt} damage to ${target.name} (now ${target.hp}/${target.hpMax})`);
+          syncLinkedCharacterHp(target);
+        } else if (kind === 'heal') {
+          let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.heal || 0);
+          if (!amt) {
+            const can = characterCanHeal(cb);
+            const pot = (can.potions || [])[0];
+            if (pot && pot.healDice) {
+              const rolled = rollDieExpr(pot.healDice);
+              amt = rolled.total;
+              consumeHealingPotion(cb, pot.name);
+              appendLog(`Used ${pot.name}: ${pot.healDice} = ${amt}`);
+            } else {
+              amt = parseInt(prompt('Heal amount?', '5'), 10) || 0;
+            }
+          }
+          if (amt <= 0) return;
+          target.hp = Math.min(target.hpMax || amt, (target.hp || 0) + amt);
+          if (target.hp > 0) target.deathSaves = { successes: 0, failures: 0 };
+          appendLog(`Healed ${target.name} for ${amt} (now ${target.hp}/${target.hpMax})`);
+          syncLinkedCharacterHp(target);
+        } else if (kind === 'cond') {
+          const cond = (panel.querySelector('#cr-apply-cond-text')?.value || '').trim() || prompt('Condition?', 'poisoned');
+          if (!cond) return;
+          const rounds = parseInt(panel.querySelector('#cr-cond-rounds')?.value, 10) || 0;
+          if (!target.effectList) target.effectList = [];
+          if (rounds > 0) {
+            target.effectList.push({ name: cond, rounds });
+            target.conditions = target.effectList.map(e => e.name + ' (' + e.rounds + ' rd)').join(', ');
+          } else {
+            const prev = (target.conditions || '').trim();
+            target.conditions = prev ? (prev + ', ' + cond) : cond;
+          }
+          appendLog(`${target.name}: ${cond}${rounds ? ' (' + rounds + ' rd)' : ''}`);
+        }
+      });
       try { save(); } catch (e) {}
       renderCombat();
-      // re-select
       try {
         const c2 = getActive();
-        getCombat(c2).selectedIndex = (getCombat(c2).combatants || []).findIndex(x => x.id === cb.id || x.name === cb.name);
+        const combat2 = getCombat(c2);
+        combat2.selectedIndex = (combat2.combatants || []).findIndex(x => x.id === cb.id || x.name === cb.name);
       } catch (e) {}
     }
+    
+    (function extraCombatUi() {
+      const healBtn = panel.querySelector('#cr-apply-heal');
+      const can = characterCanHeal(cb);
+      if (healBtn) {
+        healBtn.disabled = !can.ok;
+        healBtn.title = can.ok ? ('Healing: ' + (can.reasons || []).join(', ')) : 'No healing spells or potions';
+      }
+      panel.querySelector('#cr-copy-roll')?.addEventListener('click', () => {
+        const text = panel.querySelector('#cr-result')?.innerText || '';
+        if (text && navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Copied')).catch(() => toast(text));
+        else toast(text || 'Nothing');
+      });
+      panel.querySelector('#cd-hidden-hp')?.addEventListener('change', (e) => { cb.hideHp = !!e.target.checked; try { save(); } catch (err) {} });
+      panel.querySelector('#cd-ds-roll')?.addEventListener('click', () => {
+        cb.deathSaves = cb.deathSaves || { successes: 0, failures: 0 };
+        const r = 1 + Math.floor(Math.random() * 20);
+        if (r === 20) { cb.hp = 1; cb.deathSaves = { successes: 0, failures: 0 }; toast('Nat 20 — 1 HP'); }
+        else if (r === 1) cb.deathSaves.failures = Math.min(3, (cb.deathSaves.failures || 0) + 2);
+        else if (r >= 10) cb.deathSaves.successes = Math.min(3, (cb.deathSaves.successes || 0) + 1);
+        else cb.deathSaves.failures = Math.min(3, (cb.deathSaves.failures || 0) + 1);
+        if ((cb.deathSaves.successes || 0) >= 3) toast('Stabilized');
+        if ((cb.deathSaves.failures || 0) >= 3) toast('Dead');
+        syncLinkedCharacterHp(cb); try { save(); } catch (e) {} renderCombat();
+      });
+      panel.querySelector('#cd-ds-ok-btn')?.addEventListener('click', () => {
+        cb.deathSaves = cb.deathSaves || { successes: 0, failures: 0 };
+        cb.deathSaves.successes = Math.min(3, (cb.deathSaves.successes || 0) + 1);
+        syncLinkedCharacterHp(cb); save(); renderCombat();
+      });
+      panel.querySelector('#cd-ds-fail-btn')?.addEventListener('click', () => {
+        cb.deathSaves = cb.deathSaves || { successes: 0, failures: 0 };
+        cb.deathSaves.failures = Math.min(3, (cb.deathSaves.failures || 0) + 1);
+        syncLinkedCharacterHp(cb); save(); renderCombat();
+      });
+      panel.querySelector('#cd-toggle-reaction')?.addEventListener('click', () => { cb.reactionUsed = !cb.reactionUsed; save(); renderCombat(); });
+      panel.querySelector('#cd-spend-la')?.addEventListener('click', () => {
+        const max = cb.legendaryActionsPerRound != null ? cb.legendaryActionsPerRound : 3;
+        cb.legendaryActionsLeft = Math.max(0, (cb.legendaryActionsLeft != null ? cb.legendaryActionsLeft : max) - 1);
+        save(); renderCombat();
+      });
+      panel.querySelector('#cd-spend-lr')?.addEventListener('click', () => {
+        cb.legendaryResist = Math.max(0, (cb.legendaryResist != null ? cb.legendaryResist : cb.legendaryResistMax) - 1);
+        save(); renderCombat();
+      });
+    })();
+
+    
+    // Resource / slot / attack budget wiring
+    panel.querySelectorAll('.cd-res-dec').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.res;
+        if (!cb.combatResources || !cb.combatResources[id]) return;
+        cb.combatResources[id].used = Math.max(0, (cb.combatResources[id].used || 0) - 1);
+        syncCombatResourcesToCharacter(cb); try { save(); } catch(e) {} renderCombat();
+      });
+    });
+    panel.querySelectorAll('.cd-res-inc, .cd-res-spend').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.res;
+        if (!cb.combatResources || !cb.combatResources[id]) return;
+        const r = cb.combatResources[id];
+        const maxU = r.max >= 99 ? 99 : r.max;
+        r.used = Math.min(maxU, (r.used || 0) + 1);
+        syncCombatResourcesToCharacter(cb); try { save(); } catch(e) {} renderCombat();
+      });
+    });
+    panel.querySelectorAll('.cd-slot-spend').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const L = btn.dataset.slot;
+        if (!cb.combatSpellSlots || !cb.combatSpellSlots[L]) return;
+        const s = cb.combatSpellSlots[L];
+        s.used = Math.min(s.max, (s.used || 0) + 1);
+        syncCombatResourcesToCharacter(cb); try { save(); } catch(e) {} renderCombat();
+      });
+    });
+    panel.querySelectorAll('.cd-slot-restore').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const L = btn.dataset.slot;
+        if (!cb.combatSpellSlots || !cb.combatSpellSlots[L]) return;
+        cb.combatSpellSlots[L].used = Math.max(0, (cb.combatSpellSlots[L].used || 0) - 1);
+        syncCombatResourcesToCharacter(cb); try { save(); } catch(e) {} renderCombat();
+      });
+    });
+    panel.querySelector('#cd-pact-spend, #cd-pact-inc')?.addEventListener('click', () => {
+      cb.pactSlotsUsed = Math.min(cb.pactSlotsMax || 0, (cb.pactSlotsUsed || 0) + 1);
+      syncCombatResourcesToCharacter(cb); save(); renderCombat();
+    });
+    panel.querySelector('#cd-pact-dec')?.addEventListener('click', () => {
+      cb.pactSlotsUsed = Math.max(0, (cb.pactSlotsUsed || 0) - 1);
+      syncCombatResourcesToCharacter(cb); save(); renderCombat();
+    });
+    panel.querySelector('#cr-cast-slot')?.addEventListener('click', () => {
+      const L = panel.querySelector('#cr-upcast-level')?.value;
+      if (!L || !cb.combatSpellSlots || !cb.combatSpellSlots[L]) { toast('No slot available'); return; }
+      const s = cb.combatSpellSlots[L];
+      if ((s.used || 0) >= s.max) { toast('No slots left at this level'); return; }
+      s.used = (s.used || 0) + 1;
+      const act = window.__activeCombatAction;
+      appendLog(`Spent L${L} slot${act ? ' for ' + act.name : ''} (upcast)`);
+      toast(`Spent level ${L} slot`);
+      syncCombatResourcesToCharacter(cb); save(); renderCombat();
+    });
+    function refreshCombatDetail() { try { save(); } catch(e) {} renderCombat(); }
+    panel.querySelector('#cd-atk-dec')?.addEventListener('click', () => {
+      cb.attacksUsed = Math.max(0, (cb.attacksUsed || 0) - 1); refreshCombatDetail();
+    });
+    panel.querySelector('#cd-atk-inc')?.addEventListener('click', () => {
+      const max = cb.attacksMax != null ? cb.attacksMax : 1;
+      cb.attacksUsed = Math.min(max, (cb.attacksUsed || 0) + 1); refreshCombatDetail();
+    });
+    panel.querySelector('#cd-atk-reset')?.addEventListener('click', () => {
+      cb.attacksUsed = 0; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-move-dec')?.addEventListener('click', () => {
+      cb.moveUsed = Math.max(0, (cb.moveUsed || 0) - 5); refreshCombatDetail();
+    });
+    panel.querySelector('#cd-move-inc')?.addEventListener('click', () => {
+      const sp = cb.speed != null ? cb.speed : 30;
+      cb.moveUsed = Math.min(sp, (cb.moveUsed || 0) + 5); refreshCombatDetail();
+    });
+    panel.querySelector('#cd-move-all')?.addEventListener('click', () => {
+      cb.moveUsed = cb.speed != null ? cb.speed : 30; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-move-reset')?.addEventListener('click', () => {
+      cb.moveUsed = 0; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-action-toggle')?.addEventListener('click', () => {
+      cb.actionUsed = !cb.actionUsed; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-bonus-toggle')?.addEventListener('click', () => {
+      cb.bonusUsed = !cb.bonusUsed; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-object-toggle')?.addEventListener('click', () => {
+      cb.objectInteractUsed = !cb.objectInteractUsed; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-reaction-toggle')?.addEventListener('click', () => {
+      cb.reactionUsed = !cb.reactionUsed; refreshCombatDetail();
+    });
+    panel.querySelector('#cd-la-dec')?.addEventListener('click', () => {
+      const max = cb.legendaryActionsPerRound != null ? cb.legendaryActionsPerRound : 3;
+      cb.legendaryActionsLeft = Math.max(0, (cb.legendaryActionsLeft != null ? cb.legendaryActionsLeft : max) - 1);
+      refreshCombatDetail();
+    });
+    panel.querySelector('#cd-la-inc')?.addEventListener('click', () => {
+      const max = cb.legendaryActionsPerRound != null ? cb.legendaryActionsPerRound : 3;
+      cb.legendaryActionsLeft = Math.min(max, (cb.legendaryActionsLeft != null ? cb.legendaryActionsLeft : max) + 1);
+      refreshCombatDetail();
+    });
+    panel.querySelector('#cd-start-turn')?.addEventListener('click', () => {
+      // Start of turn: reset per-turn resources, keep reaction until start (reaction already available from previous end)
+      cb.turnPhase = 'active';
+      cb.moveUsed = 0;
+      cb.actionUsed = false;
+      cb.bonusUsed = false;
+      cb.objectInteractUsed = false;
+      cb.attacksUsed = 0;
+      cb.reactionUsed = false; // reaction refreshes at start of turn
+      if (cb.legendary) {
+        cb.legendaryActionsLeft = cb.legendaryActionsPerRound != null ? cb.legendaryActionsPerRound : 3;
+      }
+      // Death saves at start of turn if at 0 HP
+      if ((cb.hp || 0) <= 0) {
+        toast('At 0 HP — roll death save (Death Saves section)');
+      }
+      appendLog(`${cb.name}: start of turn`);
+      refreshCombatDetail();
+    });
+    panel.querySelector('#cd-end-turn-local')?.addEventListener('click', () => {
+      cb.turnPhase = 'ended';
+      appendLog(`${cb.name}: end of turn`);
+      refreshCombatDetail();
+    });
+    panel.querySelector('#cd-reset-turn')?.addEventListener('click', () => {
+      cb.turnPhase = 'active';
+      cb.moveUsed = 0;
+      cb.actionUsed = false;
+      cb.bonusUsed = false;
+      cb.objectInteractUsed = false;
+      cb.attacksUsed = 0;
+      cb.reactionUsed = false;
+      refreshCombatDetail();
+    });
+
     panel.querySelector('#cr-apply-dmg')?.addEventListener('click', () => applyToTarget('damage'));
     panel.querySelector('#cr-apply-heal')?.addEventListener('click', () => applyToTarget('heal'));
     panel.querySelector('#cr-apply-cond')?.addEventListener('click', () => applyToTarget('cond'));
 
+    window.__activeCombatAction = null;
+    function refreshTargetList(profile) {
+      const sel = panel.querySelector('#cr-target');
+      const hint = panel.querySelector('#cr-target-hint');
+      if (!sel) return;
+      let combatants = [];
+      try { combatants = getCombat(getActive()).combatants || []; } catch (e) {}
+      const valid = profile ? filterTargetsByProfile(combatants, cb, profile) : combatants;
+      const validSet = new Set(valid.map(x => x.id || x.name));
+      sel.innerHTML = combatants.map((x, i) => {
+        const ok = validSet.has(x.id || x.name);
+        const label = `${x.name} (${x.hp}/${x.hpMax}) · ${x.side || '?'}${ok ? '' : ' · invalid'}`;
+        return `<option value="${i}" ${ok ? '' : 'disabled'}>${escapeHtml(label)}</option>`;
+      }).join('') || '<option disabled>No combatants</option>';
+      // Auto-select all valid for aoe/sense, or single default
+      [...sel.options].forEach(o => { o.selected = false; });
+      if (profile && (profile.aoe || profile.targetType === 'any' || profile.effect === 'sense')) {
+        [...sel.options].forEach(o => { if (!o.disabled) o.selected = true; });
+      } else {
+        const first = [...sel.options].find(o => !o.disabled);
+        if (first) first.selected = true;
+        // self
+        if (profile && profile.targetType === 'self') {
+          const selfIdx = combatants.findIndex(x => x === cb || x.id === cb.id || x.name === cb.name);
+          if (selfIdx >= 0 && sel.options[selfIdx]) {
+            [...sel.options].forEach(o => o.selected = false);
+            sel.options[selfIdx].selected = true;
+          }
+        }
+      }
+      if (hint) {
+        const rng = profile && profile.range != null ? (profile.range === 0 ? 'Self' : profile.range + ' ft.') : '—';
+        hint.innerHTML = profile
+          ? `<strong>${escapeHtml(profile.name || '')}</strong> · targets <strong>${escapeHtml(profile.targetType || 'any')}</strong> · range <strong>${escapeHtml(String(rng))}</strong>${profile.aoe ? ' · <em>AoE</em>' : ''} · effect <strong>${escapeHtml(profile.effect || '')}</strong>`
+          : 'Select an action/spell to auto-filter valid targets.';
+      }
+    }
+    panel.querySelector('#cr-select-all-targets')?.addEventListener('click', () => {
+      const sel = panel.querySelector('#cr-target');
+      if (!sel) return;
+      [...sel.options].forEach(o => { if (!o.disabled) o.selected = true; });
+    });
+    panel.querySelector('#cr-select-none-targets')?.addEventListener('click', () => {
+      const sel = panel.querySelector('#cr-target');
+      if (!sel) return;
+      [...sel.options].forEach(o => { o.selected = false; });
+    });
+    panel.querySelector('#cr-apply-effect')?.addEventListener('click', () => {
+      const act = window.__activeCombatAction;
+      if (!act) { toast('Select an ability, spell, or attack first'); return; }
+      const packs = getSelectedTargets();
+      if (!packs.length) { toast('Select one or more valid targets'); return; }
+      const effect = act.effect || 'damage';
+      const override = parseInt(panel.querySelector('#cr-apply-amt')?.value, 10);
+      // Roll once for shared damage if needed
+      let sharedDmg = window.__lastCombatRoll?.damage || 0;
+      if ((effect === 'damage' || effect === 'debuff') && !sharedDmg && act.damage) {
+        sharedDmg = rollDieExpr(act.damage).total;
+        window.__lastCombatRoll = { damage: sharedDmg, heal: 0, hit: true, name: act.name };
+      }
+      if (effect === 'heal' && !characterCanHeal(cb).ok) {
+        // still allow ability-based heals like Cure Wounds loaded as spell
+        if (!/cure|heal|healing word|goodberry|aid/i.test(act.name || '')) {
+          toast('No healing available for this combatant');
+          return;
+        }
+      }
+      packs.forEach(({ target }) => {
+        if (effect === 'damage' || effect === 'debuff') {
+          let amt = !isNaN(override) ? override : sharedDmg;
+          if (panel.querySelector('#cr-half')?.checked) amt = Math.floor(amt / 2);
+          if (amt > 0) {
+            let left = amt;
+            const temp = target.tempHp || 0;
+            if (temp > 0) { const a = Math.min(temp, left); target.tempHp = temp - a; left -= a; }
+            target.hp = Math.max(0, (target.hp || 0) - left);
+            if (target.hp === 0) target.deathSaves = target.deathSaves || { successes: 0, failures: 0 };
+            syncLinkedCharacterHp(target);
+          }
+          if (effect === 'debuff') {
+            const cond = act.name || 'Affected';
+            if (!target.effectList) target.effectList = [];
+            target.effectList.push({ name: cond, rounds: parseInt(panel.querySelector('#cr-cond-rounds')?.value, 10) || 1 });
+            target.conditions = target.effectList.map(e => e.name + ' (' + e.rounds + ' rd)').join(', ');
+          }
+          appendLog(`${act.name} → ${target.name}: ${effect}${sharedDmg ? ' ' + sharedDmg : ''}`);
+        } else if (effect === 'heal') {
+          let amt = !isNaN(override) ? override : (window.__lastCombatRoll?.heal || 0);
+          if (!amt && act.damage) amt = rollDieExpr(act.damage).total; // some heals store dice in damage field
+          if (!amt) amt = parseInt(prompt('Heal amount for ' + target.name + '?', '5'), 10) || 0;
+          target.hp = Math.min(target.hpMax || amt, (target.hp || 0) + amt);
+          if (target.hp > 0) target.deathSaves = { successes: 0, failures: 0 };
+          syncLinkedCharacterHp(target);
+          appendLog(`${act.name} → healed ${target.name} for ${amt}`);
+        } else if (effect === 'buff') {
+          const cond = (act.name || 'Buff') + ' (buff)';
+          if (!target.effectList) target.effectList = [];
+          target.effectList.push({ name: cond, rounds: parseInt(panel.querySelector('#cr-cond-rounds')?.value, 10) || 1 });
+          target.conditions = target.effectList.map(e => e.name + ' (' + e.rounds + ' rd)').join(', ');
+          appendLog(`${act.name} → buffed ${target.name}`);
+        } else if (effect === 'sense') {
+          appendLog(`${act.name} → sensed ${target.name} (${act.text || 'GM reveals info'})`);
+          if (!target.combatLog) target.combatLog = [];
+          target.combatLog.push(`Sensed by ${cb.name}: ${act.name}`);
+        } else {
+          appendLog(`${act.name} → ${target.name}: ${act.text || 'utility'}`);
+          if (act.targetType === 'self' && target.name === cb.name) {
+            // Dark Bargain etc.
+            if (/dark bargain/i.test(act.name) && (cb.charId || cb.sourceId)) {
+              try {
+                const c = getActive();
+                const ch = [...(c.party||[]),...(c.villains||[])].find(x => x.id === (cb.charId||cb.sourceId));
+                if (ch) { ch.corruption = Math.min(6, (ch.corruption || 0) + 1); }
+              } catch (e) {}
+            }
+          }
+        }
+      });
+      toast(`${act.name} applied to ${packs.length} target(s)`);
+      try { save(); } catch (e) {}
+      renderCombat();
+    });
     panel.querySelectorAll('.combat-action-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         const hit = btn.dataset.hit;
@@ -9690,24 +10482,30 @@ setTimeout(function(){window.focus();window.print();},280);
         const kind = btn.dataset.kind || 'attack';
         const saveAb = btn.dataset.save || '';
         const name = btn.dataset.name || '';
+        const targetType = btn.dataset.targetType || 'enemy';
+        const range = btn.dataset.range !== '' ? parseInt(btn.dataset.range, 10) : null;
+        const effect = btn.dataset.effect || 'damage';
+        const aoe = btn.dataset.aoe === '1';
+        const text = btn.dataset.text || '';
         if (hit !== '' && toHitEl) toHitEl.value = hit;
         if (dmg && dmgEl) dmgEl.value = dmg;
         const modeEl = panel.querySelector('#cr-mode');
         if (modeEl) modeEl.value = kind === 'save' ? 'save' : kind === 'auto' ? 'auto' : kind === 'utility' ? 'utility' : 'attack';
         const dcEl = panel.querySelector('#cr-dc');
         if (dcEl && kind === 'save') {
-          // default villain DC ~ 8+prof+mod ≈ 15
-          if (!dcEl.value) dcEl.value = '15';
+          if (btn.dataset.dc) dcEl.value = btn.dataset.dc;
+          else if (!dcEl.value) dcEl.value = '15';
         }
+        const profile = { name, targetType, range: isNaN(range) ? null : range, effect, aoe, damage: dmg, text, rollKind: kind };
+        window.__activeCombatAction = profile;
+        refreshTargetList(profile);
         const box = panel.querySelector('#cr-result');
         if (box) {
-          const hint = kind === 'save' ? `Save (${saveAb || 'ability'}) — set DC and roll Save` :
-            kind === 'auto' ? 'Auto-hit — use Damage only' :
-            kind === 'utility' ? 'Utility — no attack roll' :
-            'Attack roll — Roll Attack';
-          box.innerHTML = `<div>Loaded <strong>${escapeHtml(name)}</strong> <span class="muted">(${escapeHtml(kind)})</span></div><div class="muted small">${escapeHtml(hint)}</div>`;
+          box.innerHTML = `<div>Loaded <strong>${escapeHtml(name)}</strong></div>
+            <div class="muted small">Targets: <strong>${escapeHtml(targetType)}</strong> · Range: <strong>${range === 0 ? 'Self' : (range != null ? range + ' ft.' : '—')}</strong> · Effect: <strong>${escapeHtml(effect)}</strong>${aoe ? ' · AoE' : ''}</div>
+            <div class="muted small">${escapeHtml(text || '')}</div>
+            <div class="muted small">Select targets, roll if needed, then <strong>Apply Effect</strong>.</div>`;
         }
-        // Highlight mode
         panel.querySelectorAll('.combat-action-chip').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
       });
@@ -9771,6 +10569,96 @@ setTimeout(function(){window.focus();window.print();},280);
     return { kind: 'utility', saveAbility: null, damage: '', note: 'Utility' };
   }
 
+
+  /** Infer who an ability/spell can target and at what range (feet). */
+  function inferTargetProfile(name, text, extra) {
+    const blob = `${name || ''} ${text || ''} ${(extra && extra.note) || ''}`.toLowerCase();
+    const sp = typeof lookupSpellInfo === 'function' ? lookupSpellInfo(name) : null;
+    const rangeText = (sp && sp.range) || '';
+    const full = blob + ' ' + String(rangeText).toLowerCase() + ' ' + String((sp && (sp.description || sp.summary)) || '').toLowerCase();
+
+    let range = null;
+    const rm = full.match(/(\d+)\s*(?:feet|foot|ft\.?)/i);
+    if (rm) range = parseInt(rm[1], 10);
+    if (/touch/i.test(rangeText) || /\btouch\b/.test(full)) range = range || 5;
+    if (/self/i.test(rangeText) && !rm) range = 0;
+
+    let targetType = 'enemy'; // default for attacks
+    let effect = 'damage';
+    let aoe = /each creature|all creatures|sphere|cone|line|within \d+ feet of|radius/i.test(full);
+
+    // Self
+    if (/\bself\b/.test(rangeText) || /\bon yourself\b|\byou gain\b|\byourself\b/.test(full) ||
+        /patient defense|step of the wind|rage\b|blade ward|shield\b|mirror image|blur\b|stoneskin|absorb elements|dark bargain|shard mark/i.test(name + full)) {
+      if (!/creature within|another creature|one creature|a creature|enemy|ally within/i.test(full) || /self \(/.test(rangeText)) {
+        targetType = 'self';
+        effect = /heal|regain|hit point/i.test(full) ? 'heal' : 'buff';
+      }
+    }
+    // Ally / friendly
+    if (/willing creature|creature you can see|ally|allies|friendly|cure wounds|healing word|aid\b|bless\b|shield of faith|haste\b|greater restoration|lesser restoration|spare the dying/i.test(full) &&
+        !/hostile|enemy only/i.test(full)) {
+      if (/willing|ally|allies|cure wounds|healing word|aid\b|bless\b/i.test(full)) {
+        targetType = /self or|you or a|yourself or/i.test(full) ? 'self-or-ally' : 'ally';
+        effect = /heal|regain|cure wounds|healing word/i.test(full) ? 'heal' : 'buff';
+      }
+    }
+    // Enemy / hostile
+    if (/hostile|enemy|enemies|spell attack|to hit|must succeed|saving throw|damage|umbrarian|whisper lash|eldritch blast|fire bolt|hold person|bane\b/i.test(full) &&
+        targetType !== 'self' && targetType !== 'ally' && targetType !== 'self-or-ally') {
+      targetType = aoe ? 'enemy' : 'enemy';
+      effect = /heal/i.test(full) ? 'heal' : 'damage';
+    }
+    // Sense / utility (Resonant Sense etc.)
+    if (/resonant sense|detect|reveal|know whether|sense the presence/i.test(full)) {
+      targetType = 'any';
+      effect = 'sense';
+      range = range || 30;
+    }
+    // Dark Bargain — self
+    if (/dark bargain/i.test(name + full)) {
+      targetType = 'self';
+      effect = 'utility';
+    }
+    // Explicit overrides from extra
+    if (extra && extra.targetType) targetType = extra.targetType;
+    if (extra && extra.range != null) range = extra.range;
+    if (extra && extra.effect) effect = extra.effect;
+    if (extra && extra.aoe != null) aoe = !!extra.aoe;
+
+    return { targetType, range, aoe, effect, rangeLabel: range === 0 ? 'Self' : (range != null ? range + ' ft.' : '—') };
+  }
+
+  function filterTargetsByProfile(combatants, actor, profile) {
+    const list = combatants || [];
+    const actorSide = actor.side || 'neutral';
+    const isAlly = (x) => {
+      if (x === actor || x.id === actor.id) return true;
+      if (actorSide === 'party' || actorSide === 'ally') return x.side === 'party' || x.side === 'ally';
+      if (actorSide === 'enemy') return x.side === 'enemy';
+      return x.side === actorSide;
+    };
+    const isEnemy = (x) => {
+      if (x === actor || x.id === actor.id) return false;
+      if (actorSide === 'party' || actorSide === 'ally') return x.side === 'enemy' || x.side === 'neutral';
+      if (actorSide === 'enemy') return x.side === 'party' || x.side === 'ally' || x.side === 'neutral';
+      return x.side !== actorSide;
+    };
+    switch (profile.targetType) {
+      case 'self':
+        return list.filter(x => x === actor || x.id === actor.id || x.name === actor.name);
+      case 'ally':
+        return list.filter(x => isAlly(x) && x !== actor && x.id !== actor.id);
+      case 'self-or-ally':
+        return list.filter(x => isAlly(x));
+      case 'enemy':
+        return list.filter(x => isEnemy(x));
+      case 'any':
+      default:
+        return list.slice();
+    }
+  }
+
   function splitSpellNames(raw) {
     return String(raw || '')
       .replace(/\\n/g, '\n')
@@ -9786,73 +10674,186 @@ setTimeout(function(){window.focus();window.print();},280);
       <div class="detail-label">${escapeHtml(title)}</div>
       <div class="combat-action-list">
         ${items.map(a => {
-          const kind = a.rollKind || '';
-          const badge = kind ? ` <span class="action-kind">${escapeHtml(kind)}</span>` : '';
-          return `<button type="button" class="combat-action-chip" data-name="${escapeAttr(a.name)}" data-hit="${a.toHit != null ? a.toHit : ''}" data-dmg="${escapeAttr(a.damage || '')}" data-kind="${escapeAttr(a.rollKind || 'attack')}" data-save="${escapeAttr(a.saveAbility || '')}" data-dc="${a.dc != null ? a.dc : ''}" title="${escapeAttr((a.text || a.name) + (a.note ? ' · ' + a.note : ''))}">${escapeHtml(a.name)}${badge}${a.toHit != null ? ' +' + a.toHit : ''}${a.damage ? ' (' + escapeHtml(a.damage) + ')' : ''}</button>`;
+          const kind = a.rollKind || a.effect || '';
+          const tgt = a.targetType || '';
+          const rng = a.rangeLabel || (a.range != null ? a.range + ' ft.' : '');
+          const badge = [kind, tgt, rng].filter(Boolean).map(x => `<span class="action-kind">${escapeHtml(x)}</span>`).join(' ');
+          return `<button type="button" class="combat-action-chip"
+            data-name="${escapeAttr(a.name)}"
+            data-hit="${a.toHit != null ? a.toHit : ''}"
+            data-dmg="${escapeAttr(a.damage || '')}"
+            data-kind="${escapeAttr(a.rollKind || 'attack')}"
+            data-save="${escapeAttr(a.saveAbility || '')}"
+            data-dc="${a.dc != null ? a.dc : ''}"
+            data-target-type="${escapeAttr(a.targetType || 'enemy')}"
+            data-range="${a.range != null ? a.range : ''}"
+            data-effect="${escapeAttr(a.effect || 'damage')}"
+            data-aoe="${a.aoe ? '1' : '0'}"
+            data-text="${escapeAttr(a.text || a.note || '')}"
+            title="${escapeAttr((a.text || a.name) + (a.note ? ' · ' + a.note : '') + (rng ? ' · ' + rng : '') + (tgt ? ' · ' + tgt : ''))}"
+          >${escapeHtml(a.name)} ${badge}${a.toHit != null ? ' +' + a.toHit : ''}${a.damage ? ' (' + escapeHtml(a.damage) + ')' : ''}</button>`;
         }).join('')}
       </div>
     </div>`;
   }
 
   function collectCombatActions(cb, best, ch) {
-    const out = { action: [], bonus: [], reaction: [], legendary: [], spell: [] };
+    const out = { action: [], bonus: [], reaction: [], legendary: [], spell: [], ability: [] };
     function push(section, name, toHit, damage, text, extra) {
       const cleanName = String(name || '').replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
       if (!cleanName) return;
-      const key = section === 'action' ? 'action'
-        : section === 'bonus' ? 'bonus'
-        : section === 'reaction' ? 'reaction'
-        : section === 'legendary' ? 'legendary'
-        : 'spell';
+      const key = ['action','bonus','reaction','legendary','spell','ability'].includes(section) ? section : 'action';
+      const profile = inferTargetProfile(cleanName, text || '', extra || {});
       const item = Object.assign({
         name: cleanName,
         toHit: toHit != null && toHit !== '' ? Number(toHit) : null,
         damage: damage || '',
         text: text || '',
-        section: key
+        section: key,
+        targetType: profile.targetType,
+        range: profile.range,
+        rangeLabel: profile.rangeLabel,
+        aoe: profile.aoe,
+        effect: profile.effect
       }, extra || {});
+      // extra may override profile
+      if (extra && extra.targetType) item.targetType = extra.targetType;
+      if (extra && extra.range != null) { item.range = extra.range; item.rangeLabel = extra.range === 0 ? 'Self' : extra.range + ' ft.'; }
+      if (extra && extra.effect) item.effect = extra.effect;
+      out[key] = out[key] || [];
       out[key].push(item);
     }
-    (cb.actions || []).forEach(a => push(a.kind || 'action', a.name, a.toHit, a.damage, a.text));
-    (cb.bonusActions || []).forEach(a => push('bonus', a.name, a.toHit, a.damage, a.text));
-    (cb.reactions || []).forEach(a => push('reaction', a.name, a.toHit, a.damage, a.text));
-    (cb.legendaryActions || []).forEach(a => push('legendary', a.name, a.toHit, a.damage, a.text));
+    (cb.actions || []).forEach(a => push(a.kind || 'action', a.name, a.toHit, a.damage, a.text, a));
+    (cb.bonusActions || []).forEach(a => push('bonus', a.name, a.toHit, a.damage, a.text, a));
+    (cb.reactions || []).forEach(a => push('reaction', a.name, a.toHit, a.damage, a.text, a));
+    (cb.legendaryActions || []).forEach(a => push('legendary', a.name, a.toHit, a.damage, a.text, a));
     parseCombatAttacks(cb, best).forEach(a => {
       if (a.name === 'Custom…') return;
-      push('action', a.name, a.toHit, a.damage, a.notes, { rollKind: 'attack' });
+      push('action', a.name, a.toHit, a.damage, a.notes, { rollKind: 'attack', targetType: 'enemy', effect: 'damage' });
     });
     const spellSrc = ch || cb;
     if (spellSrc) {
       splitSpellNames(spellSrc.cantrips).forEach(s => {
         const cls = classifySpellAction(s, '');
-        push('spell', s, null, cls.damage, 'Cantrip', {
-          rollKind: cls.kind, saveAbility: cls.saveAbility, note: cls.note
+        const prof = inferTargetProfile(s, cls.note || '', cls);
+        push('spell', s, null, cls.damage || '', 'Cantrip', {
+          rollKind: cls.kind, saveAbility: cls.saveAbility, note: cls.note,
+          targetType: prof.targetType, range: prof.range, effect: prof.effect, aoe: prof.aoe
         });
       });
-      splitSpellNames(spellSrc.spells).slice(0, 20).forEach(s => {
+      splitSpellNames(spellSrc.spells).slice(0, 24).forEach(s => {
         const bare = s.replace(/\s*\(\d+\w*\)\s*$/, '').trim();
         const cls = classifySpellAction(bare, s);
+        const prof = inferTargetProfile(bare, s + ' ' + (cls.note || ''), cls);
         push('spell', s, null, cls.damage, 'Spell', {
-          rollKind: cls.kind, saveAbility: cls.saveAbility, note: cls.note
+          rollKind: cls.kind, saveAbility: cls.saveAbility, note: cls.note,
+          targetType: prof.targetType, range: prof.range, effect: prof.effect, aoe: prof.aoe
         });
       });
       if (String(spellSrc.class || '').includes('Monk') || (spellSrc.classes || []).some(c => c.name === 'Monk')) {
-        push('bonus', 'Flurry of Blows', null, '', 'Ki');
-        push('bonus', 'Patient Defense', null, '', 'Ki');
-        push('bonus', 'Step of the Wind', null, '', 'Ki');
+        push('bonus', 'Flurry of Blows', null, '1d6', 'Ki — melee', { targetType: 'enemy', range: 5, effect: 'damage', rollKind: 'attack' });
+        push('bonus', 'Patient Defense', null, '', 'Ki — self', { targetType: 'self', range: 0, effect: 'buff', rollKind: 'utility' });
+        push('bonus', 'Step of the Wind', null, '', 'Ki — self', { targetType: 'self', range: 0, effect: 'buff', rollKind: 'utility' });
       }
       if ((spellSrc.classes || []).some(c => c.name === 'Barbarian') || spellSrc.class === 'Barbarian') {
-        push('bonus', 'Rage', null, '', 'Bonus action');
+        push('bonus', 'Rage', null, '', 'Bonus action — self', { targetType: 'self', range: 0, effect: 'buff', rollKind: 'utility' });
       }
       if ((spellSrc.classes || []).some(c => c.name === 'Bloodhunter') || spellSrc.class === 'Bloodhunter') {
-        push('bonus', 'Blood Maledict', null, '', 'Bloodhunter');
+        push('bonus', 'Blood Maledict', null, '', 'Bloodhunter — enemy', { targetType: 'enemy', range: 30, effect: 'debuff', rollKind: 'save' });
+      }
+      // ── Umbrarian template abilities ──
+      const isUmb = !!(spellSrc.isUmbrarian || cb.isUmbrarian);
+      if (isUmb) {
+        const stage = spellSrc.umbrarianStage || cb.umbrarianStage || 'dormant';
+        const shard = spellSrc.shard || cb.shard || 'Shard';
+        const ab = spellSrc.shardAbility || cb.shardAbility || 'INT';
+        push('ability', 'Resonant Sense', null, '',
+          'Action, 1/LR, 30 ft. — GM reveals true Shard / echo / Sword influence / Guardian ward (not which). Blocked by wards.',
+          { targetType: 'any', range: 30, effect: 'sense', rollKind: 'utility', aoe: false });
+        push('ability', 'Dark Bargain', null, '',
+          '1/LR — After failing a d20 test, reroll (must use); Corruption +1. Self.',
+          { targetType: 'self', range: 0, effect: 'utility', rollKind: 'utility' });
+        if (stage !== 'dormant') {
+          push('action', 'Whisper Lash', null, '2d8',
+            `Action — DC uses ${ab}; WIS save, 2d8 psychic. Range 30 ft.`,
+            { targetType: 'enemy', range: 30, effect: 'damage', rollKind: 'save', saveAbility: 'WIS', dc: 15 });
+        }
+        if (stage === 'ascendant' || stage === 'awakened') {
+          push('ability', 'Shard Gift (Awakened)', null, '',
+            `Use a Shard Gift from ${shard}. Typical range 30 ft. or self — pick targets in range.`,
+            { targetType: 'any', range: 30, effect: 'utility', rollKind: 'utility' });
+        }
+        if (stage === 'ascendant') {
+          push('ability', 'Dominion Demand', null, '',
+            'Corruption 4+: Shard Demand on a creature. Refuse → psychic damage 2× level. Range 30 ft.',
+            { targetType: 'enemy', range: 30, effect: 'debuff', rollKind: 'save', saveAbility: 'WIS' });
+        }
       }
     }
+
+      // ── CLASS_ABILITIES combat features (level-gated) ──
+      try {
+        const abilities = (typeof window !== 'undefined' && window.CLASS_ABILITIES) ? window.CLASS_ABILITIES : {};
+        const list = normalizeClassLevels(spellSrc);
+        list.forEach(c => {
+          const arr = abilities[c.name];
+          if (!Array.isArray(arr)) return;
+          const lvl = Number(c.level) || 1;
+          arr.forEach(feat => {
+            if ((feat.lvl || 1) > lvl) return;
+            const nm = feat.name || '';
+            // Skip pure passive / ASI
+            if (/ability score|asi\b|proficiency|expertise|jack of all|spellcasting\b|pact magic|divine domain|primal path|martial archetype/i.test(nm) && !/attack|strike|surge|rage|ki |channel|smite|inspiration|wild shape|second wind|action surge|indomitable|lunar|moonlight|blood |spirit |shadow /i.test(nm)) return;
+            const combatish = /attack|strike|surge|rage|ki |channel divinity|smite|inspiration|wild shape|second wind|action surge|indomitable|lunar|moonlight|blood maledict|blood rite|spirit step|shadow |flurry|patient defense|step of the wind|uncanny|evasion|deflect|stunning|reckless|danger sense|lay on hands|divine sense|cunning action|sneak attack|font of magic|metamagic|eldritch|arcane recovery|brand of|phase strike|ghostwalk|umbral|resonant/i.test(nm + ' ' + (feat.text||''));
+            if (!combatish && (feat.lvl || 1) > 1) return; // keep level 1 staples
+            const section = /bonus action|as a bonus/i.test(feat.text||'') ? 'bonus'
+              : /reaction|when hit|when a creature/i.test(feat.text||'') ? 'reaction'
+              : 'ability';
+            const prof = inferTargetProfile(nm, feat.text || '', {});
+            push(section, nm, null, '', (feat.text || '').slice(0, 220), {
+              targetType: prof.targetType, range: prof.range, effect: prof.effect, aoe: prof.aoe,
+              rollKind: /save|dc /i.test(feat.text||'') ? 'save' : (/attack/i.test(nm) ? 'attack' : 'utility'),
+              featureLevel: feat.lvl
+            });
+          });
+        });
+      } catch (e) {}
+      // Moon Path features
+      try {
+        const paths = (typeof window !== 'undefined' && window.MOON_PATHS) ? window.MOON_PATHS : [];
+        const list = normalizeClassLevels(spellSrc);
+        const mg = list.find(c => c.name === 'Moon Guardian');
+        if (mg && mg.subclass) {
+          const path = paths.find(p => p.name === mg.subclass || (p.id && mg.subclass.toLowerCase().includes(p.id)));
+          if (path && Array.isArray(path.features)) {
+            path.features.forEach(f => {
+              if ((f.lvl || 1) > (mg.level || 1)) return;
+              const prof = inferTargetProfile(f.name, f.text || '', {});
+              push('ability', f.name, null, '', (f.text || '').slice(0, 220), {
+                targetType: prof.targetType, range: prof.range, effect: prof.effect,
+                rollKind: 'utility', featureLevel: f.lvl
+              });
+            });
+          }
+        }
+      } catch (e) {}
+      // Feats with combat use
+      try {
+        const feats = spellSrc.feats || [];
+        (Array.isArray(feats) ? feats : []).forEach(f => {
+          const full = typeof findFeat === 'function' ? (findFeat(f.id || f.name) || f) : f;
+          const nm = full.name || f.name || '';
+          if (!nm) return;
+          if (!/sharpshooter|great weapon master|polearm|sentinel|war caster|alert|mobile|tough|lucky|healer|crossbow expert|dual wielder|defensive duelist|mage slayer|savage attacker|tavern brawler|grappler/i.test(nm)) return;
+          push('ability', nm, null, '', (full.text || '').slice(0, 180), { targetType: 'self', range: 0, effect: 'buff', rollKind: 'utility' });
+        });
+      } catch (e) {}
+
     if (cb.legendary || cb.legendaryActions) {
       if (!out.legendary.length) {
-        push('legendary', 'Detect', null, '', '1 action');
-        push('legendary', 'Move', null, '', '1 action');
-        push('legendary', 'Attack', null, '', '2 actions');
+        push('legendary', 'Detect', null, '', '1 LA', { targetType: 'any', range: 30, effect: 'sense' });
+        push('legendary', 'Move', null, '', '1 LA — self', { targetType: 'self', range: 0, effect: 'utility' });
+        push('legendary', 'Attack', null, '', '2 LA', { targetType: 'enemy', range: 5, effect: 'damage', rollKind: 'attack' });
       }
     }
     return out;
@@ -9901,8 +10902,8 @@ setTimeout(function(){window.focus();window.print();},280);
       row.innerHTML = `
         <div class="combat-init" title="Click to edit initiative" data-idx="${idx}">${cb.init}</div>
         <div class="combat-name-block">
-          <div class="combat-name">${escapeHtml(cb.name)}${cb.concentrating ? ' <span class="muted small" title="Concentrating">◎</span>' : ''}${cb.legendary ? ' <span class="muted small">★</span>' : ''}</div>
-          <div class="combat-sub">AC ${cb.ac}${cb.tempHp ? ' · THP ' + cb.tempHp : ''}</div>
+          <div class="combat-name">${escapeHtml(cb.name)}${cb.concentrating ? ' <span class="muted small" title="Concentrating">◎</span>' : ''}${cb.legendary ? ' <span class="muted small">★</span>' : ''}${cb.hp <= 0 ? ' <span class="muted small">☠</span>' : ''}</div>
+          <div class="combat-sub">AC ${cb.ac}${cb.tempHp ? ' · THP ' + cb.tempHp : ''}${cb.actionUsed ? ' · Act' : ''}${cb.bonusUsed ? ' · BA' : ''}${cb.reactionUsed ? ' · Reac' : ''}${(cb.attacksMax != null) ? ' · Atk ' + Math.max(0, (cb.attacksMax||1)-(cb.attacksUsed||0)) + '/' + (cb.attacksMax||1) : ''}${cb.turnPhase === 'active' ? ' · ▶' : ''}</div>
           <div class="hp-bar"><span style="width:${Math.max(0, Math.min(100, hpPct * 100))}%"></span></div>
         </div>
         <div class="combat-hp-controls">
@@ -10010,8 +11011,36 @@ setTimeout(function(){window.focus();window.print();},280);
     const combat = getCombat(c);
     const cb = combat.combatants[idx];
     if (!cb) return;
-    cb.hp = Math.max(0, (cb.hp || 0) + delta);
+    const before = cb.hp || 0;
+    if (delta < 0) {
+      let dmg = -delta;
+      const temp = cb.tempHp || 0;
+      if (temp > 0) {
+        const absorb = Math.min(temp, dmg);
+        cb.tempHp = temp - absorb;
+        dmg -= absorb;
+      }
+      cb.hp = Math.max(0, before - dmg);
+      // Concentration check when taking damage while concentrating
+      if (cb.concentrating && dmg > 0) {
+        const dc = Math.max(10, Math.floor(dmg / 2));
+        const roll = 1 + Math.floor(Math.random() * 20);
+        // CON mod unknown — use flat roll; DM can override
+        const ok = roll >= dc;
+        if (!cb.combatLog) cb.combatLog = [];
+        cb.combatLog.push(`Concentration DC ${dc}: rolled ${roll} → ${ok ? 'OK' : 'LOST'}`);
+        if (!ok) cb.concentrating = false;
+        toast(`Concentration DC ${dc}: ${roll} (${ok ? 'maintained' : 'lost'})`);
+      }
+      if (cb.hp === 0) {
+        cb.deathSaves = cb.deathSaves || { successes: 0, failures: 0 };
+      }
+    } else {
+      cb.hp = Math.min(cb.hpMax || before + delta, before + delta);
+      if (cb.hp > 0) cb.deathSaves = { successes: 0, failures: 0 };
+    }
     if (cb.hp > cb.hpMax) cb.hp = cb.hpMax;
+    syncLinkedCharacterHp(cb);
     save();
     renderCombat();
   }
@@ -10021,8 +11050,38 @@ setTimeout(function(){window.focus();window.print();},280);
     if (!c) return;
     const combat = getCombat(c);
     if (combat.combatants.length === 0) return;
+    // Reset reaction used for the combatant whose turn is ending
+    const prev = combat.combatants[combat.turnIndex];
+    if (prev) {
+      prev.turnPhase = 'ended';
+    }
     combat.turnIndex = (combat.turnIndex + 1) % combat.combatants.length;
-    if (combat.turnIndex === 0) combat.round += 1;
+    const next = combat.combatants[combat.turnIndex];
+    if (next) {
+      // Start of turn for next combatant
+      next.turnPhase = 'active';
+      next.attacksUsed = 0;
+      next.moveUsed = 0;
+      next.actionUsed = false;
+      next.bonusUsed = false;
+      next.objectInteractUsed = false;
+      next.reactionUsed = false; // refreshes at start of their turn
+      if (next.legendary) {
+        next.legendaryActionsLeft = next.legendaryActionsPerRound != null ? next.legendaryActionsPerRound : 3;
+      }
+    }
+    if (combat.turnIndex === 0) {
+      combat.round = (combat.round || 1) + 1;
+      tickConditionDurations(combat);
+      // Refresh legendary actions budget each round
+      combat.combatants.forEach(cb => {
+        if (cb.legendary) cb.legendaryActionsLeft = cb.legendaryActionsPerRound != null ? cb.legendaryActionsPerRound : 3;
+      });
+    }
+    const cur = combat.combatants[combat.turnIndex];
+    if (cur) {
+      combat.selectedIndex = combat.turnIndex;
+    }
     save();
     renderCombat();
   }
@@ -10357,21 +11416,78 @@ setTimeout(function(){window.focus();window.print();},280);
     $('#combat-random-enc-btn')?.addEventListener('click', combatRandomEncounter);
     $('#combat-quick-add-btn')?.addEventListener('click', combatQuickAdd);
     $('#combat-roll-init-btn')?.addEventListener('click', combatRollInit);
-    $('#combat-end-round-btn')?.addEventListener('click', () => {
+    $('#combat-delay-btn')?.addEventListener('click', () => {
     const c = getActive();
     if (!c) return;
     const combat = getCombat(c);
-    combat.round = (combat.round || 1) + 1;
-    combat.turnIndex = 0;
-    (combat.combatants || []).forEach(cb => {
-      // Optional: tick down simple effects marked with "1 round"
-      if (cb.conditions && /1 round/i.test(cb.conditions)) {
-        cb.conditions = cb.conditions.replace(/,?\s*[^,]*1 round[^,]*/gi, '').replace(/^,\s*|\s*,$/g, '');
+    const i = combat.turnIndex || 0;
+    if (i >= combat.combatants.length - 1) { combatNextTurn(); return; }
+    const [row] = combat.combatants.splice(i, 1);
+    combat.combatants.push(row);
+    // stay on same index (next person slides up)
+    save(); renderCombat();
+    toast(row.name + ' delayed');
+  });
+  $('#combat-save-enc-btn')?.addEventListener('click', () => {
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    const name = prompt('Encounter name?', 'Encounter ' + new Date().toLocaleDateString());
+    if (!name) return;
+    const presets = loadEncounterPresets();
+    presets.unshift({ name, at: new Date().toISOString(), combatants: JSON.parse(JSON.stringify(combat.combatants || [])) });
+    saveEncounterPresets(presets);
+    toast('Encounter saved');
+  });
+  $('#combat-load-enc-btn')?.addEventListener('click', async () => {
+    const presets = loadEncounterPresets();
+    if (!presets.length) { toast('No saved encounters'); return; }
+    const body = presets.map((p, i) => `<label class="checkbox-row"><input type="radio" name="enc" value="${i}" ${i===0?'checked':''}/> ${escapeHtml(p.name)} <span class="muted small">(${(p.combatants||[]).length})</span></label>`).join('');
+    const ok = await openModal({
+      title: 'Load Encounter',
+      bodyHtml: body,
+      confirmText: 'Load',
+      onConfirm: () => {
+        const pick = document.querySelector('input[name=enc]:checked');
+        if (!pick) return false;
+        const p = presets[parseInt(pick.value, 10)];
+        const c = getActive();
+        if (!c || !p) return false;
+        const combat = getCombat(c);
+        combat.combatants = JSON.parse(JSON.stringify(p.combatants || []));
+        combat.turnIndex = 0;
+        combat.round = 1;
+        save();
+        return true;
       }
     });
-    save();
-    renderCombat();
-    toast('Round ' + combat.round);
+    if (ok) { renderCombat(); toast('Encounter loaded'); }
+  });
+  $('#combat-export-log-btn')?.addEventListener('click', () => {
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    const lines = [`# Combat Log — Round ${combat.round || 1}`, ''];
+    (combat.combatants || []).forEach(cb => {
+      lines.push(`## ${cb.name}`);
+      (cb.combatLog || []).forEach(l => lines.push('- ' + l));
+      lines.push('');
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'combat-log.md';
+    a.click();
+    toast('Log exported');
+  });
+  $('#combat-end-round-btn')?.addEventListener('click', () => {
+    // End Round = advance to next combatant in initiative (and bump round when wrapping)
+    combatNextTurn();
+    const c = getActive();
+    if (!c) return;
+    const combat = getCombat(c);
+    const cur = combat.combatants[combat.turnIndex];
+    toast(cur ? `Turn: ${cur.name} (Round ${combat.round || 1})` : `Round ${combat.round || 1}`);
   });
   $('#combat-add-villain-gen-btn')?.addEventListener('click', () => {
     const v = generateVillain({});
@@ -10895,7 +12011,12 @@ function renderUmbrarians() {
     bindBestiaryListeners();
     setupDice();
 
-    $('#export-btn').addEventListener('click', exportData);
+    $('#sidebar-collapse-btn')?.addEventListener('click', () => {
+    document.body.classList.toggle('sidebar-collapsed');
+    try { localStorage.setItem('dsc_sidebar_collapsed', document.body.classList.contains('sidebar-collapsed') ? '1' : '0'); } catch (e) {}
+  });
+  try { if (localStorage.getItem('dsc_sidebar_collapsed') === '1') document.body.classList.add('sidebar-collapsed'); } catch (e) {}
+  $('#export-btn').addEventListener('click', exportData);
     $('#import-btn').addEventListener('click', () => $('#import-file').click());
     $('#import-file').addEventListener('change', (e) => {
       const file = e.target.files?.[0];

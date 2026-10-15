@@ -154,3 +154,10 @@ SRD / Open5e under their respective licenses (including CC-BY-4.0 for Wizards SR
 ---
 
 *The Dark Sun Chronicles · DM Companion (DSC Toolkt)*
+
+
+## Combat Tracker (separate app)
+
+Live combat tracking has moved to **[Cybervlachos's Combat Tracker](https://github.com/Cybermorf/Cybervlachos-s-Combat-Tracker)** so the DM Toolkit stays focused on campaign, party, DIE, and preparation tools.
+
+Export party/villain JSON from this Toolkit and import them in the Combat Tracker.

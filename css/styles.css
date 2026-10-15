@@ -2919,3 +2919,59 @@ table, .prog-table td {
   background: linear-gradient(90deg, #8b3a3a, #c4a35a);
 }
 .combatant-row.dead .hp-bar > span { background: #444; }
+
+.inv-group { margin-bottom: 0.65rem; }
+.inv-group-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #c4a35a; margin-bottom: 0.25rem; }
+.inv-list { list-style: none; padding: 0; margin: 0; }
+.inv-item { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 0.35rem; align-items: center; padding: 0.25rem 0; border-bottom: 1px solid rgba(196,163,90,0.15); }
+.inv-item.inv-healing .inv-name { color: #8d8; }
+.death-saves-ui { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+#cr-target { width: 100%; }
+
+#cr-target-hint { margin: 0.25rem 0 0.35rem; line-height: 1.35; }
+#cr-target option:disabled { opacity: 0.45; }
+.combat-action-chip .action-kind { margin-left: 0.15rem; }
+
+/* Collapsible sidebar */
+.sidebar-collapse-btn {
+  position: fixed;
+  left: 0.5rem;
+  top: 0.55rem;
+  z-index: 100;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  border: 1px solid rgba(196,163,90,0.45);
+  background: rgba(20,18,14,0.92);
+  color: #e8d5a3;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+}
+body.sidebar-collapsed .sidebar {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+body.sidebar-collapsed .main-content,
+body.sidebar-collapsed #main {
+  margin-left: 0 !important;
+  max-width: 100%;
+}
+.sidebar {
+  transition: transform 0.22s ease;
+}
+.combat-res-list, .combat-slots-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.combat-res-row { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; width: 100%; }
+.combat-res-name { min-width: 6.5rem; font-size: 0.85rem; }
+.combat-res-val { min-width: 3.2rem; text-align: center; }
+.combat-slot-chip {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  padding: 0.2rem 0.35rem; border: 1px solid rgba(196,163,90,0.3);
+  border-radius: 6px; font-size: 0.8rem;
+}
+.combat-slot-chip.empty { opacity: 0.45; }
+.slot-lvl { font-weight: 700; color: #c4a35a; }
+
+.turn-phase-steps { line-height: 1.4; }
+.turn-step.on { color: #c4a35a; font-weight: 600; }
+.combat-turn-phases .combat-res-row { margin-bottom: 0.25rem; }
