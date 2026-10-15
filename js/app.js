@@ -722,7 +722,96 @@
   }
 
   // ─── Navigation ──────────────────────────────────────────────────────────
-  function setView(viewName) {
+  
+  function exportPartyRoster(opts) {
+    opts = opts || {};
+    const c = getActive();
+    if (!c) { toast('Open a campaign first'); return; }
+    const payload = {
+      format: 'DSC-roster-v1',
+      exportedAt: new Date().toISOString(),
+      source: opts.source || 'DSCToolkt',
+      campaignName: c.name || '',
+      party: (c.party || []).map(function(ch) { return Object.assign({}, ch); }),
+      villains: (c.villains || []).map(function(ch) { return Object.assign({}, ch); })
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (c.name || 'roster').replace(/[^\w\-]+/g, '_') + '-roster.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Roster exported (' + payload.party.length + ' party, ' + payload.villains.length + ' villains)');
+  }
+
+  function importPartyRoster(file) {
+    if (!file) return;
+    const c = getActive();
+    if (!c) { toast('Open a campaign first'); return; }
+    const reader = new FileReader();
+    reader.onload = function() {
+      try {
+        const data = JSON.parse(reader.result);
+        var party = [], villains = [];
+        if (data && data.format === 'DSC-roster-v1') {
+          party = Array.isArray(data.party) ? data.party : [];
+          villains = Array.isArray(data.villains) ? data.villains : [];
+        } else if (Array.isArray(data)) {
+          party = data;
+        } else if (data && Array.isArray(data.party)) {
+          party = data.party;
+          villains = Array.isArray(data.villains) ? data.villains : [];
+        } else if (data && (data.name || data.characterId || data.id)) {
+          party = [data];
+        } else {
+          toast('Unrecognized roster JSON');
+          return;
+        }
+        const mode = window._rosterImportMode || 'merge';
+        function byId(list) {
+          const m = new Map();
+          (list || []).forEach(function(ch) {
+            const id = ch.characterId || ch.id;
+            if (id) m.set(id, ch);
+          });
+          return m;
+        }
+        if (mode === 'replace') {
+          c.party = party.map(function(ch) {
+            const id = ch.id || ch.characterId || uid();
+            return Object.assign({}, ch, { id: id, characterId: ch.characterId || id });
+          });
+          c.villains = villains.map(function(ch) {
+            const id = ch.id || ch.characterId || uid();
+            return Object.assign({}, ch, { id: id, characterId: ch.characterId || id });
+          });
+        } else {
+          const pm = byId(c.party);
+          party.forEach(function(ch) {
+            const id = ch.characterId || ch.id || uid();
+            pm.set(id, Object.assign({}, ch, { id: id, characterId: id }));
+          });
+          c.party = Array.from(pm.values());
+          const vm = byId(c.villains);
+          villains.forEach(function(ch) {
+            const id = ch.characterId || ch.id || uid();
+            vm.set(id, Object.assign({}, ch, { id: id, characterId: id }));
+          });
+          c.villains = Array.from(vm.values());
+        }
+        c.updatedAt = new Date().toISOString();
+        save();
+        toast('Roster imported: ' + party.length + ' party, ' + villains.length + ' villains');
+        try { renderParty(); } catch (e) {}
+      } catch (e) {
+        console.warn(e);
+        toast('Failed to import roster');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+function setView(viewName) {
     $$('.view').forEach(v => v.classList.remove('active'));
     $$('.nav-item').forEach(n => n.classList.remove('active'));
 
@@ -11989,6 +12078,25 @@ function renderUmbrarians() {
     $('#new-campaign-btn').addEventListener('click', () => promptNewCampaign());
     $('#new-session-btn').addEventListener('click', () => promptSession());
     
+    
+    const rosterExp = $('#roster-export-btn');
+    if (rosterExp && !rosterExp.dataset.wired) {
+      rosterExp.dataset.wired = '1';
+      rosterExp.addEventListener('click', function() { exportPartyRoster(); });
+    }
+    const rosterImp = $('#roster-import-btn');
+    const rosterFile = $('#roster-import-file');
+    if (rosterImp && rosterFile && !rosterImp.dataset.wired) {
+      rosterImp.dataset.wired = '1';
+      rosterImp.addEventListener('click', function() { rosterFile.click(); });
+      rosterFile.addEventListener('change', function() {
+        const f = rosterFile.files && rosterFile.files[0];
+        window._rosterImportMode = ($('#roster-import-mode') && $('#roster-import-mode').value) || 'merge';
+        if (f) importPartyRoster(f);
+        rosterFile.value = '';
+      });
+    }
+
     const impCharBtn = $('#import-character-btn');
     const impCharFile = $('#import-character-file');
     if (impCharBtn && impCharFile && !impCharBtn.dataset.wired) {

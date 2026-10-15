@@ -173,6 +173,13 @@
       <section id="view-party" class="view">
         <div class="view-header">
           <h1>Party &amp; Roster</h1>
+          <button id="roster-export-btn" class="btn secondary" title="Export party + villains">Export Roster</button>
+          <button id="roster-import-btn" class="btn secondary">Import Roster</button>
+          <input type="file" id="roster-import-file" accept=".json,application/json" hidden />
+          <select id="roster-import-mode" title="Import mode" style="max-width:9rem">
+            <option value="merge">Merge</option>
+            <option value="replace">Replace</option>
+          </select>
           <button id="import-character-btn" class="btn secondary">Import Character</button>
         <input type="file" id="import-character-file" accept=".json,application/json" hidden />
         <button id="new-character-btn" class="btn primary">
